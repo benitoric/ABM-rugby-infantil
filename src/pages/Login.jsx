@@ -103,7 +103,7 @@ export default function Login({ onIngreso }) {
   )
 }
 
-const VERSION = 'v3'
+const VERSION = 'v4'
 
 function traducir(e, detalle, codigo) {
   const mapa = {

@@ -21,7 +21,9 @@ export class ApiError extends Error {
 }
 
 export async function api(ruta, { method = 'GET', body } = {}) {
-  const res = await fetch(`/api/${ruta}`, {
+  // La ruta viaja como query para no depender del enrutamiento anidado de
+  // Vercel (/api/index es un archivo literal, siempre resuelve).
+  const res = await fetch(`/api/index?ruta=${encodeURIComponent(ruta)}`, {
     method,
     headers: {
       'content-type': 'application/json',
