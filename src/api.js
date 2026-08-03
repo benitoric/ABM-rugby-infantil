@@ -12,10 +12,11 @@ let alExpirar = () => {}
 export function onSesionExpirada(fn) { alExpirar = fn }
 
 export class ApiError extends Error {
-  constructor(codigo, error) {
+  constructor(codigo, error, detalle) {
     super(error)
     this.codigo = codigo
     this.error = error
+    this.detalle = detalle
   }
 }
 
@@ -34,7 +35,7 @@ export async function api(ruta, { method = 'GET', body } = {}) {
       setToken(null)
       alExpirar()
     }
-    throw new ApiError(res.status, datos.error || 'error')
+    throw new ApiError(res.status, datos.error || 'error', datos.detalle)
   }
   return datos
 }

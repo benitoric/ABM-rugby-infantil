@@ -27,7 +27,7 @@ export default function Login({ onIngreso }) {
         setPrimeraVez(true)
         setError('')
       } else {
-        setError(traducir(err.error))
+        setError(traducir(err.error, err.detalle))
       }
     }
     setCargando(false)
@@ -101,7 +101,7 @@ export default function Login({ onIngreso }) {
   )
 }
 
-function traducir(e) {
+function traducir(e, detalle) {
   const mapa = {
     no_invitado: 'Ese email no está habilitado como staff. Pedí que te agreguen desde la pestaña Staff.',
     suspendido: 'Tu acceso está suspendido. Hablá con el resto del staff.',
@@ -110,5 +110,9 @@ function traducir(e) {
     ya_tiene_clave: 'Ese email ya tiene contraseña. Probá iniciar sesión.',
     faltan_datos: 'Completá email y contraseña.',
   }
-  return mapa[e] || 'No se pudo ingresar. Probá de nuevo.'
+  if (mapa[e]) return mapa[e]
+  if (e === 'interno') {
+    return `Error del servidor: ${detalle || 'sin detalle'}. Podés ver el diagnóstico completo en /api/health`
+  }
+  return 'No se pudo ingresar. Probá de nuevo. Diagnóstico: /api/health'
 }
