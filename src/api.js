@@ -29,13 +29,19 @@ export async function api(ruta, { method = 'GET', body } = {}) {
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
-  const datos = await res.json().catch(() => ({}))
+  const crudo = await res.text()
+  let datos = {}
+  try { datos = JSON.parse(crudo) } catch { /* respuesta no JSON (error de plataforma) */ }
   if (!res.ok) {
     if (res.status === 401 && !ruta.startsWith('auth/')) {
       setToken(null)
       alExpirar()
     }
-    throw new ApiError(res.status, datos.error || 'error', datos.detalle)
+    throw new ApiError(
+      res.status,
+      datos.error || 'error',
+      datos.detalle || (datos.error ? undefined : crudo.slice(0, 200)),
+    )
   }
   return datos
 }

@@ -37,6 +37,8 @@ async function enrutar(metodo, p, b, req) {
         r.tablas = 'ok'
         const [c] = await query('select count(*)::int as n from staff')
         r.staff_cargados = c.n
+        const [s] = await query('select count(*)::int as n from staff where password_hash is null')
+        r.staff_sin_clave_todavia = s.n
       } else {
         r.tablas = 'FALTAN: ejecutá db/schema.sql en el SQL Editor de Neon (misma base a la que apunta DATABASE_URL)'
       }
