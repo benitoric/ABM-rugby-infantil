@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../supabaseClient.js'
+import { api } from '../api.js'
 import { edad, nombreCompleto } from '../helpers.js'
 import Ficha from './Ficha.jsx'
 
@@ -13,20 +13,15 @@ export default function Jugadores() {
   const [jugadores, setJugadores] = useState([])
   const [filtro, setFiltro] = useState('activo')
   const [busqueda, setBusqueda] = useState('')
-  const [editando, setEditando] = useState(null) // objeto jugador o VACIO
+  const [editando, setEditando] = useState(null)
   const [fichaDe, setFichaDe] = useState(null)
   const [cargando, setCargando] = useState(true)
 
   async function cargar() {
-    const { data } = await supabase
-      .from('rugby_jugadores')
-      .select('*')
-      .order('apellido')
-      .order('nombre')
-    setJugadores(data || [])
+    setJugadores(await api('jugadores'))
     setCargando(false)
   }
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { cargar().catch(() => setCargando(false)) }, [])
 
   const visibles = jugadores.filter((j) => {
     if (filtro !== 'todos' && j.estado !== filtro) return false
@@ -117,24 +112,14 @@ export function FormJugador({ inicial, onCerrar, onGuardado }) {
     e.preventDefault()
     setGuardando(true)
     setError('')
-    const datos = {
-      nombre: f.nombre.trim(),
-      apellido: f.apellido.trim(),
-      fecha_nacimiento: f.fecha_nacimiento || null,
-      dni: f.dni?.trim() || null,
-      posicion: f.posicion?.trim() || null,
-      estado: f.estado,
-      tutor_nombre: f.tutor_nombre?.trim() || null,
-      tutor_telefono: f.tutor_telefono?.trim() || null,
-      ficha_medica_vigente: !!f.ficha_medica_vigente,
-      observaciones: f.observaciones?.trim() || null,
+    try {
+      if (esNuevo) await api('jugadores', { method: 'POST', body: f })
+      else await api(`jugadores/${f.id}`, { method: 'PUT', body: f })
+      onGuardado()
+    } catch (err) {
+      setError('No se pudo guardar. Revisá los datos y probá de nuevo.')
+      setGuardando(false)
     }
-    const q = esNuevo
-      ? supabase.from('rugby_jugadores').insert(datos)
-      : supabase.from('rugby_jugadores').update(datos).eq('id', f.id)
-    const { error } = await q
-    if (error) { setError(error.message); setGuardando(false); return }
-    onGuardado()
   }
 
   return (

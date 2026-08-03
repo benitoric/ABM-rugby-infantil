@@ -1,8 +1,8 @@
 # 🏉 Rugby M12 · Tucumán Lawn Tennis
 
 App de gestión de jugadores para el staff de la división M12 de rugby infantil.
-Funciona desde el celular y la PC (es una web app; se puede "agregar a la pantalla
-de inicio" del teléfono y queda como una app más).
+Funciona desde el celular y la PC (es una web app; se puede "agregar a la
+pantalla de inicio" del teléfono y queda como una app más).
 
 ## Funciones
 
@@ -19,52 +19,48 @@ de inicio" del teléfono y queda como una app más).
 
 ## Arquitectura
 
-- **Frontend**: React + Vite, sin librerías de UI (CSS propio, mobile-first).
-- **Backend**: [Supabase](https://supabase.com) (PostgreSQL + autenticación).
-  Las tablas llevan prefijo `rugby_` porque conviven con otra app en el mismo
-  proyecto Supabase (`biuwqdmcbwoqlandgzbg`, "flia"). El esquema completo está
-  aplicado como migración `rugby_m12_schema_inicial` en ese proyecto.
-- **Seguridad**: todas las tablas tienen RLS. Solo pueden leer/escribir los
-  usuarios cuyo email figura en la tabla `rugby_staff` con `activo = true`.
-  Crear una cuenta no da acceso: hace falta estar invitado.
+- **Frontend**: React + Vite, CSS propio, mobile-first (`src/`).
+- **API**: funciones serverless de Vercel (`api/` + `server/`), en el mismo repo.
+- **Base de datos**: PostgreSQL propio en [Neon](https://neon.tech) (plan
+  gratuito). Esquema en `db/schema.sql`.
+- **Acceso**: login con email y contraseña. Solo pueden entrar los emails
+  cargados en la tabla `staff` desde la pestaña Staff de la app. En el primer
+  ingreso, cada persona crea su contraseña. Las sesiones usan JWT (60 días).
 
-## Acceso del staff
+## Puesta en marcha (una sola vez)
 
-1. Un miembro del staff agrega el email del nuevo integrante en la pestaña **Staff**.
-2. El nuevo integrante entra a la app, toca **"No tengo cuenta todavía"** y se
-   registra con ese mismo email (confirma el email si se lo piden).
-3. Al iniciar sesión, la app vincula su cuenta con la invitación y ya tiene acceso.
+### 1. Base de datos en Neon
 
-El primer usuario habilitado es `benitoric@gmail.com`.
+1. Entrá a [console.neon.tech](https://console.neon.tech) con tu cuenta.
+2. Creá un proyecto nuevo (ej. `rugby-m12`, región AWS São Paulo).
+3. Copiá la **connection string** (botón "Connect", incluye `?sslmode=require`).
+4. Creá las tablas. Opción A — desde tu PC:
+   ```bash
+   DATABASE_URL='postgresql://...' npm run db:init
+   ```
+   Opción B — pegá el contenido de `db/schema.sql` en el **SQL Editor** de Neon.
+
+### 2. Hosting en Vercel
+
+1. En [vercel.com](https://vercel.com) → **Add New → Project** → importá este
+   repositorio (igual que hiciste con finanzas-familia).
+2. En **Environment Variables** agregá:
+   - `DATABASE_URL`: la connection string de Neon.
+   - `JWT_SECRET`: una frase larga y aleatoria (por ej. 40 caracteres).
+3. Deploy. Cada push a `main` redeploya solo.
+
+### 3. Primer ingreso
+
+Entrá con `benitoric@gmail.com` (ya está cargado como staff en el esquema):
+la app te pide crear tu contraseña. Después sumá al resto del staff desde la
+pestaña **Staff**.
 
 ## Desarrollo local
 
 ```bash
 npm install
-npm run dev
+npm run dev:api   # API con base en memoria (PGLITE=1) en :3001
+npm run dev       # frontend en :5173, proxy /api → :3001
 ```
 
-## Publicación (GitHub Pages)
-
-El workflow `.github/workflows/deploy.yml` compila y publica automáticamente en
-GitHub Pages con cada push a `main`. Requisitos (una sola vez):
-
-1. El repositorio debe ser **público** (o tener plan pago de GitHub para Pages
-   en repos privados).
-2. En GitHub: **Settings → Pages → Source: GitHub Actions**.
-
-La app queda en `https://benitoric.github.io/ABM-rugby-infantil/`.
-
-Alternativa: importar el repo en [Vercel](https://vercel.com) o
-[Netlify](https://netlify.com) (build `npm run build`, carpeta `dist`).
-
-## Recomendaciones de seguridad
-
-- En el panel de Supabase del proyecto "flia" conviene revisar
-  **Authentication → Sign In / Up** y, si tu app familiar ya no necesita
-  registros nuevos, desactivar los registros públicos una vez que todo el staff
-  haya creado su cuenta.
-- Si más adelante liberás un lugar en tu plan de Supabase (o pasás a plan pago),
-  se puede migrar la app a un proyecto propio: es correr la migración
-  `rugby_m12_schema_inicial` allá y cambiar la URL y la clave en
-  `src/supabaseClient.js`.
+Para desarrollar contra la base real: `DATABASE_URL='postgresql://...' node scripts/dev-server.mjs`.

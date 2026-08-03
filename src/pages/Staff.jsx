@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../supabaseClient.js'
+import { api } from '../api.js'
 
 export default function Staff({ yo }) {
   const [staff, setStaff] = useState([])
@@ -8,35 +8,34 @@ export default function Staff({ yo }) {
   const [error, setError] = useState('')
 
   async function cargar() {
-    const { data } = await supabase.from('rugby_staff').select('*').order('created_at')
-    setStaff(data || [])
+    setStaff(await api('staff'))
   }
   useEffect(() => { cargar() }, [])
 
   async function invitar(e) {
     e.preventDefault()
     setError('')
-    const { error } = await supabase.from('rugby_staff').insert({
-      email: email.trim().toLowerCase(),
-      nombre: nombre.trim() || null,
-    })
-    if (error) {
-      setError(error.code === '23505' ? 'Ese email ya está en la lista.' : error.message)
-      return
+    try {
+      await api('staff', { method: 'POST', body: { email, nombre: nombre.trim() || null } })
+      setEmail('')
+      setNombre('')
+      cargar()
+    } catch (err) {
+      setError(err.error === 'ya_existe' ? 'Ese email ya está en la lista.' : 'No se pudo agregar.')
     }
-    setEmail('')
-    setNombre('')
-    cargar()
   }
 
   async function alternarActivo(fila) {
-    await supabase.from('rugby_staff').update({ activo: !fila.activo }).eq('email', fila.email)
+    await api(`staff/${encodeURIComponent(fila.email)}`, {
+      method: 'PUT',
+      body: { activo: !fila.activo },
+    })
     cargar()
   }
 
   async function quitar(fila) {
     if (!confirm(`¿Quitar a ${fila.email} del staff?`)) return
-    await supabase.from('rugby_staff').delete().eq('email', fila.email)
+    await api(`staff/${encodeURIComponent(fila.email)}`, { method: 'DELETE' })
     cargar()
   }
 
@@ -45,8 +44,8 @@ export default function Staff({ yo }) {
       <h2>Staff</h2>
       <p className="suave">
         Todos los del staff tienen acceso completo a la app. Para sumar a alguien:
-        agregá su email acá y pedile que cree su cuenta desde la pantalla de ingreso
-        con ese mismo email.
+        agregá su email acá y pedile que ingrese con ese email; en el primer
+        ingreso la app le pide crear su contraseña.
       </p>
 
       <form className="tarjeta" onSubmit={invitar}>
@@ -71,7 +70,7 @@ export default function Staff({ yo }) {
             <div style={{ fontWeight: 600 }}>{s.nombre || s.email}</div>
             <div className="mini">
               {s.email}
-              {!s.user_id && ' · todavía no creó su cuenta'}
+              {!s.tiene_clave && ' · todavía no ingresó por primera vez'}
             </div>
           </div>
           {!s.activo && <span className="badge inactivo">suspendido</span>}

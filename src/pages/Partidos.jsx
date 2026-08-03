@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '../supabaseClient.js'
+import { api } from '../api.js'
 import { fechaCorta, nombreCompleto } from '../helpers.js'
 
 const MAX_TIEMPOS = 6
@@ -11,16 +11,13 @@ export default function Partidos() {
 
   useEffect(() => {
     async function cargar() {
-      const { data } = await supabase
-        .from('rugby_eventos')
-        .select('*')
-        .eq('tipo', 'partido')
-        .order('fecha', { ascending: false })
-      setPartidos(data || [])
-      if (data?.length) setPartidoId(data[0].id)
+      const eventos = await api('eventos')
+      const ps = eventos.filter((e) => e.tipo === 'partido')
+      setPartidos(ps)
+      if (ps.length) setPartidoId(ps[0].id)
       setCargando(false)
     }
-    cargar()
+    cargar().catch(() => setCargando(false))
   }, [])
 
   if (cargando) return <div className="vacio">Cargando…</div>
@@ -59,67 +56,43 @@ export default function Partidos() {
 function ArmadoPartido({ partido }) {
   const [bloques, setBloques] = useState([])
   const [jugadores, setJugadores] = useState([])
-  const [asistencia, setAsistencia] = useState({}) // jugador_id -> estado
-  const [asignacion, setAsignacion] = useState({}) // jugador_id -> bloque_id
-  const [tiempos, setTiempos] = useState([]) // todos los tiempos de ambos bloques
-  const [enCancha, setEnCancha] = useState({}) // tiempo_id -> Set(jugador_id)
-  const [vista, setVista] = useState('bloques') // 'bloques' | id de bloque
-  const [tiempoSel, setTiempoSel] = useState({}) // bloque_id -> tiempo_id
+  const [asistencia, setAsistencia] = useState({})
+  const [asignacion, setAsignacion] = useState({})
+  const [tiempos, setTiempos] = useState([])
+  const [enCancha, setEnCancha] = useState({})
+  const [vista, setVista] = useState('bloques')
+  const [tiempoSel, setTiempoSel] = useState({})
   const [listo, setListo] = useState(false)
 
   useEffect(() => {
     async function cargar() {
-      // Asegurar que existan los 2 bloques del club
-      await supabase.from('rugby_bloques').upsert(
-        [
-          { evento_id: partido.id, numero: 1, nombre: 'Bloque 1' },
-          { evento_id: partido.id, numero: 2, nombre: 'Bloque 2' },
-        ],
-        { onConflict: 'evento_id,numero', ignoreDuplicates: true },
-      )
-      const { data: bls } = await supabase
-        .from('rugby_bloques').select('*').eq('evento_id', partido.id).order('numero')
-
-      // Asegurar 4 tiempos iniciales por bloque
-      const filasTiempos = []
-      for (const b of bls) {
-        for (let n = 1; n <= 4; n++) filasTiempos.push({ bloque_id: b.id, numero: n })
-      }
-      await supabase.from('rugby_tiempos').upsert(filasTiempos, {
-        onConflict: 'bloque_id,numero', ignoreDuplicates: true,
-      })
-
-      const bloqueIds = bls.map((b) => b.id)
-      const [{ data: js }, { data: asis }, { data: bj }, { data: ts }] = await Promise.all([
-        supabase.from('rugby_jugadores').select('*').neq('estado', 'inactivo')
-          .order('apellido').order('nombre'),
-        supabase.from('rugby_asistencias').select('*').eq('evento_id', partido.id),
-        supabase.from('rugby_bloque_jugadores').select('*').in('bloque_id', bloqueIds),
-        supabase.from('rugby_tiempos').select('*').in('bloque_id', bloqueIds).order('numero'),
+      const [datos, js, asis] = await Promise.all([
+        api(`partido/${partido.id}`),
+        api('jugadores'),
+        api(`eventos/${partido.id}/asistencias`),
       ])
+      setBloques(datos.bloques)
+      setTiempos(datos.tiempos)
+      setJugadores(js.filter((j) => j.estado !== 'inactivo'))
 
-      const { data: tj } = await supabase
-        .from('rugby_tiempo_jugadores').select('*')
-        .in('tiempo_id', (ts || []).map((t) => t.id))
-
-      setBloques(bls || [])
-      setJugadores(js || [])
       const mAsis = {}
-      for (const a of asis || []) mAsis[a.jugador_id] = a.estado
+      for (const a of asis) mAsis[a.jugador_id] = a.estado
       setAsistencia(mAsis)
+
       const mAsig = {}
-      for (const f of bj || []) mAsig[f.jugador_id] = f.bloque_id
+      for (const f of datos.asignaciones) mAsig[f.jugador_id] = f.bloque_id
       setAsignacion(mAsig)
-      setTiempos(ts || [])
+
       const mCancha = {}
-      for (const f of tj || []) {
+      for (const f of datos.en_cancha) {
         if (!mCancha[f.tiempo_id]) mCancha[f.tiempo_id] = new Set()
         mCancha[f.tiempo_id].add(f.jugador_id)
       }
       setEnCancha(mCancha)
+
       const sel = {}
-      for (const b of bls) {
-        const primero = (ts || []).find((t) => t.bloque_id === b.id)
+      for (const b of datos.bloques) {
+        const primero = datos.tiempos.find((t) => t.bloque_id === b.id)
         if (primero) sel[b.id] = primero.id
       }
       setTiempoSel(sel)
@@ -132,55 +105,45 @@ function ArmadoPartido({ partido }) {
     const actual = asignacion[jugadorId]
     const nuevo = actual === bloqueId ? null : bloqueId
     setAsignacion((m) => ({ ...m, [jugadorId]: nuevo }))
-    // sacar de cualquier bloque (y de sus tiempos, para no dejar datos colgados)
     if (actual) {
-      await supabase.from('rugby_bloque_jugadores').delete()
-        .eq('jugador_id', jugadorId).eq('bloque_id', actual)
+      // al sacarlo del bloque también sale de los tiempos de ese bloque
       const tiemposDelBloque = tiempos.filter((t) => t.bloque_id === actual).map((t) => t.id)
-      if (tiemposDelBloque.length) {
-        await supabase.from('rugby_tiempo_jugadores').delete()
-          .eq('jugador_id', jugadorId).in('tiempo_id', tiemposDelBloque)
-        setEnCancha((m) => {
-          const copia = { ...m }
-          for (const tid of tiemposDelBloque) {
-            if (copia[tid]?.has(jugadorId)) {
-              copia[tid] = new Set(copia[tid])
-              copia[tid].delete(jugadorId)
-            }
+      setEnCancha((m) => {
+        const copia = { ...m }
+        for (const tid of tiemposDelBloque) {
+          if (copia[tid]?.has(jugadorId)) {
+            copia[tid] = new Set(copia[tid])
+            copia[tid].delete(jugadorId)
           }
-          return copia
-        })
-      }
+        }
+        return copia
+      })
     }
-    if (nuevo) {
-      await supabase.from('rugby_bloque_jugadores').insert({ bloque_id: nuevo, jugador_id: jugadorId })
-    }
+    await api('partido/asignar', {
+      method: 'POST',
+      body: { evento_id: partido.id, jugador_id: jugadorId, bloque_id: nuevo },
+    })
   }
 
   async function toggleEnCancha(tiempoId, jugadorId) {
-    const set = enCancha[tiempoId] || new Set()
-    const estaba = set.has(jugadorId)
+    const estaba = (enCancha[tiempoId] || new Set()).has(jugadorId)
     setEnCancha((m) => {
       const copia = { ...m, [tiempoId]: new Set(m[tiempoId] || []) }
       if (estaba) copia[tiempoId].delete(jugadorId)
       else copia[tiempoId].add(jugadorId)
       return copia
     })
-    if (estaba) {
-      await supabase.from('rugby_tiempo_jugadores').delete()
-        .eq('tiempo_id', tiempoId).eq('jugador_id', jugadorId)
-    } else {
-      await supabase.from('rugby_tiempo_jugadores').insert({ tiempo_id: tiempoId, jugador_id: jugadorId })
-    }
+    await api('partido/cancha', {
+      method: 'POST',
+      body: { tiempo_id: tiempoId, jugador_id: jugadorId, dentro: !estaba },
+    })
   }
 
   async function agregarTiempo(bloqueId) {
     const delBloque = tiempos.filter((t) => t.bloque_id === bloqueId)
     if (delBloque.length >= MAX_TIEMPOS) return
-    const numero = Math.max(...delBloque.map((t) => t.numero)) + 1
-    const { data } = await supabase.from('rugby_tiempos')
-      .insert({ bloque_id: bloqueId, numero }).select().single()
-    if (data) setTiempos((ts) => [...ts, data].sort((a, b) => a.numero - b.numero))
+    const nuevo = await api('partido/tiempo', { method: 'POST', body: { bloque_id: bloqueId } })
+    setTiempos((ts) => [...ts, nuevo].sort((a, b) => a.numero - b.numero))
   }
 
   const ordenados = useMemo(() => {

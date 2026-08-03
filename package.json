@@ -1,19 +1,24 @@
 {
   "name": "abm-rugby-infantil",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "PGLITE=1 node scripts/dev-server.mjs",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "db:init": "node scripts/init-db.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.4",
+    "bcryptjs": "^2.4.3",
+    "jose": "^5.9.6",
+    "pg": "^8.13.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.2.17",
     "@vitejs/plugin-react": "^4.3.4",
     "vite": "^6.3.5"
   }

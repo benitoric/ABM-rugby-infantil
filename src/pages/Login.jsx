@@ -1,28 +1,34 @@
 import { useState } from 'react'
-import { supabase } from '../supabaseClient.js'
+import { api, setToken } from '../api.js'
 
-export default function Login() {
-  const [modo, setModo] = useState('login') // login | registro
+export default function Login({ onIngreso }) {
   const [email, setEmail] = useState('')
   const [clave, setClave] = useState('')
+  const [clave2, setClave2] = useState('')
+  const [primeraVez, setPrimeraVez] = useState(false)
   const [error, setError] = useState('')
-  const [aviso, setAviso] = useState('')
   const [cargando, setCargando] = useState(false)
 
   async function enviar(e) {
     e.preventDefault()
     setError('')
-    setAviso('')
+    if (primeraVez && clave !== clave2) {
+      setError('Las contraseñas no coinciden.')
+      return
+    }
     setCargando(true)
-    const credenciales = { email: email.trim().toLowerCase(), password: clave }
-    if (modo === 'login') {
-      const { error } = await supabase.auth.signInWithPassword(credenciales)
-      if (error) setError(traducir(error.message))
-    } else {
-      const { data, error } = await supabase.auth.signUp(credenciales)
-      if (error) setError(traducir(error.message))
-      else if (data.user && !data.session)
-        setAviso('Cuenta creada. Revisá tu email para confirmarla y después iniciá sesión.')
+    try {
+      const ruta = primeraVez ? 'auth/setup' : 'auth/login'
+      const r = await api(ruta, { method: 'POST', body: { email, password: clave } })
+      setToken(r.token)
+      onIngreso(r.staff)
+    } catch (err) {
+      if (err.error === 'necesita_clave') {
+        setPrimeraVez(true)
+        setError('')
+      } else {
+        setError(traducir(err.error))
+      }
     }
     setCargando(false)
   }
@@ -41,46 +47,68 @@ export default function Login() {
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
+            disabled={primeraVez}
           />
         </div>
         <div className="campo">
-          <label>Contraseña</label>
+          <label>{primeraVez ? 'Creá tu contraseña' : 'Contraseña'}</label>
           <input
             type="password"
             value={clave}
             onChange={(e) => setClave(e.target.value)}
             required
             minLength={6}
-            autoComplete={modo === 'login' ? 'current-password' : 'new-password'}
+            autoComplete={primeraVez ? 'new-password' : 'current-password'}
           />
         </div>
+        {primeraVez && (
+          <>
+            <div className="aviso">
+              Primer ingreso: elegí una contraseña de al menos 6 caracteres y
+              repetila para confirmar.
+            </div>
+            <div className="campo">
+              <label>Repetir contraseña</label>
+              <input
+                type="password"
+                value={clave2}
+                onChange={(e) => setClave2(e.target.value)}
+                required
+                minLength={6}
+                autoComplete="new-password"
+              />
+            </div>
+          </>
+        )}
 
         {error && <div className="error">{error}</div>}
-        {aviso && <div className="aviso">{aviso}</div>}
 
         <button className="btn" disabled={cargando}>
-          {modo === 'login' ? 'Ingresar' : 'Crear cuenta'}
+          {cargando ? 'Un momento…' : primeraVez ? 'Crear contraseña e ingresar' : 'Ingresar'}
         </button>
-        <button
-          type="button"
-          className="btn sec"
-          onClick={() => { setModo(modo === 'login' ? 'registro' : 'login'); setError(''); setAviso('') }}
-        >
-          {modo === 'login' ? 'No tengo cuenta todavía' : 'Ya tengo cuenta'}
-        </button>
+        {primeraVez && (
+          <button type="button" className="btn sec" onClick={() => { setPrimeraVez(false); setClave(''); setClave2('') }}>
+            Volver
+          </button>
+        )}
         <p className="mini">
-          Solo los emails habilitados por el staff pueden ver los datos. Crear la
-          cuenta no alcanza: pedí que te agreguen como staff.
+          Solo pueden ingresar los emails habilitados por el staff. Si es tu
+          primera vez, usá el email con el que te invitaron: la app te va a
+          pedir crear tu contraseña.
         </p>
       </form>
     </div>
   )
 }
 
-function traducir(msg) {
-  if (/invalid login credentials/i.test(msg)) return 'Email o contraseña incorrectos.'
-  if (/email not confirmed/i.test(msg)) return 'Tenés que confirmar tu email antes de ingresar.'
-  if (/already registered/i.test(msg)) return 'Ese email ya tiene una cuenta. Probá iniciar sesión.'
-  if (/at least 6 characters/i.test(msg)) return 'La contraseña debe tener al menos 6 caracteres.'
-  return msg
+function traducir(e) {
+  const mapa = {
+    no_invitado: 'Ese email no está habilitado como staff. Pedí que te agreguen desde la pestaña Staff.',
+    suspendido: 'Tu acceso está suspendido. Hablá con el resto del staff.',
+    clave_incorrecta: 'Contraseña incorrecta.',
+    clave_corta: 'La contraseña debe tener al menos 6 caracteres.',
+    ya_tiene_clave: 'Ese email ya tiene contraseña. Probá iniciar sesión.',
+    faltan_datos: 'Completá email y contraseña.',
+  }
+  return mapa[e] || 'No se pudo ingresar. Probá de nuevo.'
 }

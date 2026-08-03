@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../supabaseClient.js'
+import { api } from '../api.js'
 import { edad, fechaCorta, nombreCompleto, AREAS } from '../helpers.js'
 import { FormJugador } from './Jugadores.jsx'
 
@@ -8,66 +8,53 @@ export default function Ficha({ jugadorId, onVolver }) {
   const [seguimientos, setSeguimientos] = useState([])
   const [stats, setStats] = useState(null)
   const [editando, setEditando] = useState(false)
-  const [nuevo, setNuevo] = useState(null) // form de seguimiento
+  const [nuevo, setNuevo] = useState(null)
   const [error, setError] = useState('')
 
   async function cargar() {
-    const [{ data: jugador }, { data: segs }, { data: asis }, { data: tiempos }] = await Promise.all([
-      supabase.from('rugby_jugadores').select('*').eq('id', jugadorId).single(),
-      supabase.from('rugby_seguimientos').select('*').eq('jugador_id', jugadorId)
-        .order('fecha', { ascending: false }).order('created_at', { ascending: false }),
-      supabase.from('rugby_asistencias').select('estado, rugby_eventos(tipo)').eq('jugador_id', jugadorId),
-      supabase.from('rugby_tiempo_jugadores').select('tiempo_id').eq('jugador_id', jugadorId),
-    ])
-    setJ(jugador)
-    setSeguimientos(segs || [])
-
-    const deTipo = (tipo) => (asis || []).filter((a) => a.rugby_eventos?.tipo === tipo)
-    const pct = (lista) => {
-      if (!lista.length) return null
-      const presentes = lista.filter((a) => a.estado === 'presente' || a.estado === 'tarde').length
-      return Math.round((100 * presentes) / lista.length)
-    }
-    setStats({
-      entrenamientos: pct(deTipo('entrenamiento')),
-      partidos: pct(deTipo('partido')),
-      tiempos: (tiempos || []).length,
-    })
+    const d = await api(`jugadores/${jugadorId}/detalle`)
+    setJ(d.jugador)
+    setSeguimientos(d.seguimientos)
+    setStats(d.stats)
   }
   useEffect(() => { cargar() }, [jugadorId])
 
   async function guardarSeguimiento(e) {
     e.preventDefault()
     setError('')
-    const { data: userData } = await supabase.auth.getUser()
-    const { error } = await supabase.from('rugby_seguimientos').insert({
-      jugador_id: jugadorId,
-      fecha: nuevo.fecha,
-      area: nuevo.area,
-      valoracion: nuevo.valoracion ? Number(nuevo.valoracion) : null,
-      comentario: nuevo.comentario?.trim() || null,
-      autor_email: userData?.user?.email || null,
-    })
-    if (error) { setError(error.message); return }
-    setNuevo(null)
-    cargar()
+    try {
+      await api('seguimientos', {
+        method: 'POST',
+        body: {
+          jugador_id: jugadorId,
+          fecha: nuevo.fecha,
+          area: nuevo.area,
+          valoracion: nuevo.valoracion ? Number(nuevo.valoracion) : null,
+          comentario: nuevo.comentario?.trim() || null,
+        },
+      })
+      setNuevo(null)
+      cargar()
+    } catch {
+      setError('No se pudo guardar la entrada.')
+    }
   }
 
   async function borrarSeguimiento(id) {
     if (!confirm('¿Borrar esta entrada de seguimiento?')) return
-    await supabase.from('rugby_seguimientos').delete().eq('id', id)
+    await api(`seguimientos/${id}`, { method: 'DELETE' })
     cargar()
   }
 
   async function darDeBaja() {
     if (!confirm(`¿Dar de baja a ${nombreCompleto(j)}? Queda como "inactivo" y conserva su historial.`)) return
-    await supabase.from('rugby_jugadores').update({ estado: 'inactivo' }).eq('id', j.id)
+    await api(`jugadores/${j.id}`, { method: 'PUT', body: { ...j, estado: 'inactivo' } })
     cargar()
   }
 
   async function eliminar() {
     if (!confirm(`¿Eliminar DEFINITIVAMENTE a ${nombreCompleto(j)}? Se borra todo su historial (seguimiento, asistencias, tiempos). Esta acción no se puede deshacer.`)) return
-    await supabase.from('rugby_jugadores').delete().eq('id', j.id)
+    await api(`jugadores/${j.id}`, { method: 'DELETE' })
     onVolver()
   }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../supabaseClient.js'
+import { api } from '../api.js'
 import { fechaCorta, nombreCompleto, ESTADOS_ASISTENCIA } from '../helpers.js'
 
 export default function Asistencia() {
@@ -9,15 +9,10 @@ export default function Asistencia() {
   const [cargando, setCargando] = useState(true)
 
   async function cargar() {
-    const { data } = await supabase
-      .from('rugby_eventos')
-      .select('*')
-      .order('fecha', { ascending: false })
-      .order('created_at', { ascending: false })
-    setEventos(data || [])
+    setEventos(await api('eventos'))
     setCargando(false)
   }
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { cargar().catch(() => setCargando(false)) }, [])
 
   if (eventoSel) {
     return <TomarAsistencia evento={eventoSel} onVolver={() => { setEventoSel(null); cargar() }} />
@@ -68,15 +63,20 @@ export default function Asistencia() {
             onClick={(e) => e.stopPropagation()}
             onSubmit={async (e) => {
               e.preventDefault()
-              const { data, error } = await supabase.from('rugby_eventos').insert({
-                tipo: creando.tipo,
-                fecha: creando.fecha,
-                hora: creando.hora || null,
-                rival: creando.tipo === 'partido' ? creando.rival?.trim() || null : null,
-                lugar: creando.lugar?.trim() || null,
-                notas: creando.notas?.trim() || null,
-              }).select().single()
-              if (!error) { setCreando(null); await cargar(); setEventoSel(data) }
+              const ev = await api('eventos', {
+                method: 'POST',
+                body: {
+                  tipo: creando.tipo,
+                  fecha: creando.fecha,
+                  hora: creando.hora || null,
+                  rival: creando.tipo === 'partido' ? creando.rival?.trim() || null : null,
+                  lugar: creando.lugar?.trim() || null,
+                  notas: creando.notas?.trim() || null,
+                },
+              })
+              setCreando(null)
+              await cargar()
+              setEventoSel(ev)
             }}
           >
             <div className="fila entre" style={{ marginBottom: 12 }}>
@@ -135,19 +135,18 @@ export default function Asistencia() {
 
 function TomarAsistencia({ evento, onVolver }) {
   const [jugadores, setJugadores] = useState([])
-  const [marcas, setMarcas] = useState({}) // jugador_id -> estado
+  const [marcas, setMarcas] = useState({})
   const [cargando, setCargando] = useState(true)
 
   useEffect(() => {
     async function cargar() {
-      const [{ data: js }, { data: asis }] = await Promise.all([
-        supabase.from('rugby_jugadores').select('*').neq('estado', 'inactivo')
-          .order('apellido').order('nombre'),
-        supabase.from('rugby_asistencias').select('*').eq('evento_id', evento.id),
+      const [js, asis] = await Promise.all([
+        api('jugadores'),
+        api(`eventos/${evento.id}/asistencias`),
       ])
-      setJugadores(js || [])
+      setJugadores(js.filter((j) => j.estado !== 'inactivo'))
       const m = {}
-      for (const a of asis || []) m[a.jugador_id] = a.estado
+      for (const a of asis) m[a.jugador_id] = a.estado
       setMarcas(m)
       setCargando(false)
     }
@@ -158,30 +157,25 @@ function TomarAsistencia({ evento, onVolver }) {
     const anterior = marcas[jugadorId]
     const nuevo = anterior === estado ? null : estado
     setMarcas((m) => ({ ...m, [jugadorId]: nuevo }))
-    if (nuevo === null) {
-      await supabase.from('rugby_asistencias').delete()
-        .eq('evento_id', evento.id).eq('jugador_id', jugadorId)
-    } else {
-      await supabase.from('rugby_asistencias').upsert(
-        { evento_id: evento.id, jugador_id: jugadorId, estado: nuevo },
-        { onConflict: 'evento_id,jugador_id' },
-      )
-    }
+    await api(`eventos/${evento.id}/asistencias`, {
+      method: 'PUT',
+      body: { marcas: [{ jugador_id: jugadorId, estado: nuevo }] },
+    })
   }
 
   async function marcarTodosPresentes() {
     const nuevas = {}
     for (const j of jugadores) nuevas[j.id] = marcas[j.id] || 'presente'
     setMarcas(nuevas)
-    const filas = jugadores.map((j) => ({
-      evento_id: evento.id, jugador_id: j.id, estado: nuevas[j.id],
-    }))
-    await supabase.from('rugby_asistencias').upsert(filas, { onConflict: 'evento_id,jugador_id' })
+    await api(`eventos/${evento.id}/asistencias`, {
+      method: 'PUT',
+      body: { marcas: jugadores.map((j) => ({ jugador_id: j.id, estado: nuevas[j.id] })) },
+    })
   }
 
   async function borrarEvento() {
     if (!confirm('¿Borrar este evento y su asistencia (y bloques/tiempos si es partido)?')) return
-    await supabase.from('rugby_eventos').delete().eq('id', evento.id)
+    await api(`eventos/${evento.id}`, { method: 'DELETE' })
     onVolver()
   }
 
