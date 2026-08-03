@@ -27,7 +27,8 @@ export default function Login({ onIngreso }) {
         setPrimeraVez(true)
         setError('')
       } else {
-        setError(traducir(err.error, err.detalle))
+        console.error('Fallo de ingreso:', err.codigo, err.error, err.detalle)
+        setError(traducir(err.error, err.detalle, err.codigo))
       }
     }
     setCargando(false)
@@ -96,12 +97,15 @@ export default function Login({ onIngreso }) {
           primera vez, usá el email con el que te invitaron: la app te va a
           pedir crear tu contraseña.
         </p>
+        <p className="mini" style={{ textAlign: 'right', opacity: 0.6 }}>{VERSION}</p>
       </form>
     </div>
   )
 }
 
-function traducir(e, detalle) {
+const VERSION = 'v3'
+
+function traducir(e, detalle, codigo) {
   const mapa = {
     no_invitado: 'Ese email no está habilitado como staff. Pedí que te agreguen desde la pestaña Staff.',
     suspendido: 'Tu acceso está suspendido. Hablá con el resto del staff.',
@@ -111,8 +115,5 @@ function traducir(e, detalle) {
     faltan_datos: 'Completá email y contraseña.',
   }
   if (mapa[e]) return mapa[e]
-  if (e === 'interno') {
-    return `Error del servidor: ${detalle || 'sin detalle'}. Podés ver el diagnóstico completo en /api/health`
-  }
-  return 'No se pudo ingresar. Probá de nuevo. Diagnóstico: /api/health'
+  return `No se pudo ingresar. Datos técnicos para pasarle a Claude → código HTTP: ${codigo ?? '?'} · error: ${e || 'desconocido'} · detalle: ${detalle || 'sin detalle'} · versión: ${VERSION}`
 }
