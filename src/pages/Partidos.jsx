@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
-import { fechaCorta, nombreCompleto } from '../helpers.js'
+import { etiquetaPartido, fechaCorta, lineaBloque, nombreCompleto } from '../helpers.js'
 
 const MAX_TIEMPOS = 6
 
@@ -43,7 +43,7 @@ export default function Partidos() {
         <select value={partidoId} onChange={(e) => setPartidoId(e.target.value)}>
           {partidos.map((p) => (
             <option key={p.id} value={p.id}>
-              {fechaCorta(p.fecha)}{p.rival ? ` vs ${p.rival}` : ''}
+              {fechaCorta(p.fecha)} · {etiquetaPartido(p)}
             </option>
           ))}
         </select>
@@ -91,6 +91,7 @@ function ArmadoPartido({ partido }) {
   const [enCancha, setEnCancha] = useState({})
   const [vista, setVista] = useState('bloques')
   const [tiempoSel, setTiempoSel] = useState({})
+  const [editandoBloque, setEditandoBloque] = useState(null)
   const [listo, setListo] = useState(false)
 
   useEffect(() => {
@@ -255,10 +256,56 @@ function ArmadoPartido({ partido }) {
         </>
       )}
 
+      {editandoBloque && (
+        <div className="modal-fondo" onClick={() => setEditandoBloque(null)}>
+          <form
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={async (e) => {
+              e.preventDefault()
+              const actualizado = await api(`partido/bloque/${editandoBloque.id}`, {
+                method: 'PUT',
+                body: {
+                  rival: editandoBloque.rival?.trim() || null,
+                  lugar: editandoBloque.lugar?.trim() || null,
+                  hora_convocatoria: editandoBloque.hora_convocatoria || null,
+                },
+              })
+              setBloques((bs) => bs.map((x) => (x.id === actualizado.id ? actualizado : x)))
+              setEditandoBloque(null)
+            }}
+          >
+            <div className="fila entre" style={{ marginBottom: 12 }}>
+              <h3>{editandoBloque.nombre || `Bloque ${editandoBloque.numero}`}</h3>
+              <button type="button" className="btn sec chico" onClick={() => setEditandoBloque(null)}>Cerrar</button>
+            </div>
+            <div className="campo">
+              <label>Rival</label>
+              <input value={editandoBloque.rival || ''}
+                onChange={(e) => setEditandoBloque({ ...editandoBloque, rival: e.target.value })} />
+            </div>
+            <div className="grid2">
+              <div className="campo">
+                <label>Hora de convocatoria</label>
+                <input type="time" value={editandoBloque.hora_convocatoria?.slice(0, 5) || ''}
+                  onChange={(e) => setEditandoBloque({ ...editandoBloque, hora_convocatoria: e.target.value })} />
+              </div>
+              <div className="campo">
+                <label>Lugar de juego</label>
+                <input value={editandoBloque.lugar || ''}
+                  onChange={(e) => setEditandoBloque({ ...editandoBloque, lugar: e.target.value })} />
+              </div>
+            </div>
+            <button className="btn" style={{ width: '100%' }}>Guardar</button>
+          </form>
+        </div>
+      )}
+
       {bloques.map((b) => vista === b.id && (
         <VistaBloque
           key={b.id}
           bloque={b}
+          onEditar={() => setEditandoBloque({ ...b })}
           jugadores={ordenados.filter((j) => asignacion[j.id] === b.id)}
           tiempos={tiempos.filter((t) => t.bloque_id === b.id)}
           tiempoSel={tiempoSel[b.id]}
@@ -284,13 +331,7 @@ function Planilla({ partido, bloques, jugadores, asignacion, tiempos, enCancha }
       </div>
 
       <div className="tarjeta">
-        <h2>
-          🏉 Rugby M12 · {partido.rival ? `vs ${partido.rival}` : 'Partido'} · {fechaCorta(partido.fecha)}
-        </h2>
-        <div className="suave">
-          {partido.hora ? `${partido.hora.slice(0, 5)} hs` : ''}
-          {partido.lugar ? ` · ${partido.lugar}` : ''}
-        </div>
+        <h2>🏉 Rugby M12 · Día de partido · {fechaCorta(partido.fecha)}</h2>
 
         {bloques.map((bl) => {
           const delBloque = jugadores.filter((j) => asignacion[j.id] === bl.id)
@@ -299,7 +340,13 @@ function Planilla({ partido, bloques, jugadores, asignacion, tiempos, enCancha }
             tiemposBloque.filter((t) => (enCancha[t.id] || new Set()).has(jid)).length
           return (
             <div key={bl.id}>
-              <h3>{bl.nombre || `Bloque ${bl.numero}`} ({delBloque.length} jugadores)</h3>
+              <h3>
+                {bl.nombre || `Bloque ${bl.numero}`} vs {bl.rival || 'a definir'} ({delBloque.length} jugadores)
+              </h3>
+              <p className="mini">
+                {bl.hora_convocatoria ? `Convocatoria: ${bl.hora_convocatoria.slice(0, 5)} hs` : ''}
+                {bl.lugar ? `${bl.hora_convocatoria ? ' · ' : ''}${bl.lugar}` : ''}
+              </p>
               {!delBloque.length && <p className="mini">Sin jugadores asignados.</p>}
               {delBloque.length > 0 && (
                 <table>
@@ -342,12 +389,28 @@ function Planilla({ partido, bloques, jugadores, asignacion, tiempos, enCancha }
   )
 }
 
-function VistaBloque({ bloque, jugadores, tiempos, tiempoSel, onSelTiempo, enCancha, onToggle, onAgregarTiempo }) {
+function VistaBloque({ bloque, onEditar, jugadores, tiempos, tiempoSel, onSelTiempo, enCancha, onToggle, onAgregarTiempo }) {
+  const infoBloque = (
+    <div className="tarjeta fila entre">
+      <div className="crece">
+        <b>vs {bloque.rival || 'rival a definir'}</b>
+        <div className="mini">
+          {bloque.hora_convocatoria ? `Convocatoria: ${bloque.hora_convocatoria.slice(0, 5)} hs` : 'Sin hora de convocatoria'}
+          {bloque.lugar ? ` · ${bloque.lugar}` : ' · sin lugar definido'}
+        </div>
+      </div>
+      <button className="btn sec chico" onClick={onEditar}>Editar datos</button>
+    </div>
+  )
+
   if (!jugadores.length) {
     return (
-      <div className="vacio">
-        Este bloque no tiene jugadores. Asignalos en "Armar bloques".
-      </div>
+      <>
+        {infoBloque}
+        <div className="vacio">
+          Este bloque no tiene jugadores. Asignalos en "Armar bloques".
+        </div>
+      </>
     )
   }
 
@@ -363,6 +426,7 @@ function VistaBloque({ bloque, jugadores, tiempos, tiempoSel, onSelTiempo, enCan
 
   return (
     <>
+      {infoBloque}
       <div className="fila entre">
         <div className="seg crece">
           {tiempos.map((t) => (

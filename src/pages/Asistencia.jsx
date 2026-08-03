@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { descargarCSV, fechaCorta, nombreCompleto, ESTADOS_ASISTENCIA } from '../helpers.js'
+import { descargarCSV, etiquetaPartido, fechaCorta, lineaBloque, nombreCompleto, ESTADOS_ASISTENCIA } from '../helpers.js'
+
+const BLOQUE_VACIO = { rival: '', lugar: '', hora_convocatoria: '' }
 
 export default function Asistencia() {
   const [eventos, setEventos] = useState([])
@@ -41,7 +43,10 @@ export default function Asistencia() {
           <button className="btn sec" onClick={descargarResumen}>Resumen CSV</button>
           <button
             className="btn"
-            onClick={() => setCreando({ tipo: 'entrenamiento', fecha: hoy, hora: '', rival: '', lugar: '', notas: '' })}
+            onClick={() => setCreando({
+              tipo: 'entrenamiento', fecha: hoy, hora: '', lugar: '', notas: '',
+              b1: { ...BLOQUE_VACIO }, b2: { ...BLOQUE_VACIO },
+            })}
           >
             + Nuevo evento
           </button>
@@ -60,13 +65,16 @@ export default function Asistencia() {
           <div className="avatar">{ev.tipo === 'partido' ? '🏉' : '🏋️'}</div>
           <div className="crece">
             <div style={{ fontWeight: 600 }}>
-              {ev.tipo === 'partido' ? `Partido${ev.rival ? ` vs ${ev.rival}` : ''}` : 'Entrenamiento'}
+              {ev.tipo === 'partido' ? etiquetaPartido(ev) : 'Entrenamiento'}
             </div>
             <div className="mini">
               {fechaCorta(ev.fecha)}
               {ev.hora ? ` · ${ev.hora.slice(0, 5)} hs` : ''}
               {ev.lugar ? ` · ${ev.lugar}` : ''}
             </div>
+            {ev.tipo === 'partido' && (ev.bloques || []).map((bl) => (
+              <div key={bl.numero} className="mini">{lineaBloque(bl)}</div>
+            ))}
           </div>
           <span className="mini">→</span>
         </button>
@@ -79,15 +87,22 @@ export default function Asistencia() {
             onClick={(e) => e.stopPropagation()}
             onSubmit={async (e) => {
               e.preventDefault()
+              const esPartido = creando.tipo === 'partido'
+              const bloque = (n, d) => ({
+                numero: n,
+                rival: d.rival?.trim() || null,
+                lugar: d.lugar?.trim() || null,
+                hora_convocatoria: d.hora_convocatoria || null,
+              })
               const ev = await api('eventos', {
                 method: 'POST',
                 body: {
                   tipo: creando.tipo,
                   fecha: creando.fecha,
-                  hora: creando.hora || null,
-                  rival: creando.tipo === 'partido' ? creando.rival?.trim() || null : null,
-                  lugar: creando.lugar?.trim() || null,
+                  hora: esPartido ? null : creando.hora || null,
+                  lugar: esPartido ? null : creando.lugar?.trim() || null,
                   notas: creando.notas?.trim() || null,
+                  bloques: esPartido ? [bloque(1, creando.b1), bloque(2, creando.b2)] : undefined,
                 },
               })
               setCreando(null)
@@ -110,31 +125,59 @@ export default function Asistencia() {
               </div>
             </div>
 
-            <div className="grid2">
-              <div className="campo">
-                <label>Fecha</label>
-                <input type="date" required value={creando.fecha}
-                  onChange={(e) => setCreando({ ...creando, fecha: e.target.value })} />
-              </div>
-              <div className="campo">
-                <label>Hora</label>
-                <input type="time" value={creando.hora}
-                  onChange={(e) => setCreando({ ...creando, hora: e.target.value })} />
-              </div>
-            </div>
+            {creando.tipo === 'entrenamiento' && (
+              <>
+                <div className="grid2">
+                  <div className="campo">
+                    <label>Fecha</label>
+                    <input type="date" required value={creando.fecha}
+                      onChange={(e) => setCreando({ ...creando, fecha: e.target.value })} />
+                  </div>
+                  <div className="campo">
+                    <label>Hora</label>
+                    <input type="time" value={creando.hora}
+                      onChange={(e) => setCreando({ ...creando, hora: e.target.value })} />
+                  </div>
+                </div>
+                <div className="campo">
+                  <label>Lugar</label>
+                  <input placeholder="Ej.: cancha 2 TLT" value={creando.lugar}
+                    onChange={(e) => setCreando({ ...creando, lugar: e.target.value })} />
+                </div>
+              </>
+            )}
 
             {creando.tipo === 'partido' && (
-              <div className="campo">
-                <label>Rival</label>
-                <input placeholder="Ej.: Tucumán Rugby" value={creando.rival}
-                  onChange={(e) => setCreando({ ...creando, rival: e.target.value })} />
-              </div>
+              <>
+                <div className="campo">
+                  <label>Fecha</label>
+                  <input type="date" required value={creando.fecha}
+                    onChange={(e) => setCreando({ ...creando, fecha: e.target.value })} />
+                </div>
+                {[['b1', 'Bloque 1'], ['b2', 'Bloque 2']].map(([clave, titulo]) => (
+                  <div key={clave} className="tarjeta" style={{ marginBottom: 10 }}>
+                    <h3 style={{ marginBottom: 8 }}>{titulo}</h3>
+                    <div className="campo">
+                      <label>Rival</label>
+                      <input placeholder="Ej.: Tucumán Rugby" value={creando[clave].rival}
+                        onChange={(e) => setCreando({ ...creando, [clave]: { ...creando[clave], rival: e.target.value } })} />
+                    </div>
+                    <div className="grid2">
+                      <div className="campo">
+                        <label>Hora de convocatoria</label>
+                        <input type="time" value={creando[clave].hora_convocatoria}
+                          onChange={(e) => setCreando({ ...creando, [clave]: { ...creando[clave], hora_convocatoria: e.target.value } })} />
+                      </div>
+                      <div className="campo">
+                        <label>Lugar de juego</label>
+                        <input placeholder="Ej.: sede Marcos Paz" value={creando[clave].lugar}
+                          onChange={(e) => setCreando({ ...creando, [clave]: { ...creando[clave], lugar: e.target.value } })} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </>
             )}
-            <div className="campo">
-              <label>Lugar</label>
-              <input placeholder="Ej.: cancha 2 TLT" value={creando.lugar}
-                onChange={(e) => setCreando({ ...creando, lugar: e.target.value })} />
-            </div>
             <div className="campo">
               <label>Notas</label>
               <textarea value={creando.notas}
@@ -223,13 +266,16 @@ function TomarAsistencia({ evento, onVolver }) {
 
       <div className="tarjeta">
         <h2>
-          {evento.tipo === 'partido' ? `Partido${evento.rival ? ` vs ${evento.rival}` : ''}` : 'Entrenamiento'}
+          {evento.tipo === 'partido' ? etiquetaPartido(evento) : 'Entrenamiento'}
         </h2>
         <div className="suave">
           {fechaCorta(evento.fecha)}
           {evento.hora ? ` · ${evento.hora.slice(0, 5)} hs` : ''}
           {evento.lugar ? ` · ${evento.lugar}` : ''}
         </div>
+        {evento.tipo === 'partido' && (evento.bloques || []).map((bl) => (
+          <div key={bl.numero} className="mini">{lineaBloque(bl)}</div>
+        ))}
         {evento.notas && <p className="mini" style={{ marginTop: 6 }}>📝 {evento.notas}</p>}
         <div className="fila" style={{ marginTop: 8 }}>
           {ESTADOS_ASISTENCIA.map((e) => (

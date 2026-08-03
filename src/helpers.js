@@ -60,6 +60,20 @@ export function descargarCSV(nombreArchivo, filas) {
   URL.revokeObjectURL(url)
 }
 
+// Línea descriptiva de un bloque de partido: rival, convocatoria y lugar
+export function lineaBloque(b) {
+  const partes = [`B${b.numero} vs ${b.rival || 'a definir'}`]
+  if (b.hora_convocatoria) partes.push(`conv. ${b.hora_convocatoria.slice(0, 5)} hs`)
+  if (b.lugar) partes.push(b.lugar)
+  return partes.join(' · ')
+}
+
+export function etiquetaPartido(ev) {
+  const rivales = (ev.bloques || []).filter((b) => b.rival).map((b) => `B${b.numero} vs ${b.rival}`)
+  if (rivales.length) return `Partido · ${rivales.join(' / ')}`
+  return `Partido${ev.rival ? ` vs ${ev.rival}` : ''}`
+}
+
 export const ROLES_STAFF = [
   'Cabeza de división',
   'Entrenador',
