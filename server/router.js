@@ -257,21 +257,30 @@ async function enrutar(metodo, p, b, req) {
   if (p[0] === 'staff') {
     if (metodo === 'GET') {
       return query(
-        `select email, nombre, activo, password_hash is not null as tiene_clave
+        `select email, nombre, rol, activo, password_hash is not null as tiene_clave
          from staff order by created_at`)
     }
     if (metodo === 'POST') {
       const email = String(b.email || '').trim().toLowerCase()
       if (!email) throw { codigo: 400, error: 'faltan_datos' }
       const filas = await query(
-        `insert into staff (email, nombre) values ($1, $2)
-         on conflict (email) do nothing returning email`, [email, b.nombre || null])
+        `insert into staff (email, nombre, rol) values ($1, $2, $3)
+         on conflict (email) do nothing returning email`,
+        [email, b.nombre || null, validarRol(b.rol)])
       if (!filas.length) throw { codigo: 409, error: 'ya_existe' }
       return { ok: true }
     }
     if (metodo === 'PUT' && p[1]) {
-      if (p[1] === yo.email) throw { codigo: 400, error: 'no_podes_editarte' }
-      await query('update staff set activo = $1 where email = $2', [!!b.activo, p[1]])
+      if ('activo' in b) {
+        if (p[1] === yo.email) throw { codigo: 400, error: 'no_podes_suspenderte' }
+        await query('update staff set activo = $1 where email = $2', [!!b.activo, p[1]])
+      }
+      if ('rol' in b) {
+        await query('update staff set rol = $1 where email = $2', [validarRol(b.rol), p[1]])
+      }
+      if ('nombre' in b) {
+        await query('update staff set nombre = $1 where email = $2', [b.nombre || null, p[1]])
+      }
       return { ok: true }
     }
     if (metodo === 'DELETE' && p[1]) {
@@ -282,6 +291,21 @@ async function enrutar(metodo, p, b, req) {
   }
 
   throw { codigo: 404, error: 'no_existe' }
+}
+
+const ROLES = [
+  'Cabeza de división',
+  'Entrenador',
+  'Preparador físico (PF)',
+  'PF/entrenador',
+  'Manager principal',
+  'Manager asistente',
+]
+
+function validarRol(rol) {
+  if (!rol) return null
+  if (!ROLES.includes(rol)) throw { codigo: 400, error: 'rol_invalido' }
+  return rol
 }
 
 function datosJugador(b) {

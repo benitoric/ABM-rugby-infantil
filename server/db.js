@@ -24,6 +24,9 @@ async function inicializar() {
     ssl: { rejectUnauthorized: false },
     max: 1,
   })
+  // Migraciones livianas: cambios de esquema posteriores al despliegue
+  // inicial, idempotentes, aplicados en el arranque en frío de la función.
+  await pool.query('alter table staff add column if not exists rol text')
   return (texto, params) => pool.query(texto, params)
 }
 
