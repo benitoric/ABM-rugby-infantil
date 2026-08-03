@@ -23,6 +23,29 @@ export async function handle(req, res) {
 }
 
 async function enrutar(metodo, p, b, req) {
+  // ---------- diagnóstico (sin token, no expone datos) ----------
+  if (p[0] === 'health' && metodo === 'GET') {
+    const r = {
+      database_url_configurada: !!(process.env.DATABASE_URL || '').trim(),
+      jwt_secret_configurado: !!(process.env.JWT_SECRET || '').trim(),
+    }
+    try {
+      await query('select 1')
+      r.conexion_base = 'ok'
+      const [t] = await query("select to_regclass('public.staff') as staff")
+      if (t.staff) {
+        r.tablas = 'ok'
+        const [c] = await query('select count(*)::int as n from staff')
+        r.staff_cargados = c.n
+      } else {
+        r.tablas = 'FALTAN: ejecutá db/schema.sql en el SQL Editor de Neon (misma base a la que apunta DATABASE_URL)'
+      }
+    } catch (e) {
+      r.conexion_base = 'ERROR: ' + String(e?.message || e)
+    }
+    return r
+  }
+
   // ---------- autenticación (sin token) ----------
   if (p[0] === 'auth') {
     const email = String(b?.email || '').trim().toLowerCase()

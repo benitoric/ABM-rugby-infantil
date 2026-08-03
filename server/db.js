@@ -20,11 +20,25 @@ async function inicializar() {
   // Las columnas date llegan como texto plano 'YYYY-MM-DD' (no objetos Date)
   pg.types.setTypeParser(1082, (v) => v)
   const pool = new pg.Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: urlDeConexion(),
     ssl: { rejectUnauthorized: false },
     max: 1,
   })
   return (texto, params) => pool.query(texto, params)
+}
+
+// Tolera los formatos habituales al pegar la cadena de Neon: comillas,
+// espacios, o el comando completo `psql 'postgresql://...'`.
+function urlDeConexion() {
+  const crudo = (process.env.DATABASE_URL || '').trim()
+  if (!crudo) {
+    throw new Error('Falta DATABASE_URL en las variables de entorno (Vercel → Settings → Environment Variables)')
+  }
+  const m = crudo.match(/postgres(?:ql)?:\/\/[^\s'"]+/)
+  if (!m) {
+    throw new Error('DATABASE_URL no parece una cadena de conexión de Postgres: debería empezar con postgresql://')
+  }
+  return m[0]
 }
 
 export async function query(texto, params = []) {
