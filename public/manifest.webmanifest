@@ -3,8 +3,8 @@
   "short_name": "Rugby M12",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#f6f7f4",
-  "theme_color": "#14532d",
+  "background_color": "#f4f6fa",
+  "theme_color": "#1a4a9e",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
   ]

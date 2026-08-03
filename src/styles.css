@@ -1,12 +1,14 @@
+/* Colores institucionales del Tucumán Lawn Tennis Club: azul y dorado */
 :root {
-  --verde-oscuro: #14532d;
-  --verde: #16a34a;
-  --verde-claro: #dcfce7;
-  --fondo: #f4f6f3;
+  --primario: #1a4a9e;
+  --primario-oscuro: #123a80;
+  --celeste: #e3ecfb;
+  --dorado: #ffd200;
+  --fondo: #f4f6fa;
   --tarjeta: #ffffff;
-  --texto: #1c2420;
-  --texto-suave: #5b6660;
-  --borde: #dde3dd;
+  --texto: #1c2028;
+  --texto-suave: #5b6270;
+  --borde: #dde1ea;
   --ok: #16a34a;
   --warn: #d97706;
   --info: #2563eb;
@@ -37,7 +39,8 @@ input, select, textarea { font: inherit; }
 
 /* ---------- encabezado ---------- */
 .header {
-  background: var(--verde-oscuro);
+  background: var(--primario);
+  border-bottom: 3px solid var(--dorado);
   color: #fff;
   padding: 12px 16px;
   display: flex;
@@ -84,7 +87,7 @@ input, select, textarea { font: inherit; }
   gap: 2px;
 }
 .nav button .ico { font-size: 1.25rem; line-height: 1; }
-.nav button.activo { color: var(--verde-oscuro); font-weight: 700; }
+.nav button.activo { color: var(--primario); font-weight: 700; }
 
 @media (min-width: 720px) {
   .app { padding-bottom: 24px; }
@@ -123,12 +126,12 @@ h3 { font-size: 1rem; }
   border-radius: 10px;
   padding: 10px 16px;
   font-weight: 600;
-  background: var(--verde-oscuro);
+  background: var(--primario);
   color: #fff;
 }
 .btn.sec {
   background: #fff;
-  color: var(--verde-oscuro);
+  color: var(--primario);
   border: 1px solid var(--borde);
 }
 .btn.peligro { background: #fff; color: var(--bad); border: 1px solid #f3c1c1; }
@@ -144,7 +147,7 @@ h3 { font-size: 1rem; }
   font-size: 0.8rem;
   color: var(--texto-suave);
 }
-.chip.activo { background: var(--verde-oscuro); color: #fff; border-color: var(--verde-oscuro); }
+.chip.activo { background: var(--primario); color: #fff; border-color: var(--primario); }
 
 .badge {
   display: inline-block;
@@ -153,10 +156,10 @@ h3 { font-size: 1rem; }
   font-size: 0.7rem;
   font-weight: 700;
 }
-.badge.activo { background: var(--verde-claro); color: var(--verde-oscuro); }
+.badge.activo { background: var(--celeste); color: var(--primario); }
 .badge.lesionado { background: #fee2e2; color: var(--bad); }
 .badge.inactivo { background: #e5e7eb; color: #4b5563; }
-.badge.medica-ok { background: var(--verde-claro); color: var(--verde-oscuro); }
+.badge.medica-ok { background: var(--celeste); color: var(--primario); }
 .badge.medica-no { background: #fef3c7; color: var(--warn); }
 .badge.medica-pronto { background: #fef3c7; color: var(--warn); }
 .badge.medica-vencida { background: #fee2e2; color: var(--bad); }
@@ -215,8 +218,8 @@ h3 { font-size: 1rem; }
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: var(--verde-claro);
-  color: var(--verde-oscuro);
+  background: var(--celeste);
+  color: var(--primario);
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -241,7 +244,7 @@ h3 { font-size: 1rem; }
 /* ---------- bloques y tiempos ---------- */
 .seg {
   display: flex;
-  background: #e8ece7;
+  background: #e6eaf3;
   border-radius: 10px;
   padding: 3px;
   gap: 3px;
@@ -257,7 +260,7 @@ h3 { font-size: 1rem; }
   color: var(--texto-suave);
   white-space: nowrap;
 }
-.seg button.activo { background: #fff; color: var(--verde-oscuro); box-shadow: var(--sombra); }
+.seg button.activo { background: #fff; color: var(--primario); box-shadow: var(--sombra); }
 
 .bloque-botones { display: flex; gap: 6px; }
 .bloque-btn {
@@ -270,12 +273,12 @@ h3 { font-size: 1rem; }
   font-size: 0.75rem;
   color: var(--texto-suave);
 }
-.bloque-btn.sel { background: var(--verde-oscuro); color: #fff; border-color: var(--verde-oscuro); }
+.bloque-btn.sel { background: var(--primario); color: #fff; border-color: var(--primario); }
 
 .contador {
   font-size: 1.6rem;
   font-weight: 800;
-  color: var(--verde-oscuro);
+  color: var(--primario);
 }
 
 /* ---------- login ---------- */
@@ -285,7 +288,7 @@ h3 { font-size: 1rem; }
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: linear-gradient(160deg, var(--verde-oscuro), #1f7a43);
+  background: linear-gradient(160deg, var(--primario-oscuro), #2a63c4);
 }
 .login-caja {
   background: #fff;
@@ -297,14 +300,14 @@ h3 { font-size: 1rem; }
   flex-direction: column;
   gap: 8px;
 }
-.login-caja h1 { font-size: 1.3rem; color: var(--verde-oscuro); }
+.login-caja h1 { font-size: 1.3rem; color: var(--primario); }
 
 .error { background: #fee2e2; color: var(--bad); border-radius: 10px; padding: 10px; font-size: 0.85rem; }
 .aviso { background: #fef9c3; color: #854d0e; border-radius: 10px; padding: 10px; font-size: 0.85rem; }
 
 .vacio { text-align: center; color: var(--texto-suave); padding: 30px 10px; }
 
-.seguimiento-item { border-left: 3px solid var(--verde); padding: 8px 12px; margin-bottom: 8px; background: #fff; border-radius: 0 10px 10px 0; box-shadow: var(--sombra); }
+.seguimiento-item { border-left: 3px solid var(--dorado); padding: 8px 12px; margin-bottom: 8px; background: #fff; border-radius: 0 10px 10px 0; box-shadow: var(--sombra); }
 .estrellas { color: #f59e0b; letter-spacing: 2px; }
 
 .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -315,7 +318,7 @@ h3 { font-size: 1rem; }
   padding: 10px;
   text-align: center;
 }
-.stat .valor { font-size: 1.3rem; font-weight: 800; color: var(--verde-oscuro); }
+.stat .valor { font-size: 1.3rem; font-weight: 800; color: var(--primario); }
 .stat .etiqueta { font-size: 0.68rem; color: var(--texto-suave); text-transform: uppercase; letter-spacing: 0.04em; }
 
 /* ---------- planilla imprimible ---------- */
@@ -331,7 +334,7 @@ h3 { font-size: 1rem; }
   font-size: 0.8rem;
   text-align: center;
 }
-.planilla th { background: #eef2ee; }
+.planilla th { background: #e9effa; }
 .planilla td:first-child, .planilla th:first-child { text-align: left; }
 .planilla h3 { margin-top: 14px; }
 
@@ -347,5 +350,5 @@ h3 { font-size: 1rem; }
 details.tarjeta summary {
   cursor: pointer;
   font-weight: 600;
-  color: var(--verde-oscuro);
+  color: var(--primario);
 }

@@ -20,7 +20,10 @@ export async function handle(req, res) {
       ruta = url.pathname.replace(/^\/api\/?/, '')
       if (ruta === 'index' || ruta === 'index.js') ruta = ''
     }
-    const partes = ruta.split('/').filter(Boolean)
+    // Decodificar cada segmento (los emails viajan con @ codificado)
+    const partes = ruta.split('/').filter(Boolean).map((s) => {
+      try { return decodeURIComponent(s) } catch { return s }
+    })
     const cuerpo = await leerCuerpo(req)
     const resultado = await enrutar(req.method, partes, cuerpo, req, url)
     json(res, resultado?._codigo || 200, resultado ?? { ok: true })
@@ -119,16 +122,20 @@ async function enrutar(metodo, p, b, req, url) {
       return { ok: true }
     }
     if (metodo === 'POST' && p[1] === 'lote' && !p[2]) {
-      // Carga masiva: b.jugadores = [{nombre, apellido, fecha_nacimiento?}]
+      // Carga masiva: b.jugadores = [{nombre, apellido, ...campos opcionales}]
       const lista = Array.isArray(b?.jugadores) ? b.jugadores : []
       if (!lista.length) throw { codigo: 400, error: 'faltan_datos' }
       let creados = 0
       for (const j of lista) {
         if (!j?.nombre?.trim() || !j?.apellido?.trim()) continue
         await query(
-          `insert into jugadores (nombre, apellido, fecha_nacimiento)
-           values ($1, $2, $3)`,
-          [j.nombre.trim(), j.apellido.trim(), j.fecha_nacimiento || null])
+          `insert into jugadores (nombre, apellido, fecha_nacimiento, dni, posicion,
+             tutor_nombre, tutor_telefono, ficha_medica_vence, observaciones)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [j.nombre.trim(), j.apellido.trim(), j.fecha_nacimiento || null,
+           j.dni || null, j.posicion || null, j.tutor_nombre || null,
+           j.tutor_telefono || null, j.ficha_medica_vence || null,
+           j.observaciones || null])
         creados++
       }
       return { creados }
@@ -361,16 +368,24 @@ async function enrutar(metodo, p, b, req, url) {
       return { ok: true }
     }
     if (metodo === 'PUT' && p[1]) {
+      let tocados = 0
       if ('activo' in b) {
         if (p[1] === yo.email) throw { codigo: 400, error: 'no_podes_suspenderte' }
-        await query('update staff set activo = $1 where email = $2', [!!b.activo, p[1]])
+        const r = await query(
+          'update staff set activo = $1 where email = $2 returning email', [!!b.activo, p[1]])
+        tocados += r.length
       }
       if ('rol' in b) {
-        await query('update staff set rol = $1 where email = $2', [validarRol(b.rol), p[1]])
+        const r = await query(
+          'update staff set rol = $1 where email = $2 returning email', [validarRol(b.rol), p[1]])
+        tocados += r.length
       }
       if ('nombre' in b) {
-        await query('update staff set nombre = $1 where email = $2', [b.nombre || null, p[1]])
+        const r = await query(
+          'update staff set nombre = $1 where email = $2 returning email', [b.nombre || null, p[1]])
+        tocados += r.length
       }
+      if (!tocados) throw { codigo: 404, error: 'no_existe' }
       return { ok: true }
     }
     if (metodo === 'DELETE' && p[1]) {

@@ -32,7 +32,7 @@ export default function Staff({ yo }) {
   }
 
   async function cambiarRol(fila, nuevoRol) {
-    await api(`staff/${encodeURIComponent(fila.email)}`, {
+    await api(`staff/${fila.email}`, {
       method: 'PUT',
       body: { rol: nuevoRol || null },
     })
@@ -40,7 +40,7 @@ export default function Staff({ yo }) {
   }
 
   async function alternarActivo(fila) {
-    await api(`staff/${encodeURIComponent(fila.email)}`, {
+    await api(`staff/${fila.email}`, {
       method: 'PUT',
       body: { activo: !fila.activo },
     })
@@ -49,7 +49,7 @@ export default function Staff({ yo }) {
 
   async function quitar(fila) {
     if (!confirm(`¿Quitar a ${fila.email} del staff?`)) return
-    await api(`staff/${encodeURIComponent(fila.email)}`, { method: 'DELETE' })
+    await api(`staff/${fila.email}`, { method: 'DELETE' })
     cargar()
   }
 
