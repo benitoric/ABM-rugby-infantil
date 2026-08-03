@@ -26,6 +26,15 @@ export const AREAS = [
   { value: 'social', label: 'Social' },
 ]
 
+export const ROLES_STAFF = [
+  'Cabeza de división',
+  'Entrenador',
+  'Preparador físico (PF)',
+  'PF/entrenador',
+  'Manager principal',
+  'Manager asistente',
+]
+
 export const ESTADOS_ASISTENCIA = [
   { value: 'presente', label: 'P', title: 'Presente', color: 'var(--ok)' },
   { value: 'tarde', label: 'T', title: 'Llegó tarde', color: 'var(--warn)' },
