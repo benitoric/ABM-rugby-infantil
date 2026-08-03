@@ -161,9 +161,13 @@ function ImportarLista({ onCerrar, onImportado }) {
           <button className="btn sec chico" onClick={onCerrar}>Cerrar</button>
         </div>
         <p className="mini" style={{ marginBottom: 8 }}>
-          Pegá un jugador por línea. Formatos aceptados:<br />
-          <b>Apellido, Nombre</b> · <b>Nombre Apellido</b> · y opcionalmente la fecha
-          de nacimiento después de punto y coma: <b>Pérez, Juan; 12/05/2014</b>
+          <b>Opción 1 (recomendada):</b>{' '}
+          <a href="plantilla-jugadores.xlsx" download>⬇ descargá la plantilla de Excel</a>,
+          completala y pegá acá las filas copiadas (sin el encabezado): se cargan
+          todos los datos de una (tutor, DNI, ficha médica, etc.).<br />
+          <b>Opción 2:</b> escribí un jugador por línea: <b>Apellido, Nombre</b> ·{' '}
+          <b>Nombre Apellido</b> · con fecha de nacimiento opcional después de punto
+          y coma: <b>Pérez, Juan; 12/05/2014</b>
         </p>
         <div className="campo">
           <textarea
@@ -178,7 +182,12 @@ function ImportarLista({ onCerrar, onImportado }) {
             <b className="mini">Se van a crear {validos.length} jugadores:</b>
             {validos.map((l, i) => (
               <div key={i} className="mini">
-                • {l.apellido}, {l.nombre}{l.fecha_nacimiento ? ` (nac. ${fechaCorta(l.fecha_nacimiento)})` : ''}
+                • {l.apellido}, {l.nombre}
+                {l.fecha_nacimiento ? ` (nac. ${fechaCorta(l.fecha_nacimiento)})` : ''}
+                {l.dni ? ` · DNI ${l.dni}` : ''}
+                {l.posicion ? ` · ${l.posicion}` : ''}
+                {l.tutor_nombre ? ` · tutor: ${l.tutor_nombre}` : ''}
+                {l.ficha_medica_vence ? ` · ficha vence ${fechaCorta(l.ficha_medica_vence)}` : ''}
               </div>
             ))}
           </div>
@@ -197,10 +206,46 @@ function ImportarLista({ onCerrar, onImportado }) {
   )
 }
 
+function parsearFecha(texto) {
+  const t = (texto || '').trim()
+  if (!t) return null
+  const dmy = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
+  if (dmy) {
+    const anio = dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3]
+    return `${anio}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t
+  return undefined // formato no reconocido
+}
+
 function parsearLinea(linea) {
-  const l = linea.trim()
-  if (!l) return null
-  const [parte, extra] = l.split(';').map((s) => s.trim())
+  const l = linea.replace(/\r$/, '')
+  if (!l.trim()) return null
+
+  // Filas copiadas desde Excel: columnas separadas por tabulaciones,
+  // en el orden de la plantilla.
+  if (l.includes('\t')) {
+    const c = l.split('\t').map((s) => s.trim())
+    const [apellido, nombre, fnac, dni, posicion, tutor, telefono, vence, obs] = c
+    if (/^apellido$/i.test(apellido)) return null // encabezado pegado: se omite
+    if (!apellido || !nombre) return { error: l.slice(0, 50) }
+    const fecha = parsearFecha(fnac)
+    const fichaVence = parsearFecha(vence)
+    if (fecha === undefined || fichaVence === undefined) return { error: l.slice(0, 50) }
+    return {
+      nombre, apellido,
+      fecha_nacimiento: fecha,
+      dni: dni || null,
+      posicion: posicion || null,
+      tutor_nombre: tutor || null,
+      tutor_telefono: telefono || null,
+      ficha_medica_vence: fichaVence,
+      observaciones: obs || null,
+    }
+  }
+
+  // Formato de texto simple
+  const [parte, extra] = l.trim().split(';').map((s) => s.trim())
   let nombre, apellido
   if (parte.includes(',')) {
     ;[apellido, nombre] = parte.split(',').map((s) => s.trim())
@@ -209,14 +254,11 @@ function parsearLinea(linea) {
     nombre = t[0]
     apellido = t.slice(1).join(' ')
   }
-  if (!nombre || !apellido) return { error: l }
+  if (!nombre || !apellido) return { error: l.trim() }
   let fecha = null
   if (extra) {
-    const dmy = extra.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-    const iso = extra.match(/^\d{4}-\d{2}-\d{2}$/)
-    if (dmy) fecha = `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`
-    else if (iso) fecha = extra
-    else return { error: l }
+    fecha = parsearFecha(extra)
+    if (!fecha) return { error: l.trim() }
   }
   return { nombre, apellido, fecha_nacimiento: fecha }
 }
