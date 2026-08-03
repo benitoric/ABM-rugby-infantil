@@ -9,7 +9,15 @@ const COLS_SEGUIMIENTO = `id, jugador_id, fecha::text as fecha, area, valoracion
 export async function handle(req, res) {
   try {
     const url = new URL(req.url, 'http://localhost')
-    const partes = url.pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean)
+    // La ruta puede venir como query (?ruta=auth/login — forma principal, no
+    // depende del enrutamiento de Vercel) o en el path (/api/auth/login —
+    // dev server local y acceso directo a /api/health desde el navegador).
+    let ruta = url.searchParams.get('ruta')
+    if (!ruta) {
+      ruta = url.pathname.replace(/^\/api\/?/, '')
+      if (ruta === 'index' || ruta === 'index.js') ruta = ''
+    }
+    const partes = ruta.split('/').filter(Boolean)
     const cuerpo = await leerCuerpo(req)
     const resultado = await enrutar(req.method, partes, cuerpo, req)
     json(res, resultado?._codigo || 200, resultado ?? { ok: true })
