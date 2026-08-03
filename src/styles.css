@@ -1,0 +1,317 @@
+:root {
+  --verde-oscuro: #14532d;
+  --verde: #16a34a;
+  --verde-claro: #dcfce7;
+  --fondo: #f4f6f3;
+  --tarjeta: #ffffff;
+  --texto: #1c2420;
+  --texto-suave: #5b6660;
+  --borde: #dde3dd;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --info: #2563eb;
+  --bad: #dc2626;
+  --radio: 12px;
+  --sombra: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button { font: inherit; cursor: pointer; }
+input, select, textarea { font: inherit; }
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding-bottom: 76px; /* espacio para la barra inferior en móvil */
+  min-height: 100vh;
+}
+
+/* ---------- encabezado ---------- */
+.header {
+  background: var(--verde-oscuro);
+  color: #fff;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.header h1 { font-size: 1.05rem; font-weight: 700; line-height: 1.2; }
+.header .sub { font-size: 0.72rem; opacity: 0.85; font-weight: 400; }
+.header button {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #fff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+}
+
+/* ---------- navegación ---------- */
+.nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--tarjeta);
+  border-top: 1px solid var(--borde);
+  display: flex;
+  z-index: 30;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.nav button {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 8px 2px 10px;
+  font-size: 0.7rem;
+  color: var(--texto-suave);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.nav button .ico { font-size: 1.25rem; line-height: 1; }
+.nav button.activo { color: var(--verde-oscuro); font-weight: 700; }
+
+@media (min-width: 720px) {
+  .app { padding-bottom: 24px; }
+  .nav {
+    position: sticky;
+    top: 52px;
+    bottom: auto;
+    border-top: none;
+    border-bottom: 1px solid var(--borde);
+  }
+  .nav button { flex-direction: row; gap: 8px; font-size: 0.9rem; padding: 12px; }
+}
+
+/* ---------- contenido ---------- */
+.contenido { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+.tarjeta {
+  background: var(--tarjeta);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+  padding: 14px;
+}
+
+.fila { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fila.entre { justify-content: space-between; }
+.crece { flex: 1; }
+
+h2 { font-size: 1.15rem; }
+h3 { font-size: 1rem; }
+.suave { color: var(--texto-suave); font-size: 0.85rem; }
+.mini { font-size: 0.75rem; color: var(--texto-suave); }
+
+/* ---------- botones ---------- */
+.btn {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-weight: 600;
+  background: var(--verde-oscuro);
+  color: #fff;
+}
+.btn.sec {
+  background: #fff;
+  color: var(--verde-oscuro);
+  border: 1px solid var(--borde);
+}
+.btn.peligro { background: #fff; color: var(--bad); border: 1px solid #f3c1c1; }
+.btn.chico { padding: 6px 10px; font-size: 0.8rem; border-radius: 8px; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+
+/* ---------- chips / badges ---------- */
+.chip {
+  border: 1px solid var(--borde);
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+}
+.chip.activo { background: var(--verde-oscuro); color: #fff; border-color: var(--verde-oscuro); }
+
+.badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.badge.activo { background: var(--verde-claro); color: var(--verde-oscuro); }
+.badge.lesionado { background: #fee2e2; color: var(--bad); }
+.badge.inactivo { background: #e5e7eb; color: #4b5563; }
+.badge.medica-ok { background: var(--verde-claro); color: var(--verde-oscuro); }
+.badge.medica-no { background: #fef3c7; color: var(--warn); }
+
+/* ---------- formularios ---------- */
+.campo { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.campo label { font-size: 0.8rem; font-weight: 600; color: var(--texto-suave); }
+.campo input, .campo select, .campo textarea {
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+  width: 100%;
+}
+.campo textarea { min-height: 70px; resize: vertical; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+
+/* ---------- modal ---------- */
+.modal-fondo {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.modal {
+  background: var(--fondo);
+  width: 100%;
+  max-width: 560px;
+  max-height: 92vh;
+  overflow-y: auto;
+  border-radius: 16px 16px 0 0;
+  padding: 16px;
+}
+@media (min-width: 720px) {
+  .modal-fondo { align-items: center; }
+  .modal { border-radius: 16px; }
+}
+
+/* ---------- listas de jugadores ---------- */
+.jugador-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--tarjeta);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+  border: none;
+  width: 100%;
+  text-align: left;
+}
+.avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--verde-claro);
+  color: var(--verde-oscuro);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+/* ---------- asistencia ---------- */
+.asis-botones { display: flex; gap: 6px; }
+.asis-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--borde);
+  background: #fff;
+  font-weight: 700;
+  color: var(--texto-suave);
+}
+.asis-btn.sel { color: #fff; border-color: transparent; }
+
+/* ---------- bloques y tiempos ---------- */
+.seg {
+  display: flex;
+  background: #e8ece7;
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+  overflow-x: auto;
+}
+.seg button {
+  flex: 1;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-weight: 600;
+  color: var(--texto-suave);
+  white-space: nowrap;
+}
+.seg button.activo { background: #fff; color: var(--verde-oscuro); box-shadow: var(--sombra); }
+
+.bloque-botones { display: flex; gap: 6px; }
+.bloque-btn {
+  min-width: 42px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--borde);
+  background: #fff;
+  font-weight: 700;
+  font-size: 0.75rem;
+  color: var(--texto-suave);
+}
+.bloque-btn.sel { background: var(--verde-oscuro); color: #fff; border-color: var(--verde-oscuro); }
+
+.contador {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--verde-oscuro);
+}
+
+/* ---------- login ---------- */
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: linear-gradient(160deg, var(--verde-oscuro), #1f7a43);
+}
+.login-caja {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.login-caja h1 { font-size: 1.3rem; color: var(--verde-oscuro); }
+
+.error { background: #fee2e2; color: var(--bad); border-radius: 10px; padding: 10px; font-size: 0.85rem; }
+.aviso { background: #fef9c3; color: #854d0e; border-radius: 10px; padding: 10px; font-size: 0.85rem; }
+
+.vacio { text-align: center; color: var(--texto-suave); padding: 30px 10px; }
+
+.seguimiento-item { border-left: 3px solid var(--verde); padding: 8px 12px; margin-bottom: 8px; background: #fff; border-radius: 0 10px 10px 0; box-shadow: var(--sombra); }
+.estrellas { color: #f59e0b; letter-spacing: 2px; }
+
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stat {
+  background: var(--tarjeta);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+  padding: 10px;
+  text-align: center;
+}
+.stat .valor { font-size: 1.3rem; font-weight: 800; color: var(--verde-oscuro); }
+.stat .etiqueta { font-size: 0.68rem; color: var(--texto-suave); text-transform: uppercase; letter-spacing: 0.04em; }
