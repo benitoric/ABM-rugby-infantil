@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { edad, nombreCompleto } from '../helpers.js'
+import { edad, fechaCorta, fichaMedica, nombreCompleto } from '../helpers.js'
 import Ficha from './Ficha.jsx'
 
 const VACIO = {
   nombre: '', apellido: '', fecha_nacimiento: '', dni: '', posicion: '',
   estado: 'activo', tutor_nombre: '', tutor_telefono: '',
-  ficha_medica_vigente: false, observaciones: '',
+  ficha_medica_vigente: false, ficha_medica_vence: '', observaciones: '',
 }
 
 export default function Jugadores() {
@@ -15,6 +15,7 @@ export default function Jugadores() {
   const [busqueda, setBusqueda] = useState('')
   const [editando, setEditando] = useState(null)
   const [fichaDe, setFichaDe] = useState(null)
+  const [importando, setImportando] = useState(false)
   const [cargando, setCargando] = useState(true)
 
   async function cargar() {
@@ -39,12 +40,42 @@ export default function Jugadores() {
     )
   }
 
+  const activos = jugadores.filter((j) => j.estado !== 'inactivo')
+  const mesActual = new Date().getMonth() + 1
+  const cumples = activos
+    .filter((j) => j.fecha_nacimiento && Number(j.fecha_nacimiento.split('-')[1]) === mesActual)
+    .sort((a, b) => Number(a.fecha_nacimiento.split('-')[2]) - Number(b.fecha_nacimiento.split('-')[2]))
+  const fichasProblema = activos.filter((j) => {
+    const c = fichaMedica(j).clase
+    return c === 'medica-vencida' || c === 'medica-pronto' || c === 'medica-no'
+  })
+
   return (
     <div className="contenido">
       <div className="fila entre">
         <h2>Jugadores ({visibles.length})</h2>
-        <button className="btn" onClick={() => setEditando({ ...VACIO })}>+ Nuevo</button>
+        <div className="fila">
+          <button className="btn sec" onClick={() => setImportando(true)}>Importar lista</button>
+          <button className="btn" onClick={() => setEditando({ ...VACIO })}>+ Nuevo</button>
+        </div>
       </div>
+
+      {cumples.length > 0 && (
+        <div className="tarjeta">
+          <h3>🎂 Cumpleaños de este mes</h3>
+          {cumples.map((j) => (
+            <div key={j.id} className="mini" style={{ marginTop: 4 }}>
+              {Number(j.fecha_nacimiento.split('-')[2])}/{mesActual} — {nombreCompleto(j)} (cumple {new Date().getFullYear() - Number(j.fecha_nacimiento.split('-')[0])})
+            </div>
+          ))}
+        </div>
+      )}
+
+      {fichasProblema.length > 0 && (
+        <div className="aviso">
+          🏥 Fichas médicas a revisar: {fichasProblema.map((j) => `${j.apellido} (${fichaMedica(j).texto.toLowerCase()})`).join(' · ')}
+        </div>
+      )}
 
       <input
         className="crece"
@@ -78,9 +109,7 @@ export default function Jugadores() {
             </div>
           </div>
           {j.estado !== 'activo' && <span className={`badge ${j.estado}`}>{j.estado}</span>}
-          <span className={`badge ${j.ficha_medica_vigente ? 'medica-ok' : 'medica-no'}`}>
-            {j.ficha_medica_vigente ? 'Ficha médica ✓' : 'Sin ficha médica'}
-          </span>
+          <span className={`badge ${fichaMedica(j).clase}`}>{fichaMedica(j).texto}</span>
         </button>
       ))}
 
@@ -91,8 +120,105 @@ export default function Jugadores() {
           onGuardado={() => { setEditando(null); cargar() }}
         />
       )}
+
+      {importando && (
+        <ImportarLista
+          onCerrar={() => setImportando(false)}
+          onImportado={() => { setImportando(false); cargar() }}
+        />
+      )}
     </div>
   )
+}
+
+function ImportarLista({ onCerrar, onImportado }) {
+  const [texto, setTexto] = useState('')
+  const [error, setError] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  const lineas = texto.split('\n').map(parsearLinea).filter(Boolean)
+  const validos = lineas.filter((l) => !l.error)
+  const invalidos = lineas.filter((l) => l.error)
+
+  async function importar() {
+    if (!validos.length) return
+    setGuardando(true)
+    setError('')
+    try {
+      await api('jugadores/lote', { method: 'POST', body: { jugadores: validos } })
+      onImportado()
+    } catch {
+      setError('No se pudo importar. Probá de nuevo.')
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div className="modal-fondo" onClick={onCerrar}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="fila entre" style={{ marginBottom: 12 }}>
+          <h3>Importar lista de jugadores</h3>
+          <button className="btn sec chico" onClick={onCerrar}>Cerrar</button>
+        </div>
+        <p className="mini" style={{ marginBottom: 8 }}>
+          Pegá un jugador por línea. Formatos aceptados:<br />
+          <b>Apellido, Nombre</b> · <b>Nombre Apellido</b> · y opcionalmente la fecha
+          de nacimiento después de punto y coma: <b>Pérez, Juan; 12/05/2014</b>
+        </p>
+        <div className="campo">
+          <textarea
+            style={{ minHeight: 140 }}
+            placeholder={'Pérez, Juan; 12/05/2014\nGómez, Pedro\nLuis Díaz'}
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+          />
+        </div>
+        {validos.length > 0 && (
+          <div className="tarjeta" style={{ marginBottom: 10 }}>
+            <b className="mini">Se van a crear {validos.length} jugadores:</b>
+            {validos.map((l, i) => (
+              <div key={i} className="mini">
+                • {l.apellido}, {l.nombre}{l.fecha_nacimiento ? ` (nac. ${fechaCorta(l.fecha_nacimiento)})` : ''}
+              </div>
+            ))}
+          </div>
+        )}
+        {invalidos.length > 0 && (
+          <div className="error" style={{ marginBottom: 10 }}>
+            Líneas que no se entienden (corregilas o se omiten): {invalidos.map((l) => `"${l.error}"`).join(', ')}
+          </div>
+        )}
+        {error && <div className="error" style={{ marginBottom: 10 }}>{error}</div>}
+        <button className="btn" style={{ width: '100%' }} disabled={!validos.length || guardando} onClick={importar}>
+          {guardando ? 'Importando…' : `Importar ${validos.length} jugadores`}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function parsearLinea(linea) {
+  const l = linea.trim()
+  if (!l) return null
+  const [parte, extra] = l.split(';').map((s) => s.trim())
+  let nombre, apellido
+  if (parte.includes(',')) {
+    ;[apellido, nombre] = parte.split(',').map((s) => s.trim())
+  } else {
+    const t = parte.split(/\s+/)
+    nombre = t[0]
+    apellido = t.slice(1).join(' ')
+  }
+  if (!nombre || !apellido) return { error: l }
+  let fecha = null
+  if (extra) {
+    const dmy = extra.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+    const iso = extra.match(/^\d{4}-\d{2}-\d{2}$/)
+    if (dmy) fecha = `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`
+    else if (iso) fecha = extra
+    else return { error: l }
+  }
+  return { nombre, apellido, fecha_nacimiento: fecha }
 }
 
 export function FormJugador({ inicial, onCerrar, onGuardado }) {
@@ -174,16 +300,22 @@ export function FormJugador({ inicial, onCerrar, onGuardado }) {
           </div>
         </div>
 
-        <div className="campo">
-          <label className="fila" style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <input
-              type="checkbox"
-              style={{ width: 18, height: 18 }}
-              checked={!!f.ficha_medica_vigente}
-              onChange={(e) => setF({ ...f, ficha_medica_vigente: e.target.checked })}
-            />
-            Ficha médica vigente
-          </label>
+        <div className="grid2">
+          <div className="campo">
+            <label className="fila" style={{ flexDirection: 'row', alignItems: 'center', marginTop: 24 }}>
+              <input
+                type="checkbox"
+                style={{ width: 18, height: 18 }}
+                checked={!!f.ficha_medica_vigente}
+                onChange={(e) => setF({ ...f, ficha_medica_vigente: e.target.checked })}
+              />
+              Ficha médica vigente
+            </label>
+          </div>
+          <div className="campo">
+            <label>Vencimiento ficha médica</label>
+            <input type="date" {...campo('ficha_medica_vence')} />
+          </div>
         </div>
 
         <div className="campo">

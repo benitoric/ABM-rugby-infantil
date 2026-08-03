@@ -38,7 +38,7 @@ export default function Partidos() {
 
   return (
     <div className="contenido">
-      <div className="campo">
+      <div className="campo no-imprimir">
         <label>Partido</label>
         <select value={partidoId} onChange={(e) => setPartidoId(e.target.value)}>
           {partidos.map((p) => (
@@ -49,7 +49,36 @@ export default function Partidos() {
         </select>
       </div>
       {partido && <ArmadoPartido key={partido.id} partido={partido} />}
+      <RotacionAnual />
     </div>
+  )
+}
+
+function RotacionAnual() {
+  const [filas, setFilas] = useState(null)
+  const anio = new Date().getFullYear()
+
+  async function abrir(e) {
+    if (e.target.open && !filas) setFilas(await api(`stats/tiempos?anio=${anio}`))
+  }
+
+  return (
+    <details className="tarjeta no-imprimir" onToggle={abrir}>
+      <summary>📊 Tiempos jugados en {anio} (para equilibrar rotaciones)</summary>
+      {!filas && <p className="mini" style={{ marginTop: 8 }}>Cargando…</p>}
+      {filas && !filas.length && <p className="mini" style={{ marginTop: 8 }}>Sin datos todavía.</p>}
+      {filas && filas.map((f) => (
+        <div key={f.id} className="fila entre" style={{ marginTop: 6 }}>
+          <span style={{ fontSize: '0.9rem' }}>{f.apellido}, {f.nombre}</span>
+          <b style={{ color: f.tiempos === 0 ? 'var(--warn)' : 'var(--verde-oscuro)' }}>
+            {f.tiempos} {f.tiempos === 1 ? 'tiempo' : 'tiempos'}
+          </b>
+        </div>
+      ))}
+      <p className="mini" style={{ marginTop: 8 }}>
+        Ordenado de menor a mayor: los de arriba son los que menos jugaron en el año.
+      </p>
+    </details>
   )
 }
 
@@ -166,7 +195,7 @@ function ArmadoPartido({ partido }) {
 
   return (
     <>
-      <div className="seg">
+      <div className="seg no-imprimir">
         <button className={vista === 'bloques' ? 'activo' : ''} onClick={() => setVista('bloques')}>
           Armar bloques
         </button>
@@ -175,7 +204,21 @@ function ArmadoPartido({ partido }) {
             {b.nombre || `Bloque ${b.numero}`} ({conteoBloque(b.id)})
           </button>
         ))}
+        <button className={vista === 'planilla' ? 'activo' : ''} onClick={() => setVista('planilla')}>
+          🖨 Planilla
+        </button>
       </div>
+
+      {vista === 'planilla' && (
+        <Planilla
+          partido={partido}
+          bloques={bloques}
+          jugadores={ordenados}
+          asignacion={asignacion}
+          tiempos={tiempos}
+          enCancha={enCancha}
+        />
+      )}
 
       {vista === 'bloques' && (
         <>
@@ -226,6 +269,76 @@ function ArmadoPartido({ partido }) {
         />
       ))}
     </>
+  )
+}
+
+function Planilla({ partido, bloques, jugadores, asignacion, tiempos, enCancha }) {
+  return (
+    <div className="planilla">
+      <div className="fila entre no-imprimir">
+        <p className="mini crece">
+          Vista para llevar a la cancha: imprimila o guardala como PDF desde el
+          diálogo de impresión.
+        </p>
+        <button className="btn" onClick={() => window.print()}>Imprimir</button>
+      </div>
+
+      <div className="tarjeta">
+        <h2>
+          🏉 Rugby M12 · {partido.rival ? `vs ${partido.rival}` : 'Partido'} · {fechaCorta(partido.fecha)}
+        </h2>
+        <div className="suave">
+          {partido.hora ? `${partido.hora.slice(0, 5)} hs` : ''}
+          {partido.lugar ? ` · ${partido.lugar}` : ''}
+        </div>
+
+        {bloques.map((bl) => {
+          const delBloque = jugadores.filter((j) => asignacion[j.id] === bl.id)
+          const tiemposBloque = tiempos.filter((t) => t.bloque_id === bl.id)
+          const jugados = (jid) =>
+            tiemposBloque.filter((t) => (enCancha[t.id] || new Set()).has(jid)).length
+          return (
+            <div key={bl.id}>
+              <h3>{bl.nombre || `Bloque ${bl.numero}`} ({delBloque.length} jugadores)</h3>
+              {!delBloque.length && <p className="mini">Sin jugadores asignados.</p>}
+              {delBloque.length > 0 && (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Jugador</th>
+                      {tiemposBloque.map((t) => <th key={t.id}>T{t.numero}</th>)}
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {delBloque.map((j) => (
+                      <tr key={j.id}>
+                        <td>{nombreCompleto(j)}</td>
+                        {tiemposBloque.map((t) => (
+                          <td key={t.id}>{(enCancha[t.id] || new Set()).has(j.id) ? '✔' : ''}</td>
+                        ))}
+                        <td><b>{jugados(j.id)}</b></td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td><b>En cancha</b></td>
+                      {tiemposBloque.map((t) => (
+                        <td key={t.id}><b>{(enCancha[t.id] || new Set()).size}</b></td>
+                      ))}
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )
+        })}
+
+        <p className="mini" style={{ marginTop: 10 }}>
+          Sin bloque: {jugadores.filter((j) => !asignacion[j.id]).map(nombreCompleto).join(' · ') || '—'}
+        </p>
+      </div>
+    </div>
   )
 }
 

@@ -1,20 +1,23 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { edad, fechaCorta, nombreCompleto, AREAS } from '../helpers.js'
+import { edad, fechaCorta, fichaMedica, nombreCompleto, AREAS } from '../helpers.js'
 import { FormJugador } from './Jugadores.jsx'
 
 export default function Ficha({ jugadorId, onVolver }) {
   const [j, setJ] = useState(null)
   const [seguimientos, setSeguimientos] = useState([])
+  const [lesiones, setLesiones] = useState([])
   const [stats, setStats] = useState(null)
   const [editando, setEditando] = useState(false)
   const [nuevo, setNuevo] = useState(null)
+  const [nuevaLesion, setNuevaLesion] = useState(null)
   const [error, setError] = useState('')
 
   async function cargar() {
     const d = await api(`jugadores/${jugadorId}/detalle`)
     setJ(d.jugador)
     setSeguimientos(d.seguimientos)
+    setLesiones(d.lesiones || [])
     setStats(d.stats)
   }
   useEffect(() => { cargar() }, [jugadorId])
@@ -88,10 +91,9 @@ export default function Ficha({ jugadorId, onVolver }) {
             </div>
             <div className="fila" style={{ marginTop: 6 }}>
               <span className={`badge ${j.estado}`}>{j.estado}</span>
-              <span className={`badge ${j.ficha_medica_vigente ? 'medica-ok' : 'medica-no'}`}>
-                {j.ficha_medica_vigente ? 'Ficha médica ✓' : 'Sin ficha médica'}
-              </span>
+              <span className={`badge ${fichaMedica(j).clase}`}>{fichaMedica(j).texto}</span>
               {j.posicion && <span className="badge activo">{j.posicion}</span>}
+              {lesiones.some((l) => !l.recuperado) && <span className="badge lesionado">🤕 lesión activa</span>}
             </div>
           </div>
         </div>
@@ -186,6 +188,97 @@ export default function Ficha({ jugadorId, onVolver }) {
           <div className="fila entre" style={{ marginTop: 4 }}>
             <span className="mini">{s.autor_email || ''}</span>
             <button className="btn peligro chico" onClick={() => borrarSeguimiento(s.id)}>Borrar</button>
+          </div>
+        </div>
+      ))}
+
+      <div className="fila entre">
+        <h3>Lesiones</h3>
+        <button
+          className="btn chico"
+          onClick={() => setNuevaLesion({ fecha: hoy, descripcion: '', fecha_retorno_estimada: '' })}
+        >
+          + Registrar lesión
+        </button>
+      </div>
+
+      {nuevaLesion && (
+        <form
+          className="tarjeta"
+          onSubmit={async (e) => {
+            e.preventDefault()
+            await api('lesiones', {
+              method: 'POST',
+              body: {
+                jugador_id: jugadorId,
+                fecha: nuevaLesion.fecha,
+                descripcion: nuevaLesion.descripcion,
+                fecha_retorno_estimada: nuevaLesion.fecha_retorno_estimada || null,
+              },
+            })
+            setNuevaLesion(null)
+            cargar()
+          }}
+        >
+          <div className="grid2">
+            <div className="campo">
+              <label>Fecha de la lesión</label>
+              <input type="date" required value={nuevaLesion.fecha}
+                onChange={(e) => setNuevaLesion({ ...nuevaLesion, fecha: e.target.value })} />
+            </div>
+            <div className="campo">
+              <label>Retorno estimado</label>
+              <input type="date" value={nuevaLesion.fecha_retorno_estimada}
+                onChange={(e) => setNuevaLesion({ ...nuevaLesion, fecha_retorno_estimada: e.target.value })} />
+            </div>
+          </div>
+          <div className="campo">
+            <label>Descripción *</label>
+            <textarea required placeholder="Ej.: esguince de tobillo derecho en el entrenamiento"
+              value={nuevaLesion.descripcion}
+              onChange={(e) => setNuevaLesion({ ...nuevaLesion, descripcion: e.target.value })} />
+          </div>
+          <div className="fila">
+            <button className="btn crece">Guardar lesión</button>
+            <button type="button" className="btn sec" onClick={() => setNuevaLesion(null)}>Cancelar</button>
+          </div>
+        </form>
+      )}
+
+      {lesiones.length === 0 && !nuevaLesion && (
+        <div className="vacio">Sin lesiones registradas. 🙌</div>
+      )}
+
+      {lesiones.map((l) => (
+        <div key={l.id} className="tarjeta" style={{ borderLeft: l.recuperado ? '3px solid var(--ok)' : '3px solid var(--bad)' }}>
+          <div className="fila entre">
+            <b style={{ fontSize: '0.9rem' }}>{l.recuperado ? '✅ Recuperado' : '🤕 En recuperación'}</b>
+            <span className="mini">{fechaCorta(l.fecha)}</span>
+          </div>
+          <p style={{ fontSize: '0.9rem', marginTop: 4 }}>{l.descripcion}</p>
+          {l.fecha_retorno_estimada && !l.recuperado && (
+            <p className="mini" style={{ marginTop: 4 }}>Retorno estimado: {fechaCorta(l.fecha_retorno_estimada)}</p>
+          )}
+          <div className="fila" style={{ marginTop: 8 }}>
+            <button
+              className="btn sec chico"
+              onClick={async () => {
+                await api(`lesiones/${l.id}`, { method: 'PUT', body: { recuperado: !l.recuperado } })
+                cargar()
+              }}
+            >
+              {l.recuperado ? 'Reabrir' : 'Marcar recuperado'}
+            </button>
+            <button
+              className="btn peligro chico"
+              onClick={async () => {
+                if (!confirm('¿Borrar este registro de lesión?')) return
+                await api(`lesiones/${l.id}`, { method: 'DELETE' })
+                cargar()
+              }}
+            >
+              Borrar
+            </button>
           </div>
         </div>
       ))}

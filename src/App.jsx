@@ -35,7 +35,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="header">
+      <header className="header no-imprimir">
         <div>
           <h1>Rugby M12</h1>
           <div className="sub">Tucumán Lawn Tennis · {staff.nombre || staff.email}</div>
@@ -43,7 +43,7 @@ export default function App() {
         <button onClick={salir}>Salir</button>
       </header>
 
-      <nav className="nav">
+      <nav className="nav no-imprimir">
         {TABS.map((t) => (
           <button
             key={t.id}

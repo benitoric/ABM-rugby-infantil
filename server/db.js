@@ -27,6 +27,16 @@ async function inicializar() {
   // Migraciones livianas: cambios de esquema posteriores al despliegue
   // inicial, idempotentes, aplicados en el arranque en frío de la función.
   await pool.query('alter table staff add column if not exists rol text')
+  await pool.query('alter table jugadores add column if not exists ficha_medica_vence date')
+  await pool.query(`create table if not exists lesiones (
+    id uuid primary key default gen_random_uuid(),
+    jugador_id uuid not null references jugadores(id) on delete cascade,
+    fecha date not null default current_date,
+    descripcion text not null,
+    fecha_retorno_estimada date,
+    recuperado boolean not null default false,
+    created_at timestamptz not null default now()
+  )`)
   return (texto, params) => pool.query(texto, params)
 }
 
