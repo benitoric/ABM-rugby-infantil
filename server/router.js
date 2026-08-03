@@ -2,7 +2,10 @@ import { query } from './db.js'
 import { autenticar, crearToken, hashClave, compararClave } from './auth.js'
 
 const COLS_JUGADOR = `id, nombre, apellido, fecha_nacimiento::text as fecha_nacimiento,
-  dni, posicion, estado, tutor_nombre, tutor_telefono, ficha_medica_vigente, observaciones`
+  dni, posicion, estado, tutor_nombre, tutor_telefono, ficha_medica_vigente,
+  ficha_medica_vence::text as ficha_medica_vence, observaciones`
+const COLS_LESION = `id, jugador_id, fecha::text as fecha, descripcion,
+  fecha_retorno_estimada::text as fecha_retorno_estimada, recuperado`
 const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora, rival, lugar, notas`
 const COLS_SEGUIMIENTO = `id, jugador_id, fecha::text as fecha, area, valoracion, comentario, autor_email`
 
@@ -19,7 +22,7 @@ export async function handle(req, res) {
     }
     const partes = ruta.split('/').filter(Boolean)
     const cuerpo = await leerCuerpo(req)
-    const resultado = await enrutar(req.method, partes, cuerpo, req)
+    const resultado = await enrutar(req.method, partes, cuerpo, req, url)
     json(res, resultado?._codigo || 200, resultado ?? { ok: true })
   } catch (e) {
     if (e && e.codigo) json(res, e.codigo, { error: e.error || 'error' })
@@ -30,7 +33,7 @@ export async function handle(req, res) {
   }
 }
 
-async function enrutar(metodo, p, b, req) {
+async function enrutar(metodo, p, b, req, url) {
   // ---------- diagnóstico (sin token, no expone datos) ----------
   if (p[0] === 'health' && metodo === 'GET') {
     const r = {
@@ -98,8 +101,8 @@ async function enrutar(metodo, p, b, req) {
       const d = datosJugador(b)
       const filas = await query(
         `insert into jugadores (nombre, apellido, fecha_nacimiento, dni, posicion, estado,
-           tutor_nombre, tutor_telefono, ficha_medica_vigente, observaciones)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning ${COLS_JUGADOR}`, d)
+           tutor_nombre, tutor_telefono, ficha_medica_vigente, ficha_medica_vence, observaciones)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning ${COLS_JUGADOR}`, d)
       return filas[0]
     }
     if (metodo === 'PUT' && p[1]) {
@@ -107,19 +110,37 @@ async function enrutar(metodo, p, b, req) {
       const filas = await query(
         `update jugadores set nombre=$1, apellido=$2, fecha_nacimiento=$3, dni=$4,
            posicion=$5, estado=$6, tutor_nombre=$7, tutor_telefono=$8,
-           ficha_medica_vigente=$9, observaciones=$10, updated_at=now()
-         where id=$11 returning ${COLS_JUGADOR}`, [...d, p[1]])
+           ficha_medica_vigente=$9, ficha_medica_vence=$10, observaciones=$11, updated_at=now()
+         where id=$12 returning ${COLS_JUGADOR}`, [...d, p[1]])
       return filas[0]
     }
     if (metodo === 'DELETE' && p[1]) {
       await query('delete from jugadores where id = $1', [p[1]])
       return { ok: true }
     }
+    if (metodo === 'POST' && p[1] === 'lote' && !p[2]) {
+      // Carga masiva: b.jugadores = [{nombre, apellido, fecha_nacimiento?}]
+      const lista = Array.isArray(b?.jugadores) ? b.jugadores : []
+      if (!lista.length) throw { codigo: 400, error: 'faltan_datos' }
+      let creados = 0
+      for (const j of lista) {
+        if (!j?.nombre?.trim() || !j?.apellido?.trim()) continue
+        await query(
+          `insert into jugadores (nombre, apellido, fecha_nacimiento)
+           values ($1, $2, $3)`,
+          [j.nombre.trim(), j.apellido.trim(), j.fecha_nacimiento || null])
+        creados++
+      }
+      return { creados }
+    }
     if (metodo === 'GET' && p[1] && p[2] === 'detalle') {
       const [jugador] = await query(`select ${COLS_JUGADOR} from jugadores where id = $1`, [p[1]])
       if (!jugador) throw { codigo: 404, error: 'no_existe' }
       const seguimientos = await query(
         `select ${COLS_SEGUIMIENTO} from seguimientos where jugador_id = $1
+         order by fecha desc, created_at desc`, [p[1]])
+      const lesiones = await query(
+        `select ${COLS_LESION} from lesiones where jugador_id = $1
          order by fecha desc, created_at desc`, [p[1]])
       const asis = await query(
         `select ev.tipo, a.estado from asistencias a
@@ -133,7 +154,7 @@ async function enrutar(metodo, p, b, req) {
         return Math.round((100 * pres) / lista.length)
       }
       return {
-        jugador, seguimientos,
+        jugador, seguimientos, lesiones,
         stats: { entrenamientos: pct('entrenamiento'), partidos: pct('partido'), tiempos: total },
       }
     }
@@ -151,6 +172,75 @@ async function enrutar(metodo, p, b, req) {
     if (metodo === 'DELETE' && p[1]) {
       await query('delete from seguimientos where id = $1', [p[1]])
       return { ok: true }
+    }
+  }
+
+  // ---------- lesiones ----------
+  if (p[0] === 'lesiones') {
+    if (metodo === 'POST' && !p[1]) {
+      if (!b?.jugador_id || !b?.descripcion?.trim()) throw { codigo: 400, error: 'faltan_datos' }
+      const filas = await query(
+        `insert into lesiones (jugador_id, fecha, descripcion, fecha_retorno_estimada)
+         values ($1, $2, $3, $4) returning ${COLS_LESION}`,
+        [b.jugador_id, b.fecha || new Date().toISOString().slice(0, 10),
+         b.descripcion.trim(), b.fecha_retorno_estimada || null])
+      return filas[0]
+    }
+    if (metodo === 'PUT' && p[1]) {
+      await query('update lesiones set recuperado = $1 where id = $2', [!!b.recuperado, p[1]])
+      return { ok: true }
+    }
+    if (metodo === 'DELETE' && p[1]) {
+      await query('delete from lesiones where id = $1', [p[1]])
+      return { ok: true }
+    }
+  }
+
+  // ---------- estadísticas ----------
+  if (p[0] === 'stats') {
+    if (metodo === 'GET' && p[1] === 'tiempos') {
+      const anio = Number(url.searchParams.get('anio')) || new Date().getFullYear()
+      return query(
+        `select j.id, j.nombre, j.apellido, count(tj.jugador_id)::int as tiempos
+         from jugadores j
+         left join tiempo_jugadores tj on tj.jugador_id = j.id and tj.tiempo_id in (
+           select t.id from tiempos t
+           join bloques bl on bl.id = t.bloque_id
+           join eventos e on e.id = bl.evento_id
+           where extract(year from e.fecha) = $1)
+         where j.estado <> 'inactivo'
+         group by j.id, j.nombre, j.apellido
+         order by tiempos, j.apellido, j.nombre`, [anio])
+    }
+    if (metodo === 'GET' && p[1] === 'asistencia') {
+      const filas = await query(
+        `select j.id, j.nombre, j.apellido, ev.tipo,
+           count(*) filter (where a.estado in ('presente','tarde'))::int as presentes,
+           count(*)::int as total
+         from asistencias a
+         join eventos ev on ev.id = a.evento_id
+         join jugadores j on j.id = a.jugador_id
+         group by j.id, j.nombre, j.apellido, ev.tipo`)
+      const porJugador = {}
+      for (const f of filas) {
+        if (!porJugador[f.id]) {
+          porJugador[f.id] = {
+            id: f.id, nombre: f.nombre, apellido: f.apellido,
+            entrenamientos_presentes: 0, entrenamientos_total: 0,
+            partidos_presentes: 0, partidos_total: 0,
+          }
+        }
+        const j = porJugador[f.id]
+        if (f.tipo === 'entrenamiento') {
+          j.entrenamientos_presentes = f.presentes
+          j.entrenamientos_total = f.total
+        } else {
+          j.partidos_presentes = f.presentes
+          j.partidos_total = f.total
+        }
+      }
+      return Object.values(porJugador)
+        .sort((a, b2) => a.apellido.localeCompare(b2.apellido) || a.nombre.localeCompare(b2.nombre))
     }
   }
 
@@ -313,7 +403,8 @@ function datosJugador(b) {
   return [
     b.nombre.trim(), b.apellido.trim(), b.fecha_nacimiento || null, b.dni || null,
     b.posicion || null, b.estado || 'activo', b.tutor_nombre || null,
-    b.tutor_telefono || null, !!b.ficha_medica_vigente, b.observaciones || null,
+    b.tutor_telefono || null, !!b.ficha_medica_vigente, b.ficha_medica_vence || null,
+    b.observaciones || null,
   ]
 }
 

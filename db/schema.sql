@@ -21,6 +21,7 @@ create table if not exists jugadores (
   tutor_nombre text,
   tutor_telefono text,
   ficha_medica_vigente boolean not null default false,
+  ficha_medica_vence date,
   observaciones text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -34,6 +35,16 @@ create table if not exists seguimientos (
   valoracion int check (valoracion between 1 and 5),
   comentario text,
   autor_email text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists lesiones (
+  id uuid primary key default gen_random_uuid(),
+  jugador_id uuid not null references jugadores(id) on delete cascade,
+  fecha date not null default current_date,
+  descripcion text not null,
+  fecha_retorno_estimada date,
+  recuperado boolean not null default false,
   created_at timestamptz not null default now()
 );
 

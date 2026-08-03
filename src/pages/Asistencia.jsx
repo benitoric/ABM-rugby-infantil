@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { fechaCorta, nombreCompleto, ESTADOS_ASISTENCIA } from '../helpers.js'
+import { descargarCSV, fechaCorta, nombreCompleto, ESTADOS_ASISTENCIA } from '../helpers.js'
 
 export default function Asistencia() {
   const [eventos, setEventos] = useState([])
@@ -20,16 +20,32 @@ export default function Asistencia() {
 
   const hoy = new Date().toISOString().slice(0, 10)
 
+  async function descargarResumen() {
+    const stats = await api('stats/asistencia')
+    const pct = (p, t) => (t ? `${Math.round((100 * p) / t)}%` : '—')
+    descargarCSV('asistencia-resumen.csv', [
+      ['Jugador', 'Entrenamientos asistidos', 'Entrenamientos totales', '% Entren.', 'Partidos asistidos', 'Partidos totales', '% Partidos'],
+      ...stats.map((s) => [
+        `${s.apellido}, ${s.nombre}`,
+        s.entrenamientos_presentes, s.entrenamientos_total, pct(s.entrenamientos_presentes, s.entrenamientos_total),
+        s.partidos_presentes, s.partidos_total, pct(s.partidos_presentes, s.partidos_total),
+      ]),
+    ])
+  }
+
   return (
     <div className="contenido">
       <div className="fila entre">
         <h2>Eventos</h2>
-        <button
-          className="btn"
-          onClick={() => setCreando({ tipo: 'entrenamiento', fecha: hoy, hora: '', rival: '', lugar: '', notas: '' })}
-        >
-          + Nuevo evento
-        </button>
+        <div className="fila">
+          <button className="btn sec" onClick={descargarResumen}>Resumen CSV</button>
+          <button
+            className="btn"
+            onClick={() => setCreando({ tipo: 'entrenamiento', fecha: hoy, hora: '', rival: '', lugar: '', notas: '' })}
+          >
+            + Nuevo evento
+          </button>
+        </div>
       </div>
 
       {cargando && <div className="vacio">Cargando…</div>}
@@ -184,11 +200,25 @@ function TomarAsistencia({ evento, onVolver }) {
     return acc
   }, {})
 
+  function descargarEvento() {
+    const titulo = evento.tipo === 'partido' ? `partido${evento.rival ? `-vs-${evento.rival}` : ''}` : 'entrenamiento'
+    descargarCSV(`asistencia-${titulo}-${evento.fecha}.csv`, [
+      ['Jugador', 'Asistencia'],
+      ...jugadores.map((j) => [
+        nombreCompleto(j),
+        ESTADOS_ASISTENCIA.find((e) => e.value === marcas[j.id])?.title || 'Sin marcar',
+      ]),
+    ])
+  }
+
   return (
     <div className="contenido">
       <div className="fila entre">
         <button className="btn sec chico" onClick={onVolver}>← Volver</button>
-        <button className="btn peligro chico" onClick={borrarEvento}>Borrar evento</button>
+        <div className="fila">
+          <button className="btn sec chico" onClick={descargarEvento}>Descargar CSV</button>
+          <button className="btn peligro chico" onClick={borrarEvento}>Borrar evento</button>
+        </div>
       </div>
 
       <div className="tarjeta">
