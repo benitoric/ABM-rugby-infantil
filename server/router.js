@@ -8,6 +8,8 @@ const COLS_LESION = `id, jugador_id, fecha::text as fecha, descripcion,
   fecha_retorno_estimada::text as fecha_retorno_estimada, recuperado`
 const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora, rival, lugar, notas`
 const COLS_SEGUIMIENTO = `id, jugador_id, fecha::text as fecha, area, valoracion, comentario, autor_email`
+const COLS_BLOQUE = `id, evento_id, numero, nombre, rival, lugar,
+  hora_convocatoria::text as hora_convocatoria`
 
 export async function handle(req, res) {
   try {
@@ -254,14 +256,39 @@ async function enrutar(metodo, p, b, req, url) {
   // ---------- eventos y asistencia ----------
   if (p[0] === 'eventos') {
     if (metodo === 'GET' && !p[1]) {
-      return query(`select ${COLS_EVENTO} from eventos order by fecha desc, created_at desc`)
+      const eventos = await query(
+        `select ${COLS_EVENTO} from eventos order by fecha desc, created_at desc`)
+      // Datos de los bloques de cada partido (rival/lugar/convocatoria propios)
+      const bloques = await query(
+        `select ${COLS_BLOQUE} from bloques order by numero`)
+      for (const ev of eventos) {
+        if (ev.tipo === 'partido') ev.bloques = bloques.filter((bl) => bl.evento_id === ev.id)
+      }
+      return eventos
     }
     if (metodo === 'POST' && !p[1]) {
       const filas = await query(
         `insert into eventos (tipo, fecha, hora, rival, lugar, notas)
          values ($1,$2,$3,$4,$5,$6) returning ${COLS_EVENTO}`,
         [b.tipo, b.fecha, b.hora || null, b.rival || null, b.lugar || null, b.notas || null])
-      return filas[0]
+      const evento = filas[0]
+      // Un partido nace con sus 2 bloques, cada uno con rival/lugar/convocatoria
+      if (b.tipo === 'partido') {
+        const datos = Array.isArray(b.bloques) ? b.bloques : []
+        evento.bloques = []
+        for (const numero of [1, 2]) {
+          const d = datos.find((x) => Number(x?.numero) === numero) || {}
+          const [bl] = await query(
+            `insert into bloques (evento_id, numero, nombre, rival, lugar, hora_convocatoria)
+             values ($1, $2, $3, $4, $5, $6)
+             on conflict (evento_id, numero) do nothing
+             returning ${COLS_BLOQUE}`,
+            [evento.id, numero, `Bloque ${numero}`, d.rival || null, d.lugar || null,
+             d.hora_convocatoria || null])
+          if (bl) evento.bloques.push(bl)
+        }
+      }
+      return evento
     }
     if (metodo === 'DELETE' && p[1]) {
       await query('delete from eventos where id = $1', [p[1]])
@@ -297,8 +324,14 @@ async function enrutar(metodo, p, b, req, url) {
         `insert into bloques (evento_id, numero, nombre)
          values ($1, 1, 'Bloque 1'), ($1, 2, 'Bloque 2')
          on conflict (evento_id, numero) do nothing`, [eventoId])
+      // Partidos viejos: si el rival estaba cargado a nivel evento, pasa al bloque
+      await query(
+        `update bloques set rival = e.rival, lugar = coalesce(bloques.lugar, e.lugar)
+         from eventos e
+         where e.id = bloques.evento_id and bloques.evento_id = $1
+           and bloques.rival is null and e.rival is not null`, [eventoId])
       const bloques = await query(
-        'select id, numero, nombre from bloques where evento_id = $1 order by numero', [eventoId])
+        `select ${COLS_BLOQUE} from bloques where evento_id = $1 order by numero`, [eventoId])
       for (const bl of bloques) {
         await query(
           `insert into tiempos (bloque_id, numero) values ($1,1),($1,2),($1,3),($1,4)
@@ -329,6 +362,14 @@ async function enrutar(metodo, p, b, req, url) {
           [b.bloque_id, b.jugador_id])
       }
       return { ok: true }
+    }
+    if (metodo === 'PUT' && p[1] === 'bloque' && p[2]) {
+      const filas = await query(
+        `update bloques set rival = $1, lugar = $2, hora_convocatoria = $3
+         where id = $4 returning ${COLS_BLOQUE}`,
+        [b.rival || null, b.lugar || null, b.hora_convocatoria || null, p[2]])
+      if (!filas.length) throw { codigo: 404, error: 'no_existe' }
+      return filas[0]
     }
     if (metodo === 'POST' && p[1] === 'tiempo') {
       const filas = await query(

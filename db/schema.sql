@@ -72,6 +72,9 @@ create table if not exists bloques (
   evento_id uuid not null references eventos(id) on delete cascade,
   numero int not null check (numero in (1,2)),
   nombre text,
+  rival text,
+  lugar text,
+  hora_convocatoria time,
   unique (evento_id, numero)
 );
 
