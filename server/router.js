@@ -5,7 +5,7 @@ const COLS_JUGADOR = `id, nombre, apellido, fecha_nacimiento::text as fecha_naci
   dni, posicion, aptitudes, estado, tutor_nombre, tutor_telefono, ficha_medica_vigente,
   ficha_medica_vence::text as ficha_medica_vence, observaciones`
 
-const APTITUDES = ['conduccion', 'penetracion', 'definicion', 'equipo', 'individual']
+const APTITUDES = ['conduccion', 'penetracion', 'definicion']
 const COLS_LESION = `id, jugador_id, fecha::text as fecha, descripcion,
   fecha_retorno_estimada::text as fecha_retorno_estimada, recuperado`
 const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora, rival, lugar, notas`
