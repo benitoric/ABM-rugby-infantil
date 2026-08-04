@@ -158,6 +158,19 @@ async function enrutar(metodo, p, b, req, url) {
       }
       return { creados }
     }
+    // Acción masiva: marca ficha médica vigente a todos los que hoy figuran
+    // inhabilitados (activos con ficha vencida o sin ficha). Limpia el
+    // vencimiento viejo porque tiene prioridad sobre el tilde de vigente.
+    if (metodo === 'POST' && p[1] === 'fichas-vigentes' && !p[2]) {
+      const filas = await query(
+        `update jugadores
+         set ficha_medica_vigente = true, ficha_medica_vence = null, updated_at = now()
+         where estado = 'activo'
+           and (ficha_medica_vence < current_date
+                or (ficha_medica_vence is null and not ficha_medica_vigente))
+         returning id`)
+      return { actualizados: filas.length }
+    }
     if (metodo === 'GET' && p[1] && p[2] === 'detalle') {
       const [jugador] = await query(`select ${COLS_JUGADOR} from jugadores where id = $1`, [p[1]])
       if (!jugador) throw { codigo: 404, error: 'no_existe' }

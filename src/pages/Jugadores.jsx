@@ -106,6 +106,25 @@ export default function Jugadores() {
         ))}
       </div>
 
+      {filtro === 'inhabilitado' && visibles.length > 0 && (
+        <button
+          className="btn sec"
+          onClick={async () => {
+            if (!confirm(
+              `¿Marcar ficha médica vigente a los ${visibles.length} jugadores inhabilitados?\n\n` +
+              'Pasan a estado Activo. Se limpian los vencimientos viejos: cargá el ' +
+              'vencimiento real de cada ficha cuando lo tengas, para que la app ' +
+              'vuelva a avisar cuando venzan.'
+            )) return
+            const r = await api('jugadores/fichas-vigentes', { method: 'POST' })
+            alert(`Listo: ${r.actualizados} jugadores pasaron a ficha vigente.`)
+            cargar()
+          }}
+        >
+          ✓ Marcar ficha médica vigente a los {visibles.length} inhabilitados
+        </button>
+      )}
+
       {cargando && <div className="vacio">Cargando…</div>}
       {!cargando && visibles.length === 0 && (
         <div className="vacio">No hay jugadores en esta vista. Agregá el primero con "+ Nuevo".</div>
