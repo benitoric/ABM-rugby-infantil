@@ -92,7 +92,7 @@ export default function Ficha({ jugadorId, onVolver }) {
             <div className="fila" style={{ marginTop: 6 }}>
               <span className={`badge ${j.estado}`}>{j.estado}</span>
               <span className={`badge ${fichaMedica(j).clase}`}>{fichaMedica(j).texto}</span>
-              {j.posicion && <span className="badge activo">{j.posicion}</span>}
+              {j.posicion && <span className={`badge puesto-${j.posicion.toLowerCase()}`}>{j.posicion}</span>}
               {lesiones.some((l) => !l.recuperado) && <span className="badge lesionado">🤕 lesión activa</span>}
             </div>
             {(j.aptitudes || []).length > 0 && (

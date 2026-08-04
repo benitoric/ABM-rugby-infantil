@@ -17,6 +17,7 @@ export default function Jugadores() {
   const [fichaDe, setFichaDe] = useState(null)
   const [importando, setImportando] = useState(false)
   const [cargando, setCargando] = useState(true)
+  const [orden, setOrden] = useState({ campo: 'nombre', asc: true })
 
   async function cargar() {
     setJugadores(await api('jugadores'))
@@ -30,6 +31,28 @@ export default function Jugadores() {
     if (!q) return true
     return `${j.nombre} ${j.apellido} ${j.dni || ''}`.toLowerCase().includes(q)
   })
+
+  const RANGO_ESTADO = { activo: 0, lesionado: 1, inactivo: 2 }
+  const ordenados = [...visibles].sort((a, b) => {
+    let cmp = 0
+    if (orden.campo === 'puesto') cmp = (a.posicion || 'zz').localeCompare(b.posicion || 'zz')
+    else if (orden.campo === 'aptitudes') cmp = (a.aptitudes || []).length - (b.aptitudes || []).length
+    else if (orden.campo === 'estado') cmp = RANGO_ESTADO[a.estado] - RANGO_ESTADO[b.estado]
+    const desempate = nombreCompleto(a).localeCompare(nombreCompleto(b), 'es')
+    return (orden.asc ? 1 : -1) * (cmp || desempate)
+  })
+
+  function encabezado(campo, texto) {
+    const activo = orden.campo === campo
+    return (
+      <button
+        className={`orden-btn ${activo ? 'activo' : ''}`}
+        onClick={() => setOrden({ campo, asc: activo ? !orden.asc : true })}
+      >
+        {texto}{activo ? (orden.asc ? ' ▲' : ' ▼') : ''}
+      </button>
+    )
+  }
 
   if (fichaDe) {
     return (
@@ -87,16 +110,33 @@ export default function Jugadores() {
         <div className="vacio">No hay jugadores en esta vista. Agregá el primero con "+ Nuevo".</div>
       )}
 
-      {visibles.map((j) => (
-        <button key={j.id} className="jugador-item compacto" onClick={() => setFichaDe(j.id)}>
-          <div className="avatar">{j.nombre[0]}{j.apellido[0]}</div>
-          <div className="crece nombre-jugador">{nombreCompleto(j)}</div>
+      {!cargando && visibles.length > 0 && (
+        <div className="fila-jugador tabla-cab">
+          {encabezado('nombre', 'Jugador')}
+          {encabezado('puesto', 'Puesto')}
+          {encabezado('aptitudes', 'Aptitudes')}
+          {encabezado('estado', 'Estado')}
+        </div>
+      )}
+
+      {ordenados.map((j) => (
+        <button key={j.id} className="jugador-item compacto fila-jugador" onClick={() => setFichaDe(j.id)}>
+          <div className="fila celda-nombre">
+            <div className="avatar">{j.nombre[0]}{j.apellido[0]}</div>
+            <div className="crece nombre-jugador">{nombreCompleto(j)}</div>
+          </div>
+          <div>
+            {j.posicion && (
+              <span className={`badge puesto-${j.posicion.toLowerCase()}`}>{j.posicion}</span>
+            )}
+          </div>
           <div className="etiquetas">
-            {j.posicion && <span className="badge puesto">{j.posicion}</span>}
             {APTITUDES.filter((a) => (j.aptitudes || []).includes(a.value)).map((a) => (
               <span key={a.value} className="badge aptitud">{a.abrev}</span>
             ))}
-            {j.estado === 'lesionado' && <span className="badge lesionado">🤕 Lesionado</span>}
+          </div>
+          <div>
+            {j.estado === 'lesionado' && <span className="badge lesionado">🤕 Lesión</span>}
             {j.estado === 'inactivo' && <span className="badge inactivo">Inactivo</span>}
           </div>
         </button>

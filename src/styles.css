@@ -164,7 +164,9 @@ h3 { font-size: 1rem; }
 .badge.medica-pronto { background: #fef3c7; color: var(--warn); }
 .badge.medica-vencida { background: #fee2e2; color: var(--bad); }
 .badge.aptitud { background: #fff6cc; color: #8a6d00; border: 1px solid #f0dd8a; }
-.badge.puesto { background: var(--celeste); color: var(--primario); }
+.badge.puesto-forward { background: var(--celeste); color: var(--primario); }
+.badge.puesto-back { background: #dcfce7; color: #15803d; }
+.badge.puesto-mixto { background: #f3e8ff; color: #7e22ce; }
 
 /* ---------- formularios ---------- */
 .campo { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
@@ -220,7 +222,7 @@ h3 { font-size: 1rem; }
 .jugador-item.compacto .avatar { width: 30px; height: 30px; font-size: 0.7rem; }
 .nombre-jugador {
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -228,10 +230,39 @@ h3 { font-size: 1rem; }
 .etiquetas {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
+  gap: 3px;
   flex-wrap: wrap;
 }
+
+/* Listado de jugadores como tabla: mismas columnas en encabezado y filas */
+.fila-jugador {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 58px 84px 58px;
+  align-items: center;
+  gap: 4px;
+}
+@media (min-width: 520px) {
+  .fila-jugador { grid-template-columns: minmax(0, 1fr) 90px 120px 90px; }
+}
+.fila-jugador .badge { font-size: 0.65rem; padding: 2px 5px; white-space: nowrap; }
+.celda-nombre { gap: 8px; flex-wrap: nowrap; min-width: 0; }
+@media (max-width: 519px) {
+  .celda-nombre .avatar { display: none; }
+}
+.tabla-cab { padding: 0 10px; margin-bottom: -6px; }
+.orden-btn {
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--texto-suave);
+  white-space: nowrap;
+}
+.orden-btn.activo { color: var(--primario); }
 .avatar {
   width: 38px;
   height: 38px;
