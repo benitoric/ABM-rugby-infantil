@@ -2,14 +2,17 @@ import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { edad, estadoJugador, fechaCorta, fichaMedica, nombreCompleto, APTITUDES, AREAS, ESTADOS } from '../helpers.js'
 import { FormJugador } from './Jugadores.jsx'
+import { FormEvaluacion, TarjetaEvaluacion } from './Evaluacion.jsx'
 
 export default function Ficha({ jugadorId, onVolver }) {
   const [j, setJ] = useState(null)
   const [seguimientos, setSeguimientos] = useState([])
+  const [evaluaciones, setEvaluaciones] = useState([])
   const [lesiones, setLesiones] = useState([])
   const [stats, setStats] = useState(null)
   const [editando, setEditando] = useState(false)
   const [nuevo, setNuevo] = useState(null)
+  const [evaluando, setEvaluando] = useState(false)
   const [nuevaLesion, setNuevaLesion] = useState(null)
   const [error, setError] = useState('')
 
@@ -17,6 +20,7 @@ export default function Ficha({ jugadorId, onVolver }) {
     const d = await api(`jugadores/${jugadorId}/detalle`)
     setJ(d.jugador)
     setSeguimientos(d.seguimientos)
+    setEvaluaciones(d.evaluaciones || [])
     setLesiones(d.lesiones || [])
     setStats(d.stats)
   }
@@ -131,12 +135,37 @@ export default function Ficha({ jugadorId, onVolver }) {
       )}
 
       <div className="fila entre">
-        <h3>Seguimiento evolutivo</h3>
+        <h3>Evaluación periódica</h3>
+        <button className="btn chico" onClick={() => setEvaluando(true)}>+ Evaluar</button>
+      </div>
+
+      {evaluaciones.length === 0 && (
+        <div className="vacio">
+          Sin evaluaciones todavía. Se recomienda evaluar 2 o 3 veces al año
+          (inicio, mitad y cierre de temporada).
+        </div>
+      )}
+
+      {evaluaciones.map((ev, i) => (
+        <TarjetaEvaluacion
+          key={ev.id}
+          ev={ev}
+          anterior={evaluaciones[i + 1]}
+          onBorrar={async (id) => {
+            if (!confirm('¿Borrar esta evaluación completa?')) return
+            await api(`evaluaciones/${id}`, { method: 'DELETE' })
+            cargar()
+          }}
+        />
+      ))}
+
+      <div className="fila entre">
+        <h3>Notas de seguimiento</h3>
         <button
           className="btn chico"
           onClick={() => setNuevo({ fecha: hoy, area: 'tecnica', valoracion: '', comentario: '' })}
         >
-          + Nueva entrada
+          + Nueva nota
         </button>
       </div>
 
@@ -179,7 +208,7 @@ export default function Ficha({ jugadorId, onVolver }) {
       )}
 
       {seguimientos.length === 0 && !nuevo && (
-        <div className="vacio">Todavía no hay entradas de seguimiento para este jugador.</div>
+        <div className="vacio">Sin notas. Sirven para observaciones puntuales entre evaluaciones.</div>
       )}
 
       {seguimientos.map((s) => (
@@ -304,6 +333,15 @@ export default function Ficha({ jugadorId, onVolver }) {
           inicial={j}
           onCerrar={() => setEditando(false)}
           onGuardado={() => { setEditando(false); cargar() }}
+        />
+      )}
+
+      {evaluando && (
+        <FormEvaluacion
+          jugador={j}
+          anterior={evaluaciones[0]}
+          onCerrar={() => setEvaluando(false)}
+          onGuardado={() => { setEvaluando(false); cargar() }}
         />
       )}
     </div>

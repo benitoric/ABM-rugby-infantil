@@ -39,6 +39,18 @@ create table if not exists seguimientos (
   created_at timestamptz not null default now()
 );
 
+-- Evaluación periódica: una fila por sesión de evaluación de un jugador.
+-- "valores" guarda { variable: 1..5 } según el catálogo de src/evaluacion.js.
+create table if not exists evaluaciones (
+  id uuid primary key default gen_random_uuid(),
+  jugador_id uuid not null references jugadores(id) on delete cascade,
+  fecha date not null default current_date,
+  valores jsonb not null default '{}',
+  comentario text,
+  autor_email text,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists lesiones (
   id uuid primary key default gen_random_uuid(),
   jugador_id uuid not null references jugadores(id) on delete cascade,
