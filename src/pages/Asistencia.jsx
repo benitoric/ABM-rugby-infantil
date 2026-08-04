@@ -295,7 +295,7 @@ function TomarAsistencia({ evento, onVolver }) {
         return (
           <button
             key={j.id}
-            className="jugador-item"
+            className="jugador-item compacto"
             style={presente ? { borderLeft: '4px solid var(--ok)' } : { opacity: 0.65 }}
             onClick={() => marcar(j.id)}
           >
@@ -303,7 +303,7 @@ function TomarAsistencia({ evento, onVolver }) {
               <div style={{ fontWeight: 600 }}>{nombreCompleto(j)}</div>
               {j.estado === 'lesionado' && <span className="badge lesionado">lesionado</span>}
             </div>
-            <span style={{ fontWeight: 800, color: presente ? 'var(--ok)' : 'var(--texto-suave)' }}>
+            <span style={{ fontWeight: 800, color: presente ? 'var(--ok)' : 'var(--bad)' }}>
               {presente ? 'PRESENTE ✓' : 'AUSENTE'}
             </span>
           </button>
