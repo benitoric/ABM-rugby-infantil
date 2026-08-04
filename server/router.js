@@ -20,6 +20,7 @@ const COLS_LESION = `id, jugador_id, fecha::text as fecha, descripcion,
   fecha_retorno_estimada::text as fecha_retorno_estimada, recuperado`
 const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora, rival, lugar, notas`
 const COLS_SEGUIMIENTO = `id, jugador_id, fecha::text as fecha, area, valoracion, comentario, autor_email`
+const COLS_EVALUACION = `id, jugador_id, fecha::text as fecha, valores, comentario, autor_email`
 const COLS_BLOQUE = `id, evento_id, numero, nombre, rival, lugar,
   hora_convocatoria::text as hora_convocatoria, valoracion, cronica`
 
@@ -163,6 +164,9 @@ async function enrutar(metodo, p, b, req, url) {
       const lesiones = await query(
         `select ${COLS_LESION} from lesiones where jugador_id = $1
          order by fecha desc, created_at desc`, [p[1]])
+      const evaluaciones = await query(
+        `select ${COLS_EVALUACION} from evaluaciones where jugador_id = $1
+         order by fecha desc, created_at desc`, [p[1]])
       // Ausente por defecto: cuentan todos los eventos ya ocurridos en los que
       // se tomó asistencia; presente solo si tiene la marca explícita.
       const [tot] = await query(
@@ -183,7 +187,7 @@ async function enrutar(metodo, p, b, req, url) {
       const pct = (presentes, totales) =>
         totales ? Math.round((100 * presentes) / totales) : null
       return {
-        jugador, seguimientos, lesiones,
+        jugador, seguimientos, lesiones, evaluaciones,
         stats: {
           entrenamientos: pct(pres.ent, tot.ent),
           partidos: pct(pres.par, tot.par),
@@ -204,6 +208,30 @@ async function enrutar(metodo, p, b, req, url) {
     }
     if (metodo === 'DELETE' && p[1]) {
       await query('delete from seguimientos where id = $1', [p[1]])
+      return { ok: true }
+    }
+  }
+
+  // ---------- evaluaciones periódicas ----------
+  if (p[0] === 'evaluaciones') {
+    if (metodo === 'POST' && !p[1]) {
+      if (!b?.jugador_id) throw { codigo: 400, error: 'faltan_datos' }
+      // Solo se guardan valores enteros de 1 a 5
+      const valores = {}
+      for (const [k, v] of Object.entries(b.valores || {})) {
+        const n = Number(v)
+        if (Number.isInteger(n) && n >= 1 && n <= 5) valores[k] = n
+      }
+      if (!Object.keys(valores).length) throw { codigo: 400, error: 'faltan_datos' }
+      const filas = await query(
+        `insert into evaluaciones (jugador_id, fecha, valores, comentario, autor_email)
+         values ($1, $2, $3, $4, $5) returning ${COLS_EVALUACION}`,
+        [b.jugador_id, b.fecha || new Date().toISOString().slice(0, 10),
+         JSON.stringify(valores), b.comentario?.trim() || null, yo.email])
+      return filas[0]
+    }
+    if (metodo === 'DELETE' && p[1]) {
+      await query('delete from evaluaciones where id = $1', [p[1]])
       return { ok: true }
     }
   }

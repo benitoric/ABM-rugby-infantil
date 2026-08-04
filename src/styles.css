@@ -393,6 +393,48 @@ h3 { font-size: 1rem; }
   .planilla th { background: #eee; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
+/* ---------- evaluación periódica ---------- */
+.eval-area-titulo {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--primario);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--primario);
+}
+.eval-var { padding: 8px 0; border-bottom: 1px solid var(--borde); }
+.eval-var:last-child { border-bottom: none; }
+.eval-guia { font-size: 0.74rem; color: var(--texto-suave); margin-top: 2px; }
+.eval-anterior { font-size: 0.7rem; font-weight: 400; color: var(--texto-suave); margin-left: 6px; }
+.eval-estrellas { display: flex; flex-shrink: 0; }
+.eval-estrellas button {
+  background: none;
+  border: none;
+  font-size: 1.55rem;
+  line-height: 1;
+  padding: 2px 3px;
+  color: #d5d9e2;
+}
+.eval-estrellas button.on { color: #f59e0b; }
+.eval-pie {
+  position: sticky;
+  bottom: -16px;
+  margin: 0 -16px -16px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  background: var(--fondo);
+  border-top: 1px solid var(--borde);
+}
+.eval-prom { background: var(--celeste); color: var(--primario); font-weight: 600; }
+.eval-detalle-fila { font-size: 0.85rem; padding: 3px 0; }
+.eval-estrellas-off { color: #d5d9e2; letter-spacing: 2px; }
+.eval-delta { margin-left: 6px; font-size: 0.75rem; }
+.eval-delta.sube { color: var(--ok); }
+.eval-delta.baja { color: var(--bad); }
+
 /* ---------- detalles plegables ---------- */
 details.tarjeta summary {
   cursor: pointer;

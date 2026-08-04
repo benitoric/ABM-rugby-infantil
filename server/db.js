@@ -49,6 +49,15 @@ async function inicializar() {
   await pool.query('alter table asistencias drop constraint if exists asistencias_estado_check')
   await pool.query(`alter table asistencias add constraint asistencias_estado_check
     check (estado in ('presente','ausente'))`)
+  await pool.query(`create table if not exists evaluaciones (
+    id uuid primary key default gen_random_uuid(),
+    jugador_id uuid not null references jugadores(id) on delete cascade,
+    fecha date not null default current_date,
+    valores jsonb not null default '{}',
+    comentario text,
+    autor_email text,
+    created_at timestamptz not null default now()
+  )`)
   await pool.query(`create table if not exists lesiones (
     id uuid primary key default gen_random_uuid(),
     jugador_id uuid not null references jugadores(id) on delete cascade,
