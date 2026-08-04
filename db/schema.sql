@@ -75,6 +75,8 @@ create table if not exists bloques (
   rival text,
   lugar text,
   hora_convocatoria time,
+  valoracion int check (valoracion between 1 and 5),
+  cronica text,
   unique (evento_id, numero)
 );
 

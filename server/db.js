@@ -31,6 +31,8 @@ async function inicializar() {
   await pool.query('alter table bloques add column if not exists rival text')
   await pool.query('alter table bloques add column if not exists lugar text')
   await pool.query('alter table bloques add column if not exists hora_convocatoria time')
+  await pool.query('alter table bloques add column if not exists valoracion int check (valoracion between 1 and 5)')
+  await pool.query('alter table bloques add column if not exists cronica text')
   await pool.query(`create table if not exists lesiones (
     id uuid primary key default gen_random_uuid(),
     jugador_id uuid not null references jugadores(id) on delete cascade,

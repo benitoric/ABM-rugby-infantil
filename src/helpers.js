@@ -65,6 +65,7 @@ export function lineaBloque(b) {
   const partes = [`B${b.numero} vs ${b.rival || 'a definir'}`]
   if (b.hora_convocatoria) partes.push(`conv. ${b.hora_convocatoria.slice(0, 5)} hs`)
   if (b.lugar) partes.push(b.lugar)
+  if (b.valoracion) partes.push('★'.repeat(b.valoracion))
   return partes.join(' · ')
 }
 

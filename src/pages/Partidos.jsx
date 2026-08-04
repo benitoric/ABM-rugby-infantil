@@ -306,6 +306,7 @@ function ArmadoPartido({ partido }) {
           key={b.id}
           bloque={b}
           onEditar={() => setEditandoBloque({ ...b })}
+          onActualizado={(nuevo) => setBloques((bs) => bs.map((x) => (x.id === nuevo.id ? nuevo : x)))}
           jugadores={ordenados.filter((j) => asignacion[j.id] === b.id)}
           tiempos={tiempos.filter((t) => t.bloque_id === b.id)}
           tiempoSel={tiempoSel[b.id]}
@@ -389,7 +390,71 @@ function Planilla({ partido, bloques, jugadores, asignacion, tiempos, enCancha }
   )
 }
 
-function VistaBloque({ bloque, onEditar, jugadores, tiempos, tiempoSel, onSelTiempo, enCancha, onToggle, onAgregarTiempo }) {
+function Estrellas({ valor, onCambiar }) {
+  return (
+    <div className="estrellas-sel">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          title={`${n} de 5`}
+          onClick={() => onCambiar(n === valor ? null : n)}
+        >
+          {n <= (valor || 0) ? '★' : '☆'}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function BalancePartido({ bloque, onActualizado }) {
+  const [cronica, setCronica] = useState(bloque.cronica || '')
+  const [guardado, setGuardado] = useState(false)
+
+  useEffect(() => {
+    setCronica(bloque.cronica || '')
+    setGuardado(false)
+  }, [bloque.id])
+
+  async function guardar(cambios) {
+    const nuevo = await api(`partido/bloque/${bloque.id}`, { method: 'PUT', body: cambios })
+    onActualizado(nuevo)
+  }
+
+  const cronicaCambiada = cronica !== (bloque.cronica || '')
+
+  return (
+    <div className="tarjeta">
+      <div className="fila entre">
+        <div>
+          <h3>Balance del partido</h3>
+          <p className="mini">¿Cómo jugó el bloque? (sin puntaje: es rugby infantil 😉)</p>
+        </div>
+        <Estrellas valor={bloque.valoracion} onCambiar={(v) => guardar({ valoracion: v })} />
+      </div>
+      <div className="campo" style={{ marginTop: 8, marginBottom: 0 }}>
+        <label>Incidentes y situaciones a destacar</label>
+        <textarea
+          placeholder="Ej.: golpe en la rodilla de Juan (avisado al tutor); gran actitud del equipo en el segundo tiempo; devolver camiseta N° 8…"
+          value={cronica}
+          onChange={(e) => { setCronica(e.target.value); setGuardado(false) }}
+        />
+        {(cronicaCambiada || guardado) && (
+          <button
+            className="btn chico"
+            style={{ marginTop: 6, alignSelf: 'flex-end' }}
+            disabled={!cronicaCambiada}
+            onClick={async () => { await guardar({ cronica: cronica.trim() || null }); setGuardado(true) }}
+          >
+            {guardado && !cronicaCambiada ? '✓ Guardado' : 'Guardar crónica'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiempoSel, onSelTiempo, enCancha, onToggle, onAgregarTiempo }) {
   const infoBloque = (
     <div className="tarjeta fila entre">
       <div className="crece">
@@ -410,6 +475,7 @@ function VistaBloque({ bloque, onEditar, jugadores, tiempos, tiempoSel, onSelTie
         <div className="vacio">
           Este bloque no tiene jugadores. Asignalos en "Armar bloques".
         </div>
+        <BalancePartido bloque={bloque} onActualizado={onActualizado} />
       </>
     )
   }
@@ -479,6 +545,8 @@ function VistaBloque({ bloque, onEditar, jugadores, tiempos, tiempoSel, onSelTie
           </button>
         )
       })}
+
+      <BalancePartido bloque={bloque} onActualizado={onActualizado} />
     </>
   )
 }
