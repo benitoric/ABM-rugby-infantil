@@ -22,8 +22,6 @@ export const APTITUDES = [
   { value: 'conduccion', label: 'Conducción', abrev: 'Cond' },
   { value: 'penetracion', label: 'Penetración', abrev: 'Pen' },
   { value: 'definicion', label: 'Definición', abrev: 'Def' },
-  { value: 'equipo', label: 'Juego en equipo', abrev: 'Eq' },
-  { value: 'individual', label: 'Juego individual', abrev: 'Ind' },
 ]
 
 export function abrevAptitudes(j) {

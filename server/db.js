@@ -29,6 +29,14 @@ async function inicializar() {
   await pool.query('alter table staff add column if not exists rol text')
   await pool.query('alter table jugadores add column if not exists ficha_medica_vence date')
   await pool.query(`alter table jugadores add column if not exists aptitudes jsonb not null default '[]'`)
+  // Limpieza: quedaron solo conducción/penetración/definición como aptitudes
+  await pool.query(`
+    update jugadores set aptitudes = (
+      select coalesce(jsonb_agg(t.a), '[]'::jsonb)
+      from jsonb_array_elements_text(jugadores.aptitudes) as t(a)
+      where t.a in ('conduccion', 'penetracion', 'definicion')
+    )
+    where aptitudes @> '["equipo"]' or aptitudes @> '["individual"]'`)
   await pool.query('alter table bloques add column if not exists rival text')
   await pool.query('alter table bloques add column if not exists lugar text')
   await pool.query('alter table bloques add column if not exists hora_convocatoria time')
