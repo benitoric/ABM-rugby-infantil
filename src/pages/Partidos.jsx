@@ -177,12 +177,7 @@ function ArmadoPartido({ partido }) {
   }
 
   const ordenados = useMemo(() => {
-    const prioridad = (j) => {
-      const a = asistencia[j.id]
-      if (a === 'presente' || a === 'tarde') return 0
-      if (!a) return 1
-      return 2
-    }
+    const prioridad = (j) => (asistencia[j.id] === 'presente' ? 0 : 1)
     return [...jugadores].sort((x, y) =>
       prioridad(x) - prioridad(y) ||
       x.apellido.localeCompare(y.apellido) ||
@@ -228,17 +223,16 @@ function ArmadoPartido({ partido }) {
             Tocá de nuevo el mismo botón para sacarlo del bloque.
           </p>
           {ordenados.map((j) => {
-            const a = asistencia[j.id]
-            const apagado = a === 'ausente' || a === 'justificado'
+            const presente = asistencia[j.id] === 'presente'
             return (
-              <div key={j.id} className="jugador-item" style={{ cursor: 'default', opacity: apagado ? 0.5 : 1 }}>
+              <div key={j.id} className="jugador-item" style={{ cursor: 'default', opacity: presente ? 1 : 0.6 }}>
                 <div className="crece">
                   <div style={{ fontWeight: 600 }}>
                     {nombreCompleto(j)}
                     {j.posicion && <span className="mini"> · {j.posicion}</span>}
                   </div>
                   <div className="mini">
-                    {a ? `Asistencia: ${a}` : 'Sin marcar asistencia'}
+                    {presente ? 'Presente' : 'Ausente'}
                     {j.estado === 'lesionado' ? ' · 🤕 lesionado' : ''}
                     {abrevAptitudes(j) ? ` · ${abrevAptitudes(j)}` : ''}
                   </div>

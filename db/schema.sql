@@ -64,7 +64,7 @@ create table if not exists asistencias (
   id uuid primary key default gen_random_uuid(),
   evento_id uuid not null references eventos(id) on delete cascade,
   jugador_id uuid not null references jugadores(id) on delete cascade,
-  estado text not null check (estado in ('presente','ausente','tarde','justificado')),
+  estado text not null check (estado in ('presente','ausente')),
   unique (evento_id, jugador_id)
 );
 

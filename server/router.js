@@ -153,20 +153,32 @@ async function enrutar(metodo, p, b, req, url) {
       const lesiones = await query(
         `select ${COLS_LESION} from lesiones where jugador_id = $1
          order by fecha desc, created_at desc`, [p[1]])
-      const asis = await query(
-        `select ev.tipo, a.estado from asistencias a
-         join eventos ev on ev.id = a.evento_id where a.jugador_id = $1`, [p[1]])
+      // Ausente por defecto: cuentan todos los eventos ya ocurridos en los que
+      // se tomó asistencia; presente solo si tiene la marca explícita.
+      const [tot] = await query(
+        `select count(*) filter (where e.tipo = 'entrenamiento')::int as ent,
+                count(*) filter (where e.tipo = 'partido')::int as par
+         from eventos e
+         where e.fecha <= current_date
+           and exists (select 1 from asistencias a where a.evento_id = e.id)`)
+      const [pres] = await query(
+        `select count(*) filter (where ev.tipo = 'entrenamiento')::int as ent,
+                count(*) filter (where ev.tipo = 'partido')::int as par
+         from asistencias a
+         join eventos ev on ev.id = a.evento_id
+         where a.jugador_id = $1 and a.estado = 'presente' and ev.fecha <= current_date`,
+        [p[1]])
       const [{ total }] = await query(
         'select count(*)::int as total from tiempo_jugadores where jugador_id = $1', [p[1]])
-      const pct = (tipo) => {
-        const lista = asis.filter((a) => a.tipo === tipo)
-        if (!lista.length) return null
-        const pres = lista.filter((a) => a.estado === 'presente' || a.estado === 'tarde').length
-        return Math.round((100 * pres) / lista.length)
-      }
+      const pct = (presentes, totales) =>
+        totales ? Math.round((100 * presentes) / totales) : null
       return {
         jugador, seguimientos, lesiones,
-        stats: { entrenamientos: pct('entrenamiento'), partidos: pct('partido'), tiempos: total },
+        stats: {
+          entrenamientos: pct(pres.ent, tot.ent),
+          partidos: pct(pres.par, tot.par),
+          tiempos: total,
+        },
       }
     }
   }
@@ -224,34 +236,33 @@ async function enrutar(metodo, p, b, req, url) {
          order by tiempos, j.apellido, j.nombre`, [anio])
     }
     if (metodo === 'GET' && p[1] === 'asistencia') {
+      // Ausente por defecto: el total es la cantidad de eventos ya ocurridos
+      // con asistencia tomada, igual para todos los jugadores.
+      const [tot] = await query(
+        `select count(*) filter (where e.tipo = 'entrenamiento')::int as ent,
+                count(*) filter (where e.tipo = 'partido')::int as par
+         from eventos e
+         where e.fecha <= current_date
+           and exists (select 1 from asistencias a where a.evento_id = e.id)`)
       const filas = await query(
-        `select j.id, j.nombre, j.apellido, ev.tipo,
-           count(*) filter (where a.estado in ('presente','tarde'))::int as presentes,
-           count(*)::int as total
-         from asistencias a
-         join eventos ev on ev.id = a.evento_id
-         join jugadores j on j.id = a.jugador_id
-         group by j.id, j.nombre, j.apellido, ev.tipo`)
-      const porJugador = {}
-      for (const f of filas) {
-        if (!porJugador[f.id]) {
-          porJugador[f.id] = {
-            id: f.id, nombre: f.nombre, apellido: f.apellido,
-            entrenamientos_presentes: 0, entrenamientos_total: 0,
-            partidos_presentes: 0, partidos_total: 0,
-          }
-        }
-        const j = porJugador[f.id]
-        if (f.tipo === 'entrenamiento') {
-          j.entrenamientos_presentes = f.presentes
-          j.entrenamientos_total = f.total
-        } else {
-          j.partidos_presentes = f.presentes
-          j.partidos_total = f.total
-        }
-      }
-      return Object.values(porJugador)
-        .sort((a, b2) => a.apellido.localeCompare(b2.apellido) || a.nombre.localeCompare(b2.nombre))
+        `select j.id, j.nombre, j.apellido,
+           count(a.id) filter (where ev.tipo = 'entrenamiento' and a.estado = 'presente'
+             and ev.fecha <= current_date)::int as ent_presentes,
+           count(a.id) filter (where ev.tipo = 'partido' and a.estado = 'presente'
+             and ev.fecha <= current_date)::int as par_presentes
+         from jugadores j
+         left join asistencias a on a.jugador_id = j.id
+         left join eventos ev on ev.id = a.evento_id
+         where j.estado <> 'inactivo'
+         group by j.id, j.nombre, j.apellido
+         order by j.apellido, j.nombre`)
+      return filas.map((f) => ({
+        id: f.id, nombre: f.nombre, apellido: f.apellido,
+        entrenamientos_presentes: f.ent_presentes,
+        entrenamientos_total: tot.ent,
+        partidos_presentes: f.par_presentes,
+        partidos_total: tot.par,
+      }))
     }
   }
 
@@ -307,6 +318,9 @@ async function enrutar(metodo, p, b, req, url) {
             await query('delete from asistencias where evento_id = $1 and jugador_id = $2',
               [p[1], m.jugador_id])
           } else {
+            if (!['presente', 'ausente'].includes(m.estado)) {
+              throw { codigo: 400, error: 'estado_invalido' }
+            }
             await query(
               `insert into asistencias (evento_id, jugador_id, estado) values ($1,$2,$3)
                on conflict (evento_id, jugador_id) do update set estado = excluded.estado`,

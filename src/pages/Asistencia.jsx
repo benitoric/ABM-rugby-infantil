@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { descargarCSV, etiquetaPartido, fechaCorta, lineaBloque, nombreCompleto, ESTADOS_ASISTENCIA } from '../helpers.js'
+import { descargarCSV, etiquetaPartido, fechaCorta, lineaBloque, nombreCompleto } from '../helpers.js'
 
 const BLOQUE_VACIO = { rival: '', lugar: '', hora_convocatoria: '' }
 
@@ -212,9 +212,9 @@ function TomarAsistencia({ evento, onVolver }) {
     cargar()
   }, [evento.id])
 
-  async function marcar(jugadorId, estado) {
-    const anterior = marcas[jugadorId]
-    const nuevo = anterior === estado ? null : estado
+  // Ausente por defecto: tocar al jugador alterna presente/ausente
+  async function marcar(jugadorId) {
+    const nuevo = marcas[jugadorId] === 'presente' ? 'ausente' : 'presente'
     setMarcas((m) => ({ ...m, [jugadorId]: nuevo }))
     await api(`eventos/${evento.id}/asistencias`, {
       method: 'PUT',
@@ -224,11 +224,11 @@ function TomarAsistencia({ evento, onVolver }) {
 
   async function marcarTodosPresentes() {
     const nuevas = {}
-    for (const j of jugadores) nuevas[j.id] = marcas[j.id] || 'presente'
+    for (const j of jugadores) nuevas[j.id] = 'presente'
     setMarcas(nuevas)
     await api(`eventos/${evento.id}/asistencias`, {
       method: 'PUT',
-      body: { marcas: jugadores.map((j) => ({ jugador_id: j.id, estado: nuevas[j.id] })) },
+      body: { marcas: jugadores.map((j) => ({ jugador_id: j.id, estado: 'presente' })) },
     })
   }
 
@@ -238,18 +238,15 @@ function TomarAsistencia({ evento, onVolver }) {
     onVolver()
   }
 
-  const conteo = Object.values(marcas).filter(Boolean).reduce((acc, e) => {
-    acc[e] = (acc[e] || 0) + 1
-    return acc
-  }, {})
+  const presentes = jugadores.filter((j) => marcas[j.id] === 'presente').length
 
   function descargarEvento() {
-    const titulo = evento.tipo === 'partido' ? `partido${evento.rival ? `-vs-${evento.rival}` : ''}` : 'entrenamiento'
+    const titulo = evento.tipo === 'partido' ? 'partido' : 'entrenamiento'
     descargarCSV(`asistencia-${titulo}-${evento.fecha}.csv`, [
       ['Jugador', 'Asistencia'],
       ...jugadores.map((j) => [
         nombreCompleto(j),
-        ESTADOS_ASISTENCIA.find((e) => e.value === marcas[j.id])?.title || 'Sin marcar',
+        marcas[j.id] === 'presente' ? 'Presente' : 'Ausente',
       ]),
     ])
   }
@@ -278,40 +275,40 @@ function TomarAsistencia({ evento, onVolver }) {
         ))}
         {evento.notas && <p className="mini" style={{ marginTop: 6 }}>📝 {evento.notas}</p>}
         <div className="fila" style={{ marginTop: 8 }}>
-          {ESTADOS_ASISTENCIA.map((e) => (
-            <span key={e.value} className="mini">
-              <b style={{ color: e.color }}>{e.label}</b> {e.title}: {conteo[e.value] || 0}
-            </span>
-          ))}
+          <span className="mini"><b style={{ color: 'var(--ok)' }}>Presentes: {presentes}</b></span>
+          <span className="mini"><b style={{ color: 'var(--bad)' }}>Ausentes: {jugadores.length - presentes}</b></span>
         </div>
       </div>
 
+      <p className="mini">
+        Todos arrancan como ausentes: tocá a los que vinieron y quedan marcados
+        presentes (tocá de nuevo para deshacer).
+      </p>
+
       <button className="btn sec" onClick={marcarTodosPresentes}>
-        Marcar presentes a todos los que faltan marcar
+        Marcar presentes a todos
       </button>
 
       {cargando && <div className="vacio">Cargando…</div>}
-      {jugadores.map((j) => (
-        <div key={j.id} className="jugador-item" style={{ cursor: 'default' }}>
-          <div className="crece">
-            <div style={{ fontWeight: 600 }}>{nombreCompleto(j)}</div>
-            {j.estado === 'lesionado' && <span className="badge lesionado">lesionado</span>}
-          </div>
-          <div className="asis-botones">
-            {ESTADOS_ASISTENCIA.map((e) => (
-              <button
-                key={e.value}
-                className={`asis-btn ${marcas[j.id] === e.value ? 'sel' : ''}`}
-                style={marcas[j.id] === e.value ? { background: e.color } : {}}
-                title={e.title}
-                onClick={() => marcar(j.id, e.value)}
-              >
-                {e.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
+      {jugadores.map((j) => {
+        const presente = marcas[j.id] === 'presente'
+        return (
+          <button
+            key={j.id}
+            className="jugador-item"
+            style={presente ? { borderLeft: '4px solid var(--ok)' } : { opacity: 0.65 }}
+            onClick={() => marcar(j.id)}
+          >
+            <div className="crece">
+              <div style={{ fontWeight: 600 }}>{nombreCompleto(j)}</div>
+              {j.estado === 'lesionado' && <span className="badge lesionado">lesionado</span>}
+            </div>
+            <span style={{ fontWeight: 800, color: presente ? 'var(--ok)' : 'var(--texto-suave)' }}>
+              {presente ? 'PRESENTE ✓' : 'AUSENTE'}
+            </span>
+          </button>
+        )
+      })}
     </div>
   )
 }
