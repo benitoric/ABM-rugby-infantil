@@ -9,7 +9,7 @@ const COLS_LESION = `id, jugador_id, fecha::text as fecha, descripcion,
 const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora, rival, lugar, notas`
 const COLS_SEGUIMIENTO = `id, jugador_id, fecha::text as fecha, area, valoracion, comentario, autor_email`
 const COLS_BLOQUE = `id, evento_id, numero, nombre, rival, lugar,
-  hora_convocatoria::text as hora_convocatoria`
+  hora_convocatoria::text as hora_convocatoria, valoracion, cronica`
 
 export async function handle(req, res) {
   try {
@@ -364,10 +364,26 @@ async function enrutar(metodo, p, b, req, url) {
       return { ok: true }
     }
     if (metodo === 'PUT' && p[1] === 'bloque' && p[2]) {
+      // Actualización parcial: solo cambian los campos presentes en el cuerpo
+      const sets = []
+      const vals = []
+      for (const campo of ['rival', 'lugar', 'hora_convocatoria', 'cronica']) {
+        if (campo in b) {
+          vals.push(b[campo] || null)
+          sets.push(`${campo} = $${vals.length}`)
+        }
+      }
+      if ('valoracion' in b) {
+        const v = b.valoracion == null ? null : Number(b.valoracion)
+        if (v !== null && !(v >= 1 && v <= 5)) throw { codigo: 400, error: 'valoracion_invalida' }
+        vals.push(v)
+        sets.push(`valoracion = $${vals.length}`)
+      }
+      if (!sets.length) throw { codigo: 400, error: 'faltan_datos' }
+      vals.push(p[2])
       const filas = await query(
-        `update bloques set rival = $1, lugar = $2, hora_convocatoria = $3
-         where id = $4 returning ${COLS_BLOQUE}`,
-        [b.rival || null, b.lugar || null, b.hora_convocatoria || null, p[2]])
+        `update bloques set ${sets.join(', ')} where id = $${vals.length} returning ${COLS_BLOQUE}`,
+        vals)
       if (!filas.length) throw { codigo: 404, error: 'no_existe' }
       return filas[0]
     }

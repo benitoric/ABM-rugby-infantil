@@ -310,6 +310,16 @@ h3 { font-size: 1rem; }
 .seguimiento-item { border-left: 3px solid var(--dorado); padding: 8px 12px; margin-bottom: 8px; background: #fff; border-radius: 0 10px 10px 0; box-shadow: var(--sombra); }
 .estrellas { color: #f59e0b; letter-spacing: 2px; }
 
+.estrellas-sel { display: flex; gap: 2px; }
+.estrellas-sel button {
+  background: none;
+  border: none;
+  font-size: 1.6rem;
+  line-height: 1;
+  padding: 2px;
+  color: #f59e0b;
+}
+
 .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .stat {
   background: var(--tarjeta);
