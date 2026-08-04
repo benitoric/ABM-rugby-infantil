@@ -5,6 +5,7 @@ import Jugadores from './pages/Jugadores.jsx'
 import Asistencia from './pages/Asistencia.jsx'
 import Partidos from './pages/Partidos.jsx'
 import Staff from './pages/Staff.jsx'
+import { VERSION } from './version.js'
 
 const TABS = [
   { id: 'jugadores', label: 'Jugadores', ico: '👥' },
@@ -38,7 +39,7 @@ export default function App() {
       <header className="header no-imprimir">
         <div>
           <h1>Rugby M12</h1>
-          <div className="sub">Tucumán Lawn Tennis · {staff.nombre || staff.email}</div>
+          <div className="sub">Tucumán Lawn Tennis · {staff.nombre || staff.email} · {VERSION}</div>
         </div>
         <button onClick={salir}>Salir</button>
       </header>
