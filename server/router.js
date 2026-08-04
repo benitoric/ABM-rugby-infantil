@@ -209,6 +209,20 @@ async function enrutar(metodo, p, b, req, url) {
   }
 
   // ---------- lesiones ----------
+  // Una lesión activa pasa al jugador a estado "lesionado"; al recuperarse o
+  // borrarse la última lesión activa vuelve a "activo". Nunca toca a los
+  // dados de baja ("inactivo").
+  async function sincronizarEstadoLesion(jugadorId) {
+    const activas = await query(
+      'select count(*)::int as n from lesiones where jugador_id = $1 and not recuperado',
+      [jugadorId])
+    if (activas[0].n > 0) {
+      await query("update jugadores set estado = 'lesionado' where id = $1 and estado = 'activo'", [jugadorId])
+    } else {
+      await query("update jugadores set estado = 'activo' where id = $1 and estado = 'lesionado'", [jugadorId])
+    }
+  }
+
   if (p[0] === 'lesiones') {
     if (metodo === 'POST' && !p[1]) {
       if (!b?.jugador_id || !b?.descripcion?.trim()) throw { codigo: 400, error: 'faltan_datos' }
@@ -217,14 +231,18 @@ async function enrutar(metodo, p, b, req, url) {
          values ($1, $2, $3, $4) returning ${COLS_LESION}`,
         [b.jugador_id, b.fecha || new Date().toISOString().slice(0, 10),
          b.descripcion.trim(), b.fecha_retorno_estimada || null])
+      await sincronizarEstadoLesion(b.jugador_id)
       return filas[0]
     }
     if (metodo === 'PUT' && p[1]) {
-      await query('update lesiones set recuperado = $1 where id = $2', [!!b.recuperado, p[1]])
+      const filas = await query(
+        'update lesiones set recuperado = $1 where id = $2 returning jugador_id', [!!b.recuperado, p[1]])
+      if (filas[0]) await sincronizarEstadoLesion(filas[0].jugador_id)
       return { ok: true }
     }
     if (metodo === 'DELETE' && p[1]) {
-      await query('delete from lesiones where id = $1', [p[1]])
+      const filas = await query('delete from lesiones where id = $1 returning jugador_id', [p[1]])
+      if (filas[0]) await sincronizarEstadoLesion(filas[0].jugador_id)
       return { ok: true }
     }
   }
