@@ -95,9 +95,3 @@ export const ROLES_STAFF = [
   'Manager asistente',
 ]
 
-export const ESTADOS_ASISTENCIA = [
-  { value: 'presente', label: 'P', title: 'Presente', color: 'var(--ok)' },
-  { value: 'tarde', label: 'T', title: 'Llegó tarde', color: 'var(--warn)' },
-  { value: 'justificado', label: 'J', title: 'Ausente justificado', color: 'var(--info)' },
-  { value: 'ausente', label: 'A', title: 'Ausente', color: 'var(--bad)' },
-]
