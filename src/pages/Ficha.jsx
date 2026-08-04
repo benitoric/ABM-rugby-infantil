@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { edad, fechaCorta, fichaMedica, nombreCompleto, AREAS } from '../helpers.js'
+import { edad, fechaCorta, fichaMedica, nombreCompleto, APTITUDES, AREAS } from '../helpers.js'
 import { FormJugador } from './Jugadores.jsx'
 
 export default function Ficha({ jugadorId, onVolver }) {
@@ -95,6 +95,13 @@ export default function Ficha({ jugadorId, onVolver }) {
               {j.posicion && <span className="badge activo">{j.posicion}</span>}
               {lesiones.some((l) => !l.recuperado) && <span className="badge lesionado">🤕 lesión activa</span>}
             </div>
+            {(j.aptitudes || []).length > 0 && (
+              <div className="fila" style={{ marginTop: 6 }}>
+                {APTITUDES.filter((a) => j.aptitudes.includes(a.value)).map((a) => (
+                  <span key={a.value} className="badge aptitud">{a.label}</span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         {(j.tutor_nombre || j.tutor_telefono) && (

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { edad, fechaCorta, fichaMedica, nombreCompleto } from '../helpers.js'
+import { edad, fechaCorta, fichaMedica, nombreCompleto, APTITUDES } from '../helpers.js'
 import Ficha from './Ficha.jsx'
 
 const VACIO = {
   nombre: '', apellido: '', fecha_nacimiento: '', dni: '', posicion: '',
-  estado: 'activo', tutor_nombre: '', tutor_telefono: '',
+  aptitudes: [], estado: 'activo', tutor_nombre: '', tutor_telefono: '',
   ficha_medica_vigente: false, ficha_medica_vence: '', observaciones: '',
 }
 
@@ -323,6 +323,30 @@ export function FormJugador({ inicial, onCerrar, onGuardado }) {
               <option>Back</option>
               <option>Mixto</option>
             </select>
+          </div>
+          <div className="campo" style={{ gridColumn: '1 / -1' }}>
+            <label>Aptitudes (marcá todas las que correspondan)</label>
+            <div className="fila" style={{ gap: '4px 14px' }}>
+              {APTITUDES.map((a) => (
+                <label key={a.value} className="fila" style={{ gap: 6, fontWeight: 400 }}>
+                  <input
+                    type="checkbox"
+                    style={{ width: 17, height: 17 }}
+                    checked={(f.aptitudes || []).includes(a.value)}
+                    onChange={(e) => {
+                      const actuales = f.aptitudes || []
+                      setF({
+                        ...f,
+                        aptitudes: e.target.checked
+                          ? [...actuales, a.value]
+                          : actuales.filter((x) => x !== a.value),
+                      })
+                    }}
+                  />
+                  {a.label}
+                </label>
+              ))}
+            </div>
           </div>
           <div className="campo">
             <label>Estado</label>

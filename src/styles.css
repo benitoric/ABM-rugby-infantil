@@ -163,6 +163,7 @@ h3 { font-size: 1rem; }
 .badge.medica-no { background: #fef3c7; color: var(--warn); }
 .badge.medica-pronto { background: #fef3c7; color: var(--warn); }
 .badge.medica-vencida { background: #fee2e2; color: var(--bad); }
+.badge.aptitud { background: #fff6cc; color: #8a6d00; border: 1px solid #f0dd8a; }
 
 /* ---------- formularios ---------- */
 .campo { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
