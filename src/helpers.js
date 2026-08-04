@@ -55,6 +55,23 @@ export function fichaMedica(j) {
     : { clase: 'medica-no', texto: 'Sin ficha médica' }
 }
 
+// Estado efectivo del jugador. La baja ('inactivo') y la lesión vienen de la
+// base; 'inhabilitado' se deriva de la ficha médica (vencida o inexistente).
+export const ESTADOS = {
+  activo: 'Activo',
+  inhabilitado: 'Inhabilitado',
+  lesionado: 'Lesionado',
+  inactivo: 'Inactivo',
+}
+
+export function estadoJugador(j) {
+  if (j.estado === 'inactivo') return 'inactivo'
+  if (j.estado === 'lesionado') return 'lesionado'
+  const c = fichaMedica(j).clase
+  if (c === 'medica-vencida' || c === 'medica-no') return 'inhabilitado'
+  return 'activo'
+}
+
 // Descarga en el navegador un CSV (separado por ; para que Excel en español
 // lo abra directo en columnas).
 export function descargarCSV(nombreArchivo, filas) {

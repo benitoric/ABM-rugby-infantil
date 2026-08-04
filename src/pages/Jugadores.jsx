@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { fechaCorta, nombreCompleto, APTITUDES } from '../helpers.js'
+import { estadoJugador, fechaCorta, nombreCompleto, APTITUDES, ESTADOS } from '../helpers.js'
 import Ficha from './Ficha.jsx'
 
 const VACIO = {
@@ -26,18 +26,18 @@ export default function Jugadores() {
   useEffect(() => { cargar().catch(() => setCargando(false)) }, [])
 
   const visibles = jugadores.filter((j) => {
-    if (filtro !== 'todos' && j.estado !== filtro) return false
+    if (filtro !== 'todos' && estadoJugador(j) !== filtro) return false
     const q = busqueda.trim().toLowerCase()
     if (!q) return true
     return `${j.nombre} ${j.apellido} ${j.dni || ''}`.toLowerCase().includes(q)
   })
 
-  const RANGO_ESTADO = { activo: 0, lesionado: 1, inactivo: 2 }
+  const RANGO_ESTADO = { activo: 0, inhabilitado: 1, lesionado: 2, inactivo: 3 }
   const ordenados = [...visibles].sort((a, b) => {
     let cmp = 0
     if (orden.campo === 'puesto') cmp = (a.posicion || 'zz').localeCompare(b.posicion || 'zz')
     else if (orden.campo === 'aptitudes') cmp = (a.aptitudes || []).length - (b.aptitudes || []).length
-    else if (orden.campo === 'estado') cmp = RANGO_ESTADO[a.estado] - RANGO_ESTADO[b.estado]
+    else if (orden.campo === 'estado') cmp = RANGO_ESTADO[estadoJugador(a)] - RANGO_ESTADO[estadoJugador(b)]
     const desempate = nombreCompleto(a).localeCompare(nombreCompleto(b), 'es')
     return (orden.asc ? 1 : -1) * (cmp || desempate)
   })
@@ -98,7 +98,7 @@ export default function Jugadores() {
       />
 
       <div className="fila">
-        {[['activo', 'Activos'], ['lesionado', 'Lesionados'], ['inactivo', 'Inactivos'], ['todos', 'Todos']].map(([v, l]) => (
+        {[['activo', 'Activos'], ['inhabilitado', 'Inhabilitados'], ['lesionado', 'Lesionados'], ['inactivo', 'Inactivos'], ['todos', 'Todos']].map(([v, l]) => (
           <button key={v} className={`chip ${filtro === v ? 'activo' : ''}`} onClick={() => setFiltro(v)}>
             {l}
           </button>
@@ -136,8 +136,7 @@ export default function Jugadores() {
             ))}
           </div>
           <div>
-            {j.estado === 'lesionado' && <span className="badge lesionado">🤕 Lesión</span>}
-            {j.estado === 'inactivo' && <span className="badge inactivo">Inactivo</span>}
+            <span className={`badge ${estadoJugador(j)}`}>{ESTADOS[estadoJugador(j)]}</span>
           </div>
         </button>
       ))}

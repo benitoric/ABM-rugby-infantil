@@ -159,6 +159,7 @@ h3 { font-size: 1rem; }
 .badge.activo { background: var(--celeste); color: var(--primario); }
 .badge.lesionado { background: #fee2e2; color: var(--bad); }
 .badge.inactivo { background: #e5e7eb; color: #4b5563; }
+.badge.inhabilitado { background: #fef3c7; color: var(--warn); }
 .badge.medica-ok { background: var(--celeste); color: var(--primario); }
 .badge.medica-no { background: #fef3c7; color: var(--warn); }
 .badge.medica-pronto { background: #fef3c7; color: var(--warn); }
@@ -237,14 +238,14 @@ h3 { font-size: 1rem; }
 /* Listado de jugadores como tabla: mismas columnas en encabezado y filas */
 .fila-jugador {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 58px 84px 58px;
+  grid-template-columns: minmax(0, 1fr) 54px 74px 74px;
   align-items: center;
   gap: 4px;
 }
 @media (min-width: 520px) {
-  .fila-jugador { grid-template-columns: minmax(0, 1fr) 90px 120px 90px; }
+  .fila-jugador { grid-template-columns: minmax(0, 1fr) 90px 120px 100px; }
 }
-.fila-jugador .badge { font-size: 0.65rem; padding: 2px 5px; white-space: nowrap; }
+.fila-jugador .badge { font-size: 0.62rem; padding: 2px 4px; white-space: nowrap; }
 .celda-nombre { gap: 8px; flex-wrap: nowrap; min-width: 0; }
 @media (max-width: 519px) {
   .celda-nombre .avatar { display: none; }
