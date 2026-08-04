@@ -17,6 +17,7 @@ create table if not exists jugadores (
   fecha_nacimiento date,
   dni text,
   posicion text,
+  aptitudes jsonb not null default '[]',
   estado text not null default 'activo' check (estado in ('activo','inactivo','lesionado')),
   tutor_nombre text,
   tutor_telefono text,

@@ -18,6 +18,19 @@ export function nombreCompleto(j) {
   return `${j.apellido}, ${j.nombre}`
 }
 
+export const APTITUDES = [
+  { value: 'conduccion', label: 'Conducción', abrev: 'Cond' },
+  { value: 'penetracion', label: 'Penetración', abrev: 'Pen' },
+  { value: 'definicion', label: 'Definición', abrev: 'Def' },
+  { value: 'equipo', label: 'Juego en equipo', abrev: 'Eq' },
+  { value: 'individual', label: 'Juego individual', abrev: 'Ind' },
+]
+
+export function abrevAptitudes(j) {
+  const lista = j.aptitudes || []
+  return APTITUDES.filter((a) => lista.includes(a.value)).map((a) => a.abrev).join('·')
+}
+
 export const AREAS = [
   { value: 'tecnica', label: 'Técnica' },
   { value: 'fisica', label: 'Física' },

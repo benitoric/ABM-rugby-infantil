@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
-import { etiquetaPartido, fechaCorta, lineaBloque, nombreCompleto } from '../helpers.js'
+import { abrevAptitudes, etiquetaPartido, fechaCorta, lineaBloque, nombreCompleto } from '../helpers.js'
 
 const MAX_TIEMPOS = 6
 
@@ -233,10 +233,14 @@ function ArmadoPartido({ partido }) {
             return (
               <div key={j.id} className="jugador-item" style={{ cursor: 'default', opacity: apagado ? 0.5 : 1 }}>
                 <div className="crece">
-                  <div style={{ fontWeight: 600 }}>{nombreCompleto(j)}</div>
+                  <div style={{ fontWeight: 600 }}>
+                    {nombreCompleto(j)}
+                    {j.posicion && <span className="mini"> · {j.posicion}</span>}
+                  </div>
                   <div className="mini">
                     {a ? `Asistencia: ${a}` : 'Sin marcar asistencia'}
                     {j.estado === 'lesionado' ? ' · 🤕 lesionado' : ''}
+                    {abrevAptitudes(j) ? ` · ${abrevAptitudes(j)}` : ''}
                   </div>
                 </div>
                 <div className="bloque-botones">
@@ -533,10 +537,14 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiem
             onClick={() => tiempo && onToggle(tiempo.id, j.id)}
           >
             <div className="crece">
-              <div style={{ fontWeight: 600 }}>{nombreCompleto(j)}</div>
+              <div style={{ fontWeight: 600 }}>
+                {nombreCompleto(j)}
+                {j.posicion && <span className="mini"> · {j.posicion}</span>}
+              </div>
               <div className="mini">
                 {jugados[j.id] || 0} {jugados[j.id] === 1 ? 'tiempo jugado' : 'tiempos jugados'} en este bloque
                 {!jugados[j.id] && ' ⚠️'}
+                {abrevAptitudes(j) ? ` · ${abrevAptitudes(j)}` : ''}
               </div>
             </div>
             <span style={{ fontWeight: 800, color: dentro ? 'var(--ok)' : 'var(--texto-suave)' }}>

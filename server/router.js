@@ -2,8 +2,10 @@ import { query } from './db.js'
 import { autenticar, crearToken, hashClave, compararClave } from './auth.js'
 
 const COLS_JUGADOR = `id, nombre, apellido, fecha_nacimiento::text as fecha_nacimiento,
-  dni, posicion, estado, tutor_nombre, tutor_telefono, ficha_medica_vigente,
+  dni, posicion, aptitudes, estado, tutor_nombre, tutor_telefono, ficha_medica_vigente,
   ficha_medica_vence::text as ficha_medica_vence, observaciones`
+
+const APTITUDES = ['conduccion', 'penetracion', 'definicion', 'equipo', 'individual']
 const COLS_LESION = `id, jugador_id, fecha::text as fecha, descripcion,
   fecha_retorno_estimada::text as fecha_retorno_estimada, recuperado`
 const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora, rival, lugar, notas`
@@ -105,18 +107,18 @@ async function enrutar(metodo, p, b, req, url) {
     if (metodo === 'POST' && !p[1]) {
       const d = datosJugador(b)
       const filas = await query(
-        `insert into jugadores (nombre, apellido, fecha_nacimiento, dni, posicion, estado,
-           tutor_nombre, tutor_telefono, ficha_medica_vigente, ficha_medica_vence, observaciones)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning ${COLS_JUGADOR}`, d)
+        `insert into jugadores (nombre, apellido, fecha_nacimiento, dni, posicion, aptitudes,
+           estado, tutor_nombre, tutor_telefono, ficha_medica_vigente, ficha_medica_vence, observaciones)
+         values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12) returning ${COLS_JUGADOR}`, d)
       return filas[0]
     }
     if (metodo === 'PUT' && p[1]) {
       const d = datosJugador(b)
       const filas = await query(
         `update jugadores set nombre=$1, apellido=$2, fecha_nacimiento=$3, dni=$4,
-           posicion=$5, estado=$6, tutor_nombre=$7, tutor_telefono=$8,
-           ficha_medica_vigente=$9, ficha_medica_vence=$10, observaciones=$11, updated_at=now()
-         where id=$12 returning ${COLS_JUGADOR}`, [...d, p[1]])
+           posicion=$5, aptitudes=$6::jsonb, estado=$7, tutor_nombre=$8, tutor_telefono=$9,
+           ficha_medica_vigente=$10, ficha_medica_vence=$11, observaciones=$12, updated_at=now()
+         where id=$13 returning ${COLS_JUGADOR}`, [...d, p[1]])
       return filas[0]
     }
     if (metodo === 'DELETE' && p[1]) {
@@ -472,9 +474,12 @@ function validarRol(rol) {
 
 function datosJugador(b) {
   if (!b?.nombre?.trim() || !b?.apellido?.trim()) throw { codigo: 400, error: 'faltan_datos' }
+  const aptitudes = Array.isArray(b.aptitudes)
+    ? [...new Set(b.aptitudes.filter((a) => APTITUDES.includes(a)))]
+    : []
   return [
     b.nombre.trim(), b.apellido.trim(), b.fecha_nacimiento || null, b.dni || null,
-    b.posicion || null, b.estado || 'activo', b.tutor_nombre || null,
+    b.posicion || null, JSON.stringify(aptitudes), b.estado || 'activo', b.tutor_nombre || null,
     b.tutor_telefono || null, !!b.ficha_medica_vigente, b.ficha_medica_vence || null,
     b.observaciones || null,
   ]

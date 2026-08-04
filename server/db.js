@@ -28,6 +28,7 @@ async function inicializar() {
   // inicial, idempotentes, aplicados en el arranque en frío de la función.
   await pool.query('alter table staff add column if not exists rol text')
   await pool.query('alter table jugadores add column if not exists ficha_medica_vence date')
+  await pool.query(`alter table jugadores add column if not exists aptitudes jsonb not null default '[]'`)
   await pool.query('alter table bloques add column if not exists rival text')
   await pool.query('alter table bloques add column if not exists lugar text')
   await pool.query('alter table bloques add column if not exists hora_convocatoria time')
