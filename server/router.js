@@ -113,7 +113,10 @@ async function enrutar(metodo, p, b, req, url) {
   // ---------- jugadores ----------
   if (p[0] === 'jugadores') {
     if (metodo === 'GET' && !p[1]) {
-      return query(`select ${COLS_JUGADOR} from jugadores order by apellido, nombre`)
+      return query(`select ${COLS_JUGADOR},
+        (select max(e.fecha)::text from evaluaciones e where e.jugador_id = jugadores.id)
+          as ultima_evaluacion
+        from jugadores order by apellido, nombre`)
     }
     if (metodo === 'POST' && !p[1]) {
       const d = datosJugador(b)

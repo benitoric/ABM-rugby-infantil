@@ -242,8 +242,12 @@ h3 { font-size: 1rem; }
   align-items: center;
   gap: 4px;
 }
+.col-eval { display: none; }
+.eval-fecha-movil { font-size: 0.66rem; color: var(--texto-suave); }
 @media (min-width: 520px) {
-  .fila-jugador { grid-template-columns: minmax(0, 1fr) 90px 120px 100px; }
+  .fila-jugador { grid-template-columns: minmax(0, 1fr) 90px 110px 90px 80px; }
+  .col-eval { display: block; }
+  .eval-fecha-movil { display: none; }
 }
 .fila-jugador .badge { font-size: 0.62rem; padding: 2px 4px; white-space: nowrap; }
 .celda-nombre { gap: 8px; flex-wrap: nowrap; min-width: 0; }

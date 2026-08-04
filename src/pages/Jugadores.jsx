@@ -38,6 +38,7 @@ export default function Jugadores() {
     if (orden.campo === 'puesto') cmp = (a.posicion || 'zz').localeCompare(b.posicion || 'zz')
     else if (orden.campo === 'aptitudes') cmp = (a.aptitudes || []).length - (b.aptitudes || []).length
     else if (orden.campo === 'estado') cmp = RANGO_ESTADO[estadoJugador(a)] - RANGO_ESTADO[estadoJugador(b)]
+    else if (orden.campo === 'evaluacion') cmp = (a.ultima_evaluacion || '').localeCompare(b.ultima_evaluacion || '')
     const desempate = nombreCompleto(a).localeCompare(nombreCompleto(b), 'es')
     return (orden.asc ? 1 : -1) * (cmp || desempate)
   })
@@ -116,6 +117,7 @@ export default function Jugadores() {
           {encabezado('puesto', 'Puesto')}
           {encabezado('aptitudes', 'Aptitudes')}
           {encabezado('estado', 'Estado')}
+          <div className="col-eval">{encabezado('evaluacion', 'Últ. eval.')}</div>
         </div>
       )}
 
@@ -123,7 +125,12 @@ export default function Jugadores() {
         <button key={j.id} className="jugador-item compacto fila-jugador" onClick={() => setFichaDe(j.id)}>
           <div className="fila celda-nombre">
             <div className="avatar">{j.nombre[0]}{j.apellido[0]}</div>
-            <div className="crece nombre-jugador">{nombreCompleto(j)}</div>
+            <div className="crece" style={{ minWidth: 0 }}>
+              <div className="nombre-jugador">{nombreCompleto(j)}</div>
+              <div className="eval-fecha-movil">
+                {j.ultima_evaluacion ? `Eval. ${fechaCorta(j.ultima_evaluacion)}` : 'Sin evaluar'}
+              </div>
+            </div>
           </div>
           <div>
             {j.posicion && (
@@ -137,6 +144,9 @@ export default function Jugadores() {
           </div>
           <div>
             <span className={`badge ${estadoJugador(j)}`}>{ESTADOS[estadoJugador(j)]}</span>
+          </div>
+          <div className="col-eval mini">
+            {j.ultima_evaluacion ? fechaCorta(j.ultima_evaluacion) : '—'}
           </div>
         </button>
       ))}
