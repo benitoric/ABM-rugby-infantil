@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api, setToken } from '../api.js'
+import { VERSION } from '../version.js'
 
 export default function Login({ onIngreso }) {
   const [email, setEmail] = useState('')
@@ -102,8 +103,6 @@ export default function Login({ onIngreso }) {
     </div>
   )
 }
-
-const VERSION = 'v4'
 
 function traducir(e, detalle, codigo) {
   const mapa = {
