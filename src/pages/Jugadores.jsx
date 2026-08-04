@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { edad, fechaCorta, fichaMedica, nombreCompleto, APTITUDES } from '../helpers.js'
+import { fechaCorta, nombreCompleto, APTITUDES } from '../helpers.js'
 import Ficha from './Ficha.jsx'
 
 const VACIO = {
@@ -45,11 +45,6 @@ export default function Jugadores() {
   const cumples = activos
     .filter((j) => j.fecha_nacimiento && Number(j.fecha_nacimiento.split('-')[1]) === mesActual)
     .sort((a, b) => Number(a.fecha_nacimiento.split('-')[2]) - Number(b.fecha_nacimiento.split('-')[2]))
-  const fichasProblema = activos.filter((j) => {
-    const c = fichaMedica(j).clase
-    return c === 'medica-vencida' || c === 'medica-pronto' || c === 'medica-no'
-  })
-
   return (
     <div className="contenido">
       <div className="fila entre">
@@ -68,12 +63,6 @@ export default function Jugadores() {
               {Number(j.fecha_nacimiento.split('-')[2])}/{mesActual} — {nombreCompleto(j)} (cumple {new Date().getFullYear() - Number(j.fecha_nacimiento.split('-')[0])})
             </div>
           ))}
-        </div>
-      )}
-
-      {fichasProblema.length > 0 && (
-        <div className="aviso">
-          🏥 Fichas médicas a revisar: {fichasProblema.map((j) => `${j.apellido} (${fichaMedica(j).texto.toLowerCase()})`).join(' · ')}
         </div>
       )}
 
@@ -99,17 +88,17 @@ export default function Jugadores() {
       )}
 
       {visibles.map((j) => (
-        <button key={j.id} className="jugador-item" onClick={() => setFichaDe(j.id)}>
+        <button key={j.id} className="jugador-item compacto" onClick={() => setFichaDe(j.id)}>
           <div className="avatar">{j.nombre[0]}{j.apellido[0]}</div>
-          <div className="crece">
-            <div style={{ fontWeight: 600 }}>{nombreCompleto(j)}</div>
-            <div className="mini">
-              {edad(j.fecha_nacimiento) != null ? `${edad(j.fecha_nacimiento)} años` : 'sin fecha de nac.'}
-              {j.posicion ? ` · ${j.posicion}` : ''}
-            </div>
+          <div className="crece nombre-jugador">{nombreCompleto(j)}</div>
+          <div className="etiquetas">
+            {j.posicion && <span className="badge puesto">{j.posicion}</span>}
+            {APTITUDES.filter((a) => (j.aptitudes || []).includes(a.value)).map((a) => (
+              <span key={a.value} className="badge aptitud">{a.abrev}</span>
+            ))}
+            {j.estado === 'lesionado' && <span className="badge lesionado">🤕 Lesionado</span>}
+            {j.estado === 'inactivo' && <span className="badge inactivo">Inactivo</span>}
           </div>
-          {j.estado !== 'activo' && <span className={`badge ${j.estado}`}>{j.estado}</span>}
-          <span className={`badge ${fichaMedica(j).clase}`}>{fichaMedica(j).texto}</span>
         </button>
       ))}
 

@@ -164,6 +164,7 @@ h3 { font-size: 1rem; }
 .badge.medica-pronto { background: #fef3c7; color: var(--warn); }
 .badge.medica-vencida { background: #fee2e2; color: var(--bad); }
 .badge.aptitud { background: #fff6cc; color: #8a6d00; border: 1px solid #f0dd8a; }
+.badge.puesto { background: var(--celeste); color: var(--primario); }
 
 /* ---------- formularios ---------- */
 .campo { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
@@ -214,6 +215,22 @@ h3 { font-size: 1rem; }
   border: none;
   width: 100%;
   text-align: left;
+}
+.jugador-item.compacto { padding: 6px 10px; gap: 8px; }
+.jugador-item.compacto .avatar { width: 30px; height: 30px; font-size: 0.7rem; }
+.nombre-jugador {
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.etiquetas {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 .avatar {
   width: 38px;
