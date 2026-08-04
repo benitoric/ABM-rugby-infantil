@@ -6,6 +6,16 @@ const COLS_JUGADOR = `id, nombre, apellido, fecha_nacimiento::text as fecha_naci
   ficha_medica_vence::text as ficha_medica_vence, observaciones`
 
 const APTITUDES = ['conduccion', 'penetracion', 'definicion']
+
+// Normaliza la posición sin importar cómo venga escrita (forward, BACK, mixto…)
+function normalizarPosicion(p) {
+  const t = (p || '').trim().toLowerCase()
+  if (!t) return null
+  if (t.startsWith('for')) return 'Forward'
+  if (t.startsWith('back')) return 'Back'
+  if (t.startsWith('mix')) return 'Mixto'
+  return p.trim()
+}
 const COLS_LESION = `id, jugador_id, fecha::text as fecha, descripcion,
   fecha_retorno_estimada::text as fecha_retorno_estimada, recuperado`
 const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora, rival, lugar, notas`
@@ -137,7 +147,7 @@ async function enrutar(metodo, p, b, req, url) {
              tutor_nombre, tutor_telefono, ficha_medica_vence, observaciones)
            values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
           [j.nombre.trim(), j.apellido.trim(), j.fecha_nacimiento || null,
-           j.dni || null, j.posicion || null, j.tutor_nombre || null,
+           j.dni || null, normalizarPosicion(j.posicion), j.tutor_nombre || null,
            j.tutor_telefono || null, j.ficha_medica_vence || null,
            j.observaciones || null])
         creados++
@@ -493,7 +503,7 @@ function datosJugador(b) {
     : []
   return [
     b.nombre.trim(), b.apellido.trim(), b.fecha_nacimiento || null, b.dni || null,
-    b.posicion || null, JSON.stringify(aptitudes), b.estado || 'activo', b.tutor_nombre || null,
+    normalizarPosicion(b.posicion), JSON.stringify(aptitudes), b.estado || 'activo', b.tutor_nombre || null,
     b.tutor_telefono || null, !!b.ficha_medica_vigente, b.ficha_medica_vence || null,
     b.observaciones || null,
   ]
