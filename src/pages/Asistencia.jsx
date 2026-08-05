@@ -198,6 +198,8 @@ function TomarAsistencia({ evento, onVolver }) {
   const [staff, setStaff] = useState([])
   const [marcasStaff, setMarcasStaff] = useState({})
   const [cargando, setCargando] = useState(true)
+  const [errorCarga, setErrorCarga] = useState(null)
+  const [intento, setIntento] = useState(0)
 
   useEffect(() => {
     async function cargar() {
@@ -217,26 +219,43 @@ function TomarAsistencia({ evento, onVolver }) {
       setMarcasStaff(ms)
       setCargando(false)
     }
-    cargar()
-  }, [evento.id])
+    setErrorCarga(null)
+    setCargando(true)
+    cargar().catch((e) => {
+      setErrorCarga(e)
+      setCargando(false)
+    })
+  }, [evento.id, intento])
 
   // Ausente por defecto: tocar al jugador alterna presente/ausente
   async function marcar(jugadorId) {
-    const nuevo = marcas[jugadorId] === 'presente' ? 'ausente' : 'presente'
+    const previo = marcas[jugadorId]
+    const nuevo = previo === 'presente' ? 'ausente' : 'presente'
     setMarcas((m) => ({ ...m, [jugadorId]: nuevo }))
-    await api(`eventos/${evento.id}/asistencias`, {
-      method: 'PUT',
-      body: { marcas: [{ jugador_id: jugadorId, estado: nuevo }] },
-    })
+    try {
+      await api(`eventos/${evento.id}/asistencias`, {
+        method: 'PUT',
+        body: { marcas: [{ jugador_id: jugadorId, estado: nuevo }] },
+      })
+    } catch {
+      setMarcas((m) => ({ ...m, [jugadorId]: previo }))
+      alert('No se pudo guardar la marca. Probá de nuevo.')
+    }
   }
 
   async function marcarStaff(email) {
-    const nuevo = marcasStaff[email] === 'presente' ? 'ausente' : 'presente'
+    const previo = marcasStaff[email]
+    const nuevo = previo === 'presente' ? 'ausente' : 'presente'
     setMarcasStaff((m) => ({ ...m, [email]: nuevo }))
-    await api(`eventos/${evento.id}/asistencias-staff`, {
-      method: 'PUT',
-      body: { marcas: [{ staff_email: email, estado: nuevo }] },
-    })
+    try {
+      await api(`eventos/${evento.id}/asistencias-staff`, {
+        method: 'PUT',
+        body: { marcas: [{ staff_email: email, estado: nuevo }] },
+      })
+    } catch {
+      setMarcasStaff((m) => ({ ...m, [email]: previo }))
+      alert('No se pudo guardar la marca. Probá de nuevo.')
+    }
   }
 
   async function marcarTodosPresentes() {
@@ -312,6 +331,14 @@ function TomarAsistencia({ evento, onVolver }) {
       </button>
 
       {cargando && <div className="vacio">Cargando…</div>}
+      {errorCarga && (
+        <div className="vacio">
+          <p>No se pudo cargar el listado{errorCarga.detalle ? `: ${errorCarga.detalle}` : '.'}</p>
+          <button className="btn sec" style={{ marginTop: 8 }} onClick={() => setIntento((n) => n + 1)}>
+            Reintentar
+          </button>
+        </div>
+      )}
       {jugadores.map((j) => {
         const presente = marcas[j.id] === 'presente'
         return (
