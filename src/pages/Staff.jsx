@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { ROLES_STAFF } from '../helpers.js'
+import { ROLES_STAFF, nombreStaff } from '../helpers.js'
 
 export default function Staff({ yo }) {
   const [staff, setStaff] = useState([])
   const [email, setEmail] = useState('')
   const [nombre, setNombre] = useState('')
+  const [apellido, setApellido] = useState('')
   const [rol, setRol] = useState('')
   const [error, setError] = useState('')
+  const [editando, setEditando] = useState(null) // email de la fila en edición
+  const [edicion, setEdicion] = useState({ nombre: '', apellido: '' })
 
   async function cargar() {
     setStaff(await api('staff'))
@@ -20,15 +23,39 @@ export default function Staff({ yo }) {
     try {
       await api('staff', {
         method: 'POST',
-        body: { email, nombre: nombre.trim() || null, rol: rol || null },
+        body: {
+          email,
+          nombre: nombre.trim() || null,
+          apellido: apellido.trim() || null,
+          rol: rol || null,
+        },
       })
       setEmail('')
       setNombre('')
+      setApellido('')
       setRol('')
       cargar()
     } catch (err) {
       setError(err.error === 'ya_existe' ? 'Ese email ya está en la lista.' : 'No se pudo agregar.')
     }
+  }
+
+  function empezarEdicion(fila) {
+    setEditando(fila.email)
+    setEdicion({ nombre: fila.nombre || '', apellido: fila.apellido || '' })
+  }
+
+  async function guardarEdicion(e) {
+    e.preventDefault()
+    await api(`staff/${editando}`, {
+      method: 'PUT',
+      body: {
+        nombre: edicion.nombre.trim() || null,
+        apellido: edicion.apellido.trim() || null,
+      },
+    })
+    setEditando(null)
+    cargar()
   }
 
   async function cambiarRol(fila, nuevoRol) {
@@ -63,14 +90,18 @@ export default function Staff({ yo }) {
       </p>
 
       <form className="tarjeta" onSubmit={invitar}>
+        <div className="campo">
+          <label>Email *</label>
+          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
         <div className="grid2">
-          <div className="campo">
-            <label>Email *</label>
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-          </div>
           <div className="campo">
             <label>Nombre</label>
             <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+          </div>
+          <div className="campo">
+            <label>Apellido</label>
+            <input value={apellido} onChange={(e) => setApellido(e.target.value)} />
           </div>
         </div>
         <div className="campo">
@@ -90,7 +121,7 @@ export default function Staff({ yo }) {
             <div className="avatar">{(s.nombre || s.email)[0].toUpperCase()}</div>
             <div className="crece">
               <div style={{ fontWeight: 600 }}>
-                {s.nombre || s.email}
+                {nombreStaff(s)}
                 {s.email === yo.email && <span className="badge activo" style={{ marginLeft: 6 }}>vos</span>}
                 {!s.activo && <span className="badge inactivo" style={{ marginLeft: 6 }}>suspendido</span>}
               </div>
@@ -99,7 +130,39 @@ export default function Staff({ yo }) {
                 {!s.tiene_clave && ' · todavía no ingresó por primera vez'}
               </div>
             </div>
+            {editando !== s.email && (
+              <button className="btn sec chico" onClick={() => empezarEdicion(s)}>Editar</button>
+            )}
           </div>
+
+          {editando === s.email && (
+            <form onSubmit={guardarEdicion} style={{ marginTop: 10 }}>
+              <div className="grid2">
+                <div className="campo">
+                  <label>Nombre</label>
+                  <input
+                    autoFocus
+                    value={edicion.nombre}
+                    onChange={(e) => setEdicion({ ...edicion, nombre: e.target.value })}
+                  />
+                </div>
+                <div className="campo">
+                  <label>Apellido</label>
+                  <input
+                    value={edicion.apellido}
+                    onChange={(e) => setEdicion({ ...edicion, apellido: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="fila">
+                <button className="btn chico crece">Guardar</button>
+                <button type="button" className="btn sec chico" onClick={() => setEditando(null)}>
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
+
           <div className="fila" style={{ marginTop: 10 }}>
             <select
               className="crece"

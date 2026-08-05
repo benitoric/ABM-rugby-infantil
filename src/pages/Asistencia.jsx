@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { descargarCSV, etiquetaPartido, fechaCorta, lineaBloque, nombreCompleto } from '../helpers.js'
+import { descargarCSV, etiquetaPartido, fechaCorta, lineaBloque, nombreCompleto, nombreStaff } from '../helpers.js'
 
 const BLOQUE_VACIO = { rival: '', lugar: '', hora_convocatoria: '' }
 
@@ -258,6 +258,15 @@ function TomarAsistencia({ evento, onVolver }) {
     }
   }
 
+  async function marcarStaff(email) {
+    const nuevo = marcasStaff[email] === 'presente' ? 'ausente' : 'presente'
+    setMarcasStaff((m) => ({ ...m, [email]: nuevo }))
+    await api(`eventos/${evento.id}/asistencias-staff`, {
+      method: 'PUT',
+      body: { marcas: [{ staff_email: email, estado: nuevo }] },
+    })
+  }
+
   async function marcarTodosPresentes() {
     const nuevas = {}
     for (const j of jugadores) nuevas[j.id] = 'presente'
@@ -286,7 +295,7 @@ function TomarAsistencia({ evento, onVolver }) {
       ]),
       ['Staff', 'Asistencia'],
       ...staff.map((s) => [
-        s.nombre || s.email,
+        nombreStaff(s),
         marcasStaff[s.email] === 'presente' ? 'Presente' : 'Ausente',
       ]),
     ])
@@ -380,7 +389,7 @@ function TomarAsistencia({ evento, onVolver }) {
                 onClick={() => marcarStaff(s.email)}
               >
                 <div className="crece">
-                  <div style={{ fontWeight: 600 }}>{s.nombre || s.email}</div>
+                  <div style={{ fontWeight: 600 }}>{nombreStaff(s)}</div>
                   {s.rol && <div className="mini">{s.rol}</div>}
                 </div>
                 <span style={{ fontWeight: 800, color: presente ? 'var(--ok)' : 'var(--bad)' }}>
