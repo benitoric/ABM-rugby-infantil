@@ -26,6 +26,25 @@ async function inicializar() {
   })
   // Migraciones livianas: cambios de esquema posteriores al despliegue
   // inicial, idempotentes, aplicados en el arranque en frío de la función.
+  // Si la última migración ya está aplicada se saltea todo (los arranques en
+  // frío no pagan el costo). Si falta, un lock consultivo serializa los
+  // arranques concurrentes: dos CREATE TABLE IF NOT EXISTS simultáneos pueden
+  // fallar igual en Postgres por la carrera en el catálogo.
+  // Al agregar una migración acá, actualizar el testigo de "aplicadas".
+  const { rows: [testigo] } = await pool.query(
+    "select to_regclass('public.asistencias_staff') is not null as aplicadas")
+  if (!testigo.aplicadas) {
+    await pool.query('select pg_advisory_lock(420012)')
+    try {
+      await migrar(pool)
+    } finally {
+      await pool.query('select pg_advisory_unlock(420012)')
+    }
+  }
+  return (texto, params) => pool.query(texto, params)
+}
+
+async function migrar(pool) {
   await pool.query('alter table staff add column if not exists rol text')
   await pool.query('alter table staff add column if not exists apellido text')
   await pool.query('alter table jugadores add column if not exists ficha_medica_vence date')
@@ -75,7 +94,6 @@ async function inicializar() {
     recuperado boolean not null default false,
     created_at timestamptz not null default now()
   )`)
-  return (texto, params) => pool.query(texto, params)
 }
 
 // Tolera los formatos habituales al pegar la cadena de Neon: comillas,
