@@ -27,6 +27,7 @@ async function inicializar() {
   // Migraciones livianas: cambios de esquema posteriores al despliegue
   // inicial, idempotentes, aplicados en el arranque en frío de la función.
   await pool.query('alter table staff add column if not exists rol text')
+  await pool.query('alter table staff add column if not exists apellido text')
   await pool.query('alter table jugadores add column if not exists ficha_medica_vence date')
   await pool.query(`alter table jugadores add column if not exists aptitudes jsonb not null default '[]'`)
   // Limpieza: quedaron solo conducción/penetración/definición como aptitudes

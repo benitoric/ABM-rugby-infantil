@@ -522,16 +522,16 @@ async function enrutar(metodo, p, b, req, url) {
   if (p[0] === 'staff') {
     if (metodo === 'GET') {
       return query(
-        `select email, nombre, rol, activo, password_hash is not null as tiene_clave
+        `select email, nombre, apellido, rol, activo, password_hash is not null as tiene_clave
          from staff order by created_at`)
     }
     if (metodo === 'POST') {
       const email = String(b.email || '').trim().toLowerCase()
       if (!email) throw { codigo: 400, error: 'faltan_datos' }
       const filas = await query(
-        `insert into staff (email, nombre, rol) values ($1, $2, $3)
+        `insert into staff (email, nombre, apellido, rol) values ($1, $2, $3, $4)
          on conflict (email) do nothing returning email`,
-        [email, b.nombre || null, validarRol(b.rol)])
+        [email, b.nombre?.trim() || null, b.apellido?.trim() || null, validarRol(b.rol)])
       if (!filas.length) throw { codigo: 409, error: 'ya_existe' }
       return { ok: true }
     }
@@ -550,7 +550,14 @@ async function enrutar(metodo, p, b, req, url) {
       }
       if ('nombre' in b) {
         const r = await query(
-          'update staff set nombre = $1 where email = $2 returning email', [b.nombre || null, p[1]])
+          'update staff set nombre = $1 where email = $2 returning email',
+          [b.nombre?.trim() || null, p[1]])
+        tocados += r.length
+      }
+      if ('apellido' in b) {
+        const r = await query(
+          'update staff set apellido = $1 where email = $2 returning email',
+          [b.apellido?.trim() || null, p[1]])
         tocados += r.length
       }
       if (!tocados) throw { codigo: 404, error: 'no_existe' }

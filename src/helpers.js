@@ -18,6 +18,11 @@ export function nombreCompleto(j) {
   return `${j.apellido}, ${j.nombre}`
 }
 
+// Nombre para mostrar de un miembro del staff (el apellido es opcional)
+export function nombreStaff(s) {
+  return [s.nombre, s.apellido].filter(Boolean).join(' ') || s.email
+}
+
 export const APTITUDES = [
   { value: 'conduccion', label: 'Conducción', abrev: 'Cond' },
   { value: 'penetracion', label: 'Penetración', abrev: 'Pen' },
