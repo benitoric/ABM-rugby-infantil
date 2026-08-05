@@ -4,6 +4,7 @@
 create table if not exists staff (
   email text primary key check (email = lower(email)),
   nombre text,
+  apellido text,
   rol text,
   password_hash text,
   activo boolean not null default true,
