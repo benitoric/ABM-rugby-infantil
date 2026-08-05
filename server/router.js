@@ -402,6 +402,29 @@ async function enrutar(metodo, p, b, req, url) {
         return { ok: true }
       }
     }
+    if (p[2] === 'asistencias-staff' && p[1]) {
+      if (metodo === 'GET') {
+        return query('select staff_email, estado from asistencias_staff where evento_id = $1', [p[1]])
+      }
+      if (metodo === 'PUT') {
+        // b.marcas: [{staff_email, estado|null}] — null borra la marca
+        for (const m of b.marcas || []) {
+          if (m.estado === null) {
+            await query('delete from asistencias_staff where evento_id = $1 and staff_email = $2',
+              [p[1], m.staff_email])
+          } else {
+            if (!['presente', 'ausente'].includes(m.estado)) {
+              throw { codigo: 400, error: 'estado_invalido' }
+            }
+            await query(
+              `insert into asistencias_staff (evento_id, staff_email, estado) values ($1,$2,$3)
+               on conflict (evento_id, staff_email) do update set estado = excluded.estado`,
+              [p[1], m.staff_email, m.estado])
+          }
+        }
+        return { ok: true }
+      }
+    }
   }
 
   // ---------- día de partido: bloques y tiempos ----------

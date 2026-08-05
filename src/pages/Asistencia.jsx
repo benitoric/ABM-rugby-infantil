@@ -195,18 +195,26 @@ export default function Asistencia() {
 function TomarAsistencia({ evento, onVolver }) {
   const [jugadores, setJugadores] = useState([])
   const [marcas, setMarcas] = useState({})
+  const [staff, setStaff] = useState([])
+  const [marcasStaff, setMarcasStaff] = useState({})
   const [cargando, setCargando] = useState(true)
 
   useEffect(() => {
     async function cargar() {
-      const [js, asis] = await Promise.all([
+      const [js, asis, st, asisStaff] = await Promise.all([
         api('jugadores'),
         api(`eventos/${evento.id}/asistencias`),
+        api('staff'),
+        api(`eventos/${evento.id}/asistencias-staff`),
       ])
       setJugadores(js.filter((j) => j.estado !== 'inactivo'))
       const m = {}
       for (const a of asis) m[a.jugador_id] = a.estado
       setMarcas(m)
+      setStaff(st.filter((s) => s.activo))
+      const ms = {}
+      for (const a of asisStaff) ms[a.staff_email] = a.estado
+      setMarcasStaff(ms)
       setCargando(false)
     }
     cargar()
@@ -219,6 +227,15 @@ function TomarAsistencia({ evento, onVolver }) {
     await api(`eventos/${evento.id}/asistencias`, {
       method: 'PUT',
       body: { marcas: [{ jugador_id: jugadorId, estado: nuevo }] },
+    })
+  }
+
+  async function marcarStaff(email) {
+    const nuevo = marcasStaff[email] === 'presente' ? 'ausente' : 'presente'
+    setMarcasStaff((m) => ({ ...m, [email]: nuevo }))
+    await api(`eventos/${evento.id}/asistencias-staff`, {
+      method: 'PUT',
+      body: { marcas: [{ staff_email: email, estado: nuevo }] },
     })
   }
 
@@ -247,6 +264,11 @@ function TomarAsistencia({ evento, onVolver }) {
       ...jugadores.map((j) => [
         nombreCompleto(j),
         marcas[j.id] === 'presente' ? 'Presente' : 'Ausente',
+      ]),
+      ['Staff', 'Asistencia'],
+      ...staff.map((s) => [
+        s.nombre || s.email,
+        marcasStaff[s.email] === 'presente' ? 'Presente' : 'Ausente',
       ]),
     ])
   }
@@ -309,6 +331,39 @@ function TomarAsistencia({ evento, onVolver }) {
           </button>
         )
       })}
+
+      {!cargando && staff.length > 0 && (
+        <>
+          <div className="fila entre" style={{ marginTop: 12 }}>
+            <h3>Staff</h3>
+            <span className="mini">
+              <b style={{ color: 'var(--ok)' }}>
+                Presentes: {staff.filter((s) => marcasStaff[s.email] === 'presente').length}
+              </b>
+              {' / '}{staff.length}
+            </span>
+          </div>
+          {staff.map((s) => {
+            const presente = marcasStaff[s.email] === 'presente'
+            return (
+              <button
+                key={s.email}
+                className="jugador-item compacto"
+                style={presente ? { borderLeft: '4px solid var(--ok)' } : { opacity: 0.65 }}
+                onClick={() => marcarStaff(s.email)}
+              >
+                <div className="crece">
+                  <div style={{ fontWeight: 600 }}>{s.nombre || s.email}</div>
+                  {s.rol && <div className="mini">{s.rol}</div>}
+                </div>
+                <span style={{ fontWeight: 800, color: presente ? 'var(--ok)' : 'var(--bad)' }}>
+                  {presente ? 'PRESENTE ✓' : 'AUSENTE'}
+                </span>
+              </button>
+            )
+          })}
+        </>
+      )}
     </div>
   )
 }
