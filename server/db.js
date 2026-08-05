@@ -58,6 +58,13 @@ async function inicializar() {
     autor_email text,
     created_at timestamptz not null default now()
   )`)
+  await pool.query(`create table if not exists asistencias_staff (
+    id uuid primary key default gen_random_uuid(),
+    evento_id uuid not null references eventos(id) on delete cascade,
+    staff_email text not null references staff(email) on delete cascade,
+    estado text not null check (estado in ('presente','ausente')),
+    unique (evento_id, staff_email)
+  )`)
   await pool.query(`create table if not exists lesiones (
     id uuid primary key default gen_random_uuid(),
     jugador_id uuid not null references jugadores(id) on delete cascade,

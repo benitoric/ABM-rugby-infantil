@@ -80,6 +80,14 @@ create table if not exists asistencias (
   unique (evento_id, jugador_id)
 );
 
+create table if not exists asistencias_staff (
+  id uuid primary key default gen_random_uuid(),
+  evento_id uuid not null references eventos(id) on delete cascade,
+  staff_email text not null references staff(email) on delete cascade,
+  estado text not null check (estado in ('presente','ausente')),
+  unique (evento_id, staff_email)
+);
+
 create table if not exists bloques (
   id uuid primary key default gen_random_uuid(),
   evento_id uuid not null references eventos(id) on delete cascade,
