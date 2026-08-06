@@ -3,12 +3,14 @@ import { api } from '../api.js'
 import { edad, estadoJugador, fechaCorta, fichaMedica, nombreCompleto, APTITUDES, AREAS, ESTADOS } from '../helpers.js'
 import { FormJugador } from './Jugadores.jsx'
 import { FormEvaluacion, TarjetaEvaluacion } from './Evaluacion.jsx'
+import Documentos from './Documentos.jsx'
 
 export default function Ficha({ jugadorId, onVolver }) {
   const [j, setJ] = useState(null)
   const [seguimientos, setSeguimientos] = useState([])
   const [evaluaciones, setEvaluaciones] = useState([])
   const [lesiones, setLesiones] = useState([])
+  const [documentos, setDocumentos] = useState([])
   const [stats, setStats] = useState(null)
   const [editando, setEditando] = useState(false)
   const [nuevo, setNuevo] = useState(null)
@@ -22,6 +24,7 @@ export default function Ficha({ jugadorId, onVolver }) {
     setSeguimientos(d.seguimientos)
     setEvaluaciones(d.evaluaciones || [])
     setLesiones(d.lesiones || [])
+    setDocumentos(d.documentos || [])
     setStats(d.stats)
   }
   useEffect(() => { cargar() }, [jugadorId])
@@ -133,6 +136,8 @@ export default function Ficha({ jugadorId, onVolver }) {
           </div>
         </div>
       )}
+
+      <Documentos jugadorId={jugadorId} documentos={documentos} onCambio={cargar} />
 
       <div className="fila entre">
         <h3>Evaluación periódica</h3>

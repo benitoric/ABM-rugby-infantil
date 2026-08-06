@@ -23,6 +23,14 @@ const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora,
   suspendido, motivo_suspension, nota_suspension`
 const COLS_SEGUIMIENTO = `id, jugador_id, fecha::text as fecha, area, valoracion, comentario, autor_email`
 const COLS_EVALUACION = `id, jugador_id, fecha::text as fecha, valores, comentario, autor_email`
+// Metadatos del documento: nunca el contenido (se pide aparte al abrirlo)
+const COLS_DOCUMENTO = `id, jugador_id, tipo, nombre, mime,
+  octet_length(datos) as bytes, created_at::date::text as fecha, subido_por`
+
+// Formatos aceptados para la documentación escaneada
+const MIMES_DOC = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+// Vercel corta los cuerpos en 4,5 MB y base64 infla ~33%: 3 MB de archivo real
+const MAX_DOC_BYTES = 3 * 1024 * 1024
 const COLS_BLOQUE = `id, evento_id, numero, nombre, rival, lugar,
   hora_convocatoria::text as hora_convocatoria, valoracion, cronica,
   suspendido, motivo_suspension, nota_suspension`
@@ -211,6 +219,9 @@ async function enrutar(metodo, p, b, req, url) {
       const evaluaciones = await query(
         `select ${COLS_EVALUACION} from evaluaciones where jugador_id = $1
          order by fecha desc, created_at desc`, [p[1]])
+      const documentos = await query(
+        `select ${COLS_DOCUMENTO} from documentos where jugador_id = $1
+         order by created_at`, [p[1]])
       // Ausente por defecto: cuentan todos los eventos ya ocurridos en los que
       // se tomó asistencia; presente solo si tiene la marca explícita.
       const [tot] = await query(
@@ -233,7 +244,7 @@ async function enrutar(metodo, p, b, req, url) {
       const pct = (presentes, totales) =>
         totales ? Math.round((100 * presentes) / totales) : null
       return {
-        jugador, seguimientos, lesiones, evaluaciones,
+        jugador, seguimientos, lesiones, evaluaciones, documentos,
         stats: {
           entrenamientos: pct(pres.ent, tot.ent),
           partidos: pct(pres.par, tot.par),
@@ -317,6 +328,36 @@ async function enrutar(metodo, p, b, req, url) {
     if (metodo === 'DELETE' && p[1]) {
       const filas = await query('delete from lesiones where id = $1 returning jugador_id', [p[1]])
       if (filas[0]) await sincronizarEstadoLesion(filas[0].jugador_id)
+      return { ok: true }
+    }
+  }
+
+  // ---------- documentación escaneada (DNI) ----------
+  if (p[0] === 'documentos') {
+    // El contenido se pide de a un archivo, solo al abrirlo
+    if (metodo === 'GET' && p[1]) {
+      const [d] = await query(
+        `select nombre, mime, encode(datos, 'base64') as datos
+         from documentos where id = $1`, [p[1]])
+      if (!d) throw { codigo: 404, error: 'no_existe' }
+      return d
+    }
+    if (metodo === 'POST' && !p[1]) {
+      const datos = String(b?.datos || '')
+      if (!b?.jugador_id || !b?.nombre?.trim() || !datos) throw { codigo: 400, error: 'faltan_datos' }
+      if (!MIMES_DOC.includes(b.mime)) throw { codigo: 400, error: 'formato_no_admitido' }
+      // Tamaño real del archivo a partir del largo del base64
+      const bytes = Math.floor((datos.length * 3) / 4)
+      if (bytes > MAX_DOC_BYTES) throw { codigo: 413, error: 'archivo_muy_grande' }
+      const filas = await query(
+        `insert into documentos (jugador_id, tipo, nombre, mime, datos, subido_por)
+         values ($1, 'dni', $2, $3, decode($4, 'base64'), $5)
+         returning ${COLS_DOCUMENTO}`,
+        [b.jugador_id, b.nombre.trim().slice(0, 120), b.mime, datos, yo.email])
+      return filas[0]
+    }
+    if (metodo === 'DELETE' && p[1]) {
+      await query('delete from documentos where id = $1', [p[1]])
       return { ok: true }
     }
   }

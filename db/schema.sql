@@ -52,6 +52,20 @@ create table if not exists evaluaciones (
   created_at timestamptz not null default now()
 );
 
+-- Documentación escaneada del jugador (DNI, etc.). El archivo se guarda en la
+-- misma base: las imágenes se comprimen en el navegador antes de subirlas, así
+-- que cada documento pesa unos cientos de KB.
+create table if not exists documentos (
+  id uuid primary key default gen_random_uuid(),
+  jugador_id uuid not null references jugadores(id) on delete cascade,
+  tipo text not null default 'dni' check (tipo in ('dni')),
+  nombre text not null,
+  mime text not null,
+  datos bytea not null,
+  subido_por text,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists lesiones (
   id uuid primary key default gen_random_uuid(),
   jugador_id uuid not null references jugadores(id) on delete cascade,
