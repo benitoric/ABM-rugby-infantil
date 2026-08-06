@@ -32,9 +32,7 @@ async function inicializar() {
   // fallar igual en Postgres por la carrera en el catálogo.
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
-    `select exists (select 1 from information_schema.columns
-       where table_schema = 'public' and table_name = 'documentos'
-         and column_name = 'miniatura') as aplicadas`)
+    "select to_regclass('public.asignaciones_evaluacion') is not null as aplicadas")
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -113,6 +111,13 @@ export async function migrar(pool) {
     created_at timestamptz not null default now()
   )`)
   await pool.query('alter table documentos add column if not exists miniatura bytea')
+  await pool.query(`create table if not exists asignaciones_evaluacion (
+    jugador_id uuid not null references jugadores(id) on delete cascade,
+    staff_email text not null references staff(email) on delete cascade,
+    asignado_por text,
+    created_at timestamptz not null default now(),
+    primary key (jugador_id)
+  )`)
   await pool.query(`create table if not exists lesiones (
     id uuid primary key default gen_random_uuid(),
     jugador_id uuid not null references jugadores(id) on delete cascade,

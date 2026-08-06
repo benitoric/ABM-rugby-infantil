@@ -21,6 +21,9 @@ export default function Jugadores() {
   const [cargando, setCargando] = useState(true)
   const [orden, setOrden] = useState({ campo: 'nombre', asc: true })
   const [foto, setFoto] = useState(null)
+  const [asign, setAsign] = useState(null)
+  const [autoEvaluar, setAutoEvaluar] = useState(false)
+  const [repartiendo, setRepartiendo] = useState(false)
 
   // Ampliación de la foto del DNI: se baja el archivo completo recién al tocarla
   async function abrirFoto(j) {
@@ -43,10 +46,42 @@ export default function Jugadores() {
   }, [foto])
 
   async function cargar() {
-    setJugadores(await api('jugadores'))
+    const [lista, asignaciones] = await Promise.all([api('jugadores'), api('asignaciones')])
+    setJugadores(lista)
+    setAsign(asignaciones)
     setCargando(false)
   }
   useEffect(() => { cargar().catch(() => setCargando(false)) }, [])
+
+  async function repartir() {
+    if (!confirm(
+      `¿Repartir al azar los ${asign.sin_repartir} jugadores que necesitan evaluación ` +
+      'entre los entrenadores?\n\nA cada uno le va a aparecer el aviso con los chicos ' +
+      'que le tocan. Quedan afuera los managers y los preparadores físicos que no entrenan.'
+    )) return
+    setRepartiendo(true)
+    try {
+      const r = await api('asignaciones/repartir', { method: 'POST' })
+      alert(`Listo: ${r.asignados} jugadores repartidos entre ${r.evaluadores} entrenadores.`)
+      await cargar()
+    } catch (e) {
+      alert(e?.error === 'sin_evaluadores'
+        ? 'No hay entrenadores cargados en Staff con un rol que evalúe (cabeza de división, entrenador o PF/entrenador).'
+        : 'No se pudo repartir. Probá de nuevo.')
+    }
+    setRepartiendo(false)
+  }
+
+  async function cancelarReparto() {
+    if (!confirm('¿Cancelar el reparto y borrar todas las asignaciones pendientes?')) return
+    await api('asignaciones', { method: 'DELETE' })
+    cargar()
+  }
+
+  function evaluarA(jugadorId) {
+    setAutoEvaluar(true)
+    setFichaDe(jugadorId)
+  }
 
   const visibles = jugadores.filter((j) => {
     if (filtro !== 'todos' && estadoJugador(j) !== filtro) return false
@@ -82,7 +117,8 @@ export default function Jugadores() {
     return (
       <Ficha
         jugadorId={fichaDe}
-        onVolver={() => { setFichaDe(null); cargar() }}
+        evaluarAlAbrir={autoEvaluar}
+        onVolver={() => { setFichaDe(null); setAutoEvaluar(false); cargar() }}
       />
     )
   }
@@ -101,6 +137,58 @@ export default function Jugadores() {
           <button className="btn" onClick={() => setEditando({ ...VACIO })}>+ Nuevo</button>
         </div>
       </div>
+
+      {asign?.mias?.length > 0 && (
+        <div className="tarjeta aviso-evaluar">
+          <h3>📋 Te toca evaluar a {asign.mias.length} {asign.mias.length === 1 ? 'jugador' : 'jugadores'}</h3>
+          <p className="mini" style={{ margin: '4px 0 8px' }}>
+            Tocá cada nombre para cargar su evaluación. Van saliendo de la lista a medida que las completás.
+          </p>
+          {asign.mias.map((a) => (
+            <button key={a.jugador_id} className="asignado-item" onClick={() => evaluarA(a.jugador_id)}>
+              <span className="crece">{a.apellido}, {a.nombre}</span>
+              <span className="mini">
+                {a.ultima_evaluacion ? `últ. ${fechaCompacta(a.ultima_evaluacion)}` : 'sin evaluar'} →
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {(asign?.sin_repartir > 0 || asign?.por_evaluador?.length > 0) && (
+        <div className="tarjeta">
+          <h3>Reparto de evaluaciones</h3>
+          {asign.sin_repartir > 0 ? (
+            <>
+              <p className="mini" style={{ margin: '4px 0 8px' }}>
+                {asign.sin_repartir} {asign.sin_repartir === 1 ? 'jugador necesita' : 'jugadores necesitan'} evaluación
+                (sin evaluar o con la última de hace más de 30 días).
+              </p>
+              <button className="btn sec" style={{ width: '100%' }} disabled={repartiendo} onClick={repartir}>
+                {repartiendo ? 'Repartiendo…' : '🎲 Repartir entre los entrenadores'}
+              </button>
+            </>
+          ) : (
+            <p className="mini" style={{ marginTop: 4 }}>
+              Todos los jugadores están evaluados o ya repartidos. 🙌
+            </p>
+          )}
+          {asign.por_evaluador.length > 0 && (
+            <>
+              <div className="mini" style={{ marginTop: 10, fontWeight: 700 }}>Pendientes por entrenador</div>
+              {asign.por_evaluador.map((e) => (
+                <div key={e.staff_email} className="fila entre mini" style={{ marginTop: 3 }}>
+                  <span>{[e.nombre, e.apellido].filter(Boolean).join(' ') || e.staff_email}</span>
+                  <b>{e.pendientes}</b>
+                </div>
+              ))}
+              <button className="btn peligro chico" style={{ marginTop: 10 }} onClick={cancelarReparto}>
+                Cancelar reparto
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {cumples.length > 0 && (
         <div className="tarjeta">

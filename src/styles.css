@@ -440,6 +440,24 @@ h3 { font-size: 1rem; }
   .planilla th { background: #eee; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
+/* ---------- aviso de evaluaciones asignadas ---------- */
+.aviso-evaluar { border-left: 4px solid var(--dorado); }
+.asignado-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  margin-top: 4px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: #fff;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+.asignado-item .mini { font-weight: 400; white-space: nowrap; }
+
 /* ---------- foto del DNI en el listado ---------- */
 /* Recorte cuadrado de la cara, en el mismo lugar que las iniciales */
 .avatar-foto {
