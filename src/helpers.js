@@ -14,6 +14,13 @@ export function fechaCorta(fecha) {
   return `${d}/${m}/${y}`
 }
 
+// Fecha compacta dd/mm/aa, para los renglones angostos del listado en móvil
+export function fechaCompacta(fecha) {
+  if (!fecha) return ''
+  const [y, m, d] = fecha.split('-')
+  return `${d}/${m}/${y.slice(2)}`
+}
+
 export function nombreCompleto(j) {
   return `${j.apellido}, ${j.nombre}`
 }

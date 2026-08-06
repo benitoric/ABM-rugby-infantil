@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { api } from '../api.js'
 import { edad, fechaCorta, nombreCompleto } from '../helpers.js'
-import { areasParaEdad, bandaEtaria, promediosPorArea, BANDAS, VARIABLES_EVAL } from '../evaluacion.js'
+import { areasParaEdad, bandaEtaria, promedioGeneral, promediosPorArea, BANDAS, VARIABLES_EVAL } from '../evaluacion.js'
 
 function Estrellas({ valor, onCambiar }) {
   return (
@@ -121,6 +121,7 @@ export function FormEvaluacion({ jugador, anterior, onCerrar, onGuardado }) {
 
 export function TarjetaEvaluacion({ ev, anterior, onBorrar }) {
   const proms = promediosPorArea(ev.valores)
+  const general = promedioGeneral(ev.valores)
   const cargadas = Object.keys(ev.valores || {}).length
 
   function delta(v) {
@@ -139,6 +140,7 @@ export function TarjetaEvaluacion({ ev, anterior, onBorrar }) {
         <span className="mini">{ev.autor_email || ''}</span>
       </div>
       <div className="fila" style={{ marginTop: 6, gap: 6 }}>
+        {general != null && <span className="badge eval-general">General: {general}★</span>}
         {proms.map((p) => (
           <span key={p.area} className="badge eval-prom">{p.label}: {p.promedio}★</span>
         ))}

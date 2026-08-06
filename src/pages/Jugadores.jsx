@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { estadoJugador, fechaCorta, nombreCompleto, APTITUDES, ESTADOS } from '../helpers.js'
+import { estadoJugador, fechaCompacta, fechaCorta, nombreCompleto, APTITUDES, ESTADOS } from '../helpers.js'
+import { promedioGeneral } from '../evaluacion.js'
 import Ficha from './Ficha.jsx'
 
 const VACIO = {
@@ -147,7 +148,14 @@ export default function Jugadores() {
             <div className="crece" style={{ minWidth: 0 }}>
               <div className="nombre-jugador">{nombreCompleto(j)}</div>
               <div className="eval-fecha-movil">
-                {j.ultima_evaluacion ? `Eval. ${fechaCorta(j.ultima_evaluacion)}` : 'Sin evaluar'}
+                {j.ultima_evaluacion ? (
+                  <>
+                    📋 {fechaCompacta(j.ultima_evaluacion)}
+                    {promedioGeneral(j.ultima_evaluacion_valores) != null && (
+                      <b> · {promedioGeneral(j.ultima_evaluacion_valores)}★</b>
+                    )}
+                  </>
+                ) : 'Sin evaluar'}
               </div>
             </div>
           </div>
@@ -165,7 +173,16 @@ export default function Jugadores() {
             <span className={`badge ${estadoJugador(j)}`}>{ESTADOS[estadoJugador(j)]}</span>
           </div>
           <div className="col-eval mini">
-            {j.ultima_evaluacion ? fechaCorta(j.ultima_evaluacion) : '—'}
+            {j.ultima_evaluacion ? (
+              <>
+                <div>{fechaCorta(j.ultima_evaluacion)}</div>
+                {promedioGeneral(j.ultima_evaluacion_valores) != null && (
+                  <span className="badge eval-prom">
+                    {promedioGeneral(j.ultima_evaluacion_valores)}★
+                  </span>
+                )}
+              </>
+            ) : '—'}
           </div>
         </button>
       ))}
