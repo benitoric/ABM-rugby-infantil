@@ -32,7 +32,9 @@ async function inicializar() {
   // fallar igual en Postgres por la carrera en el catálogo.
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
-    "select to_regclass('public.asignaciones_evaluacion') is not null as aplicadas")
+    `select exists (select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'evaluaciones'
+         and column_name = 'revisor_email') as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -118,6 +120,18 @@ export async function migrar(pool) {
     created_at timestamptz not null default now(),
     primary key (jugador_id)
   )`)
+  // Revisión cruzada de las evaluaciones
+  await pool.query('alter table evaluaciones add column if not exists revisor_email text')
+  await pool.query('alter table evaluaciones add column if not exists valores_revisor jsonb')
+  await pool.query('alter table evaluaciones add column if not exists comentario_revisor text')
+  await pool.query('alter table evaluaciones add column if not exists revisado_en timestamptz')
+  await pool.query('alter table asignaciones_evaluacion add column if not exists revisor_email text')
+  await pool.query(`alter table asignaciones_evaluacion
+    add column if not exists etapa text not null default 'evaluar'`)
+  await pool.query('alter table asignaciones_evaluacion drop constraint if exists asignaciones_evaluacion_etapa_check')
+  await pool.query(`alter table asignaciones_evaluacion add constraint asignaciones_evaluacion_etapa_check
+    check (etapa in ('evaluar','revisar'))`)
+  await pool.query('alter table asignaciones_evaluacion add column if not exists evaluacion_id uuid')
   await pool.query(`create table if not exists lesiones (
     id uuid primary key default gen_random_uuid(),
     jugador_id uuid not null references jugadores(id) on delete cascade,

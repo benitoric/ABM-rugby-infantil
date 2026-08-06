@@ -5,7 +5,7 @@ import { FormJugador } from './Jugadores.jsx'
 import { FormEvaluacion, TarjetaEvaluacion } from './Evaluacion.jsx'
 import Documentos from './Documentos.jsx'
 
-export default function Ficha({ jugadorId, evaluarAlAbrir = false, onVolver }) {
+export default function Ficha({ jugadorId, evaluarAlAbrir = false, revisar = null, onVolver }) {
   const [j, setJ] = useState(null)
   const [seguimientos, setSeguimientos] = useState([])
   const [evaluaciones, setEvaluaciones] = useState([])
@@ -15,7 +15,7 @@ export default function Ficha({ jugadorId, evaluarAlAbrir = false, onVolver }) {
   const [editando, setEditando] = useState(false)
   const [nuevo, setNuevo] = useState(null)
   // Al venir desde el aviso de evaluaciones asignadas se abre el formulario solo
-  const [evaluando, setEvaluando] = useState(evaluarAlAbrir)
+  const [evaluando, setEvaluando] = useState(evaluarAlAbrir || !!revisar)
   const [nuevaLesion, setNuevaLesion] = useState(null)
   const [error, setError] = useState('')
 
@@ -346,6 +346,8 @@ export default function Ficha({ jugadorId, evaluarAlAbrir = false, onVolver }) {
         <FormEvaluacion
           jugador={j}
           anterior={evaluaciones[0]}
+          revisionDe={revisar?.evaluacion_id}
+          quienEvaluo={revisar?.quien}
           onCerrar={() => setEvaluando(false)}
           onGuardado={() => { setEvaluando(false); cargar() }}
         />

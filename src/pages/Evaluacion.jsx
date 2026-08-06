@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { api } from '../api.js'
 import { edad, fechaCorta, nombreCompleto } from '../helpers.js'
-import { areasParaEdad, bandaEtaria, promedioGeneral, promediosPorArea, BANDAS, VARIABLES_EVAL } from '../evaluacion.js'
+import {
+  acuerdo, areasParaEdad, bandaEtaria, diferencias, promedioGeneral, promediosPorArea,
+  valoresConsolidados, BANDAS, UMBRAL_DIFERENCIA, VARIABLES_EVAL,
+} from '../evaluacion.js'
 
 function Estrellas({ valor, onCambiar }) {
   return (
@@ -21,13 +24,18 @@ function Estrellas({ valor, onCambiar }) {
   )
 }
 
-export function FormEvaluacion({ jugador, anterior, onCerrar, onGuardado }) {
+// `revisionDe` = id de la evaluación que se está revisando. En ese modo no se
+// muestra la nota del primer evaluador hasta después de guardar: si se viera
+// antes, el revisor tiende a confirmarla y la segunda mirada no aporta nada.
+export function FormEvaluacion({ jugador, anterior, revisionDe, quienEvaluo, onCerrar, onGuardado }) {
   const hoy = new Date().toISOString().slice(0, 10)
   const [fecha, setFecha] = useState(hoy)
   const [valores, setValores] = useState({})
   const [comentario, setComentario] = useState('')
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
+  const [comparacion, setComparacion] = useState(null)
+  const esRevision = !!revisionDe
 
   const edadJ = edad(jugador.fecha_nacimiento)
   const banda = bandaEtaria(edadJ)
@@ -41,24 +49,52 @@ export function FormEvaluacion({ jugador, anterior, onCerrar, onGuardado }) {
     setGuardando(true)
     setError('')
     try {
+      if (esRevision) {
+        // Recién ahora se descubre la nota del primero, ya sin poder cambiarla
+        const ev = await api(`evaluaciones/${revisionDe}/revision`, {
+          method: 'POST',
+          body: { valores, comentario_revisor: comentario.trim() || null },
+        })
+        setComparacion(ev)
+        setGuardando(false)
+        return
+      }
       await api('evaluaciones', {
         method: 'POST',
         body: { jugador_id: jugador.id, fecha, valores, comentario: comentario.trim() || null },
       })
       onGuardado()
     } catch {
-      setError('No se pudo guardar la evaluación. Probá de nuevo.')
+      setError('No se pudo guardar. Probá de nuevo.')
       setGuardando(false)
     }
+  }
+
+  if (comparacion) {
+    return (
+      <div className="modal-fondo" onClick={onGuardado}>
+        <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <Comparacion ev={comparacion} jugador={jugador} />
+          <button className="btn" style={{ width: '100%' }} onClick={onGuardado}>Listo</button>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="modal-fondo" onClick={onCerrar}>
       <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={guardar}>
         <div className="fila entre" style={{ marginBottom: 4 }}>
-          <h3>Evaluar a {nombreCompleto(jugador)}</h3>
+          <h3>{esRevision ? 'Revisar a' : 'Evaluar a'} {nombreCompleto(jugador)}</h3>
           <button type="button" className="btn sec chico" onClick={onCerrar}>Cerrar</button>
         </div>
+        {esRevision && (
+          <div className="aviso" style={{ marginBottom: 8 }}>
+            🙈 <b>Segunda mirada, a ciegas.</b> Cargá tu propia evaluación sin ver la
+            de {quienEvaluo || 'el primer evaluador'}: si la vieras antes, sería difícil no
+            dejarte llevar. Al guardar aparecen las dos juntas y se marcan las diferencias.
+          </div>
+        )}
         <p className="mini" style={{ marginBottom: 8 }}>
           Guía de {BANDAS.find((b) => b.value === banda).label}
           {edadJ == null && ' (sin fecha de nacimiento: se usa la guía de 7 a 12)'}.
@@ -66,10 +102,12 @@ export function FormEvaluacion({ jugador, anterior, onCerrar, onGuardado }) {
           <b>1</b> recién inicia · <b>3</b> acorde a su edad · <b>5</b> sobresale.
           Las variables sin cargar no se guardan.
         </p>
-        <div className="campo" style={{ maxWidth: 180 }}>
-          <label>Fecha de la evaluación</label>
-          <input type="date" required value={fecha} onChange={(e) => setFecha(e.target.value)} />
-        </div>
+        {!esRevision && (
+          <div className="campo" style={{ maxWidth: 180 }}>
+            <label>Fecha de la evaluación</label>
+            <input type="date" required value={fecha} onChange={(e) => setFecha(e.target.value)} />
+          </div>
+        )}
 
         {areas.map((a) => (
           <div key={a.value}>
@@ -83,7 +121,7 @@ export function FormEvaluacion({ jugador, anterior, onCerrar, onGuardado }) {
                   <div className="crece" style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>
                       {v.label}
-                      {anterior?.valores?.[v.value] && (
+                      {!esRevision && anterior?.valores?.[v.value] && (
                         <span className="eval-anterior"> ant. {anterior.valores[v.value]}★</span>
                       )}
                     </div>
@@ -111,7 +149,7 @@ export function FormEvaluacion({ jugador, anterior, onCerrar, onGuardado }) {
         {error && <div className="error" style={{ marginBottom: 8 }}>{error}</div>}
         <div className="eval-pie">
           <button className="btn" style={{ width: '100%' }} disabled={!cargadas || guardando}>
-            {guardando ? 'Guardando…' : `Guardar evaluación (${cargadas}/${totalVars})`}
+            {guardando ? 'Guardando…' : `${esRevision ? 'Guardar y comparar' : 'Guardar evaluación'} (${cargadas}/${totalVars})`}
           </button>
         </div>
       </form>
@@ -119,14 +157,70 @@ export function FormEvaluacion({ jugador, anterior, onCerrar, onGuardado }) {
   )
 }
 
+// Las dos miradas, una al lado de la otra, con lo que hay para conversar
+export function Comparacion({ ev, jugador }) {
+  const dif = diferencias(ev)
+  const coincidencia = acuerdo(ev)
+  const comunes = Object.keys(ev.valores || {}).filter((k) => ev.valores_revisor?.[k] >= 1)
+
+  return (
+    <>
+      <h3 style={{ marginBottom: 6 }}>
+        Las dos miradas sobre {jugador ? nombreCompleto(jugador) : 'el jugador'}
+      </h3>
+      <div className="fila" style={{ gap: 6, marginBottom: 8 }}>
+        <span className="badge eval-general">
+          Final: {promedioGeneral(valoresConsolidados(ev))}★
+        </span>
+        {coincidencia != null && (
+          <span className={`badge ${coincidencia >= 70 ? 'eval-prom' : 'medica-no'}`}>
+            Coinciden en {coincidencia}%
+          </span>
+        )}
+      </div>
+      {dif.length > 0 ? (
+        <div className="aviso" style={{ marginBottom: 8 }}>
+          Hay <b>{dif.length} {dif.length === 1 ? 'variable' : 'variables'}</b> con
+          miradas muy distintas. Vale la pena hablarlas con el otro entrenador:
+          la nota final quedó en el promedio de las dos.
+        </div>
+      ) : (
+        <p className="mini" style={{ marginBottom: 8 }}>
+          Sin diferencias grandes: las dos evaluaciones cuentan lo mismo. 👌
+        </p>
+      )}
+      <div className="fila entre mini" style={{ fontWeight: 700, padding: '0 2px' }}>
+        <span>Variable</span>
+        <span>1.ª · revisión</span>
+      </div>
+      {comunes.map((k) => {
+        const a = ev.valores[k]
+        const b = ev.valores_revisor[k]
+        const lejos = Math.abs(a - b) >= UMBRAL_DIFERENCIA
+        return (
+          <div key={k} className={`fila entre eval-detalle-fila ${lejos ? 'discrepa' : ''}`}>
+            <span>{VARIABLES_EVAL[k]?.label || k}</span>
+            <span style={{ whiteSpace: 'nowrap' }}>
+              <b>{a}</b> · <b>{b}</b>
+              {lejos && <span className="eval-delta baja"> ⚠</span>}
+            </span>
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
 export function TarjetaEvaluacion({ ev, anterior, onBorrar }) {
-  const proms = promediosPorArea(ev.valores)
-  const general = promedioGeneral(ev.valores)
+  const consolidados = valoresConsolidados(ev)
+  const proms = promediosPorArea(consolidados)
+  const general = promedioGeneral(consolidados)
   const cargadas = Object.keys(ev.valores || {}).length
+  const dif = diferencias(ev)
 
   function delta(v) {
-    const ant = anterior?.valores?.[v]
-    const act = ev.valores[v]
+    const ant = valoresConsolidados(anterior)?.[v]
+    const act = consolidados[v]
     if (!ant || !act || ant === act) return null
     return act > ant
       ? <span className="eval-delta sube">▲</span>
@@ -139,30 +233,48 @@ export function TarjetaEvaluacion({ ev, anterior, onBorrar }) {
         <b style={{ fontSize: '0.9rem' }}>📋 {fechaCorta(ev.fecha)}</b>
         <span className="mini">{ev.autor_email || ''}</span>
       </div>
+      <div className="mini" style={{ marginTop: 2 }}>
+        {ev.revisado_en
+          ? `Revisada por ${ev.revisor_email}${dif.length ? ` · ${dif.length} ${dif.length === 1 ? 'diferencia' : 'diferencias'} para hablar` : ' · sin diferencias grandes'}`
+          : '⏳ Falta la revisión cruzada'}
+      </div>
       <div className="fila" style={{ marginTop: 6, gap: 6 }}>
-        {general != null && <span className="badge eval-general">General: {general}★</span>}
+        {general != null && (
+          <span className="badge eval-general">
+            {ev.revisado_en ? 'Final' : 'General'}: {general}★
+          </span>
+        )}
         {proms.map((p) => (
           <span key={p.area} className="badge eval-prom">{p.label}: {p.promedio}★</span>
         ))}
       </div>
       {ev.comentario && <p style={{ fontSize: '0.9rem', marginTop: 6 }}>{ev.comentario}</p>}
+      {ev.comentario_revisor && (
+        <p style={{ fontSize: '0.9rem', marginTop: 4 }}>
+          <span className="mini">Revisión: </span>{ev.comentario_revisor}
+        </p>
+      )}
       <details style={{ marginTop: 6 }}>
         <summary className="mini" style={{ cursor: 'pointer' }}>
           Ver detalle ({cargadas} variables)
         </summary>
         <div style={{ marginTop: 6 }}>
-          {Object.entries(VARIABLES_EVAL)
-            .filter(([k]) => ev.valores[k])
-            .map(([k, v]) => (
-              <div key={k} className="fila entre eval-detalle-fila">
-                <span>{v.label}</span>
-                <span>
-                  <span className="estrellas">{'★'.repeat(ev.valores[k])}</span>
-                  <span className="eval-estrellas-off">{'★'.repeat(5 - ev.valores[k])}</span>
-                  {delta(k)}
-                </span>
-              </div>
-            ))}
+          {ev.revisado_en ? (
+            <Comparacion ev={ev} />
+          ) : (
+            Object.entries(VARIABLES_EVAL)
+              .filter(([k]) => ev.valores[k])
+              .map(([k, v]) => (
+                <div key={k} className="fila entre eval-detalle-fila">
+                  <span>{v.label}</span>
+                  <span>
+                    <span className="estrellas">{'★'.repeat(ev.valores[k])}</span>
+                    <span className="eval-estrellas-off">{'★'.repeat(5 - ev.valores[k])}</span>
+                    {delta(k)}
+                  </span>
+                </div>
+              ))
+          )}
         </div>
         <button
           className="btn peligro chico"

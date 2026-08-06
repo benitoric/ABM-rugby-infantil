@@ -245,6 +245,41 @@ export function areasParaEdad(edad) {
     .filter((a) => a.variables.length > 0)
 }
 
+// Diferencia a partir de la cual una variable se marca para conversar
+export const UMBRAL_DIFERENCIA = 2
+
+// Puntajes finales: cuando hubo revisión cruzada, cada variable es el promedio
+// de las dos miradas; si no, queda la única que hay.
+export function valoresConsolidados(ev) {
+  const primera = ev?.valores || {}
+  const segunda = ev?.valores_revisor
+  if (!segunda) return primera
+  const res = {}
+  for (const k of new Set([...Object.keys(primera), ...Object.keys(segunda)])) {
+    const notas = [primera[k], segunda[k]].filter((n) => n >= 1)
+    res[k] = notas.reduce((x, y) => x + y, 0) / notas.length
+  }
+  return res
+}
+
+// Variables donde los dos evaluadores difieren de más: las que hay que hablar
+export function diferencias(ev) {
+  const segunda = ev?.valores_revisor
+  if (!segunda) return []
+  return Object.keys(ev.valores || {})
+    .filter((k) => segunda[k] >= 1 && Math.abs(ev.valores[k] - segunda[k]) >= UMBRAL_DIFERENCIA)
+}
+
+// Porcentaje de variables en las que las dos miradas coinciden (±1 estrella)
+export function acuerdo(ev) {
+  const segunda = ev?.valores_revisor
+  if (!segunda) return null
+  const comunes = Object.keys(ev.valores || {}).filter((k) => segunda[k] >= 1)
+  if (!comunes.length) return null
+  const cerca = comunes.filter((k) => Math.abs(ev.valores[k] - segunda[k]) <= 1).length
+  return Math.round((100 * cerca) / comunes.length)
+}
+
 // Promedio general (1 decimal) de una evaluación: todas las variables
 // cargadas pesan igual. Devuelve null si no hay ninguna.
 export function promedioGeneral(valores) {
