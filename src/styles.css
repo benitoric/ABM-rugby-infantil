@@ -415,6 +415,24 @@ h3 { font-size: 1rem; }
   .planilla th { background: #eee; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
+/* ---------- documentación escaneada ---------- */
+.doc-item { padding: 10px 12px; }
+.doc-nombre {
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.doc-vista {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: #fff;
+}
+img.doc-vista { height: auto; }
+
 /* ---------- evaluación periódica ---------- */
 .eval-area-titulo {
   display: flex;
