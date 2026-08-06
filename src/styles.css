@@ -190,6 +190,10 @@ h3 { font-size: 1rem; }
   width: 100%;
 }
 .campo textarea { min-height: 70px; resize: vertical; }
+/* sugerencias de autocompletado: chips debajo del campo, se tocan para completar */
+.sugerencias { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.sugerencias .chip { padding: 5px 10px; font-size: 0.78rem; cursor: pointer; }
+.sugerencias .chip:hover { border-color: var(--primario); color: var(--primario); }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
 
 /* ---------- modal ---------- */

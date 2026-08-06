@@ -18,7 +18,8 @@ pantalla de inicio" del teléfono y queda como una app más).
    suspensión es por bloque: puede caerse uno y jugarse el otro. Lo suspendido
    no cuenta para los porcentajes de asistencia.
 4. **Bloques del día de partido**: asignación de los presentes a los 2 bloques
-   que presenta el club.
+   que presenta el club. Los campos de rival y lugar de juego autocompletan con
+   lo ya cargado: se escriben unas letras y aparecen las coincidencias.
 5. **Equipos por tiempo**: cada bloque juega 4 a 6 tiempos; se arma el equipo de
    cada tiempo y la app avisa qué chicos todavía no jugaron ningún tiempo.
 

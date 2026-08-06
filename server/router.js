@@ -431,6 +431,29 @@ async function enrutar(metodo, p, b, req, url) {
     }
   }
 
+  // ---------- sugerencias para autocompletar ----------
+  // Salen de lo ya cargado en eventos y bloques (no hay catálogo aparte): cada
+  // rival o lugar que se guarda queda disponible la próxima vez. Se ordenan por
+  // uso, y las variantes que solo cambian en mayúsculas se unifican en la más
+  // usada ("Cardenales" y "cardenales" son el mismo lugar).
+  if (p[0] === 'sugerencias' && metodo === 'GET') {
+    const usados = async (campo) => {
+      const filas = await query(
+        `select (array_agg(valor order by usos desc, valor))[1] as valor
+         from (
+           select trim(${campo}) as valor, count(*)::int as usos from eventos
+           where coalesce(trim(${campo}), '') <> '' group by 1
+           union all
+           select trim(${campo}) as valor, count(*)::int as usos from bloques
+           where coalesce(trim(${campo}), '') <> '' group by 1
+         ) t
+         group by lower(valor)
+         order by sum(usos) desc, min(valor)`)
+      return filas.map((f) => f.valor)
+    }
+    return { rivales: await usados('rival'), lugares: await usados('lugar') }
+  }
+
   // ---------- eventos y asistencia ----------
   if (p[0] === 'eventos') {
     if (metodo === 'GET' && !p[1]) {

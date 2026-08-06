@@ -4,6 +4,7 @@ import {
   descargarCSV, esDiaDeRutina, etiquetaPartido, fechaCorta, horarioEvento, lineaBloque,
   MODALIDADES, MOTIVOS_SUSPENSION, nombreCompleto, nombreStaff, RUTINA, suspensionEvento,
 } from '../helpers.js'
+import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 
 const BLOQUE_VACIO = { rival: '', lugar: '', hora_convocatoria: '' }
 
@@ -12,6 +13,7 @@ export default function Asistencia() {
   const [eventoSel, setEventoSel] = useState(null)
   const [creando, setCreando] = useState(null)
   const [cargando, setCargando] = useState(true)
+  const [sugerencias, recargarSugerencias] = useSugerencias()
 
   async function cargar() {
     setEventos(await api('eventos'))
@@ -123,6 +125,7 @@ export default function Asistencia() {
               })
               setCreando(null)
               await cargar()
+              recargarSugerencias()
               setEventoSel(ev)
             }}
           >
@@ -185,8 +188,12 @@ export default function Asistencia() {
                 )}
                 <div className="campo">
                   <label>Lugar</label>
-                  <input placeholder="Ej.: cancha 2 TLT" value={creando.lugar}
-                    onChange={(e) => setCreando({ ...creando, lugar: e.target.value })} />
+                  <CampoSugerido
+                    placeholder="Ej.: cancha 2 TLT"
+                    value={creando.lugar}
+                    opciones={sugerencias.lugares}
+                    onChange={(v) => setCreando({ ...creando, lugar: v })}
+                  />
                 </div>
               </>
             )}
@@ -203,8 +210,12 @@ export default function Asistencia() {
                     <h3 style={{ marginBottom: 8 }}>{titulo}</h3>
                     <div className="campo">
                       <label>Rival</label>
-                      <input placeholder="Ej.: Tucumán Rugby" value={creando[clave].rival}
-                        onChange={(e) => setCreando({ ...creando, [clave]: { ...creando[clave], rival: e.target.value } })} />
+                      <CampoSugerido
+                        placeholder="Ej.: Tucumán Rugby"
+                        value={creando[clave].rival}
+                        opciones={sugerencias.rivales}
+                        onChange={(v) => setCreando({ ...creando, [clave]: { ...creando[clave], rival: v } })}
+                      />
                     </div>
                     <div className="grid2">
                       <div className="campo">
@@ -214,8 +225,12 @@ export default function Asistencia() {
                       </div>
                       <div className="campo">
                         <label>Lugar de juego</label>
-                        <input placeholder="Ej.: sede Marcos Paz" value={creando[clave].lugar}
-                          onChange={(e) => setCreando({ ...creando, [clave]: { ...creando[clave], lugar: e.target.value } })} />
+                        <CampoSugerido
+                          placeholder="Ej.: sede Marcos Paz"
+                          value={creando[clave].lugar}
+                          opciones={sugerencias.lugares}
+                          onChange={(v) => setCreando({ ...creando, [clave]: { ...creando[clave], lugar: v } })}
+                        />
                       </div>
                     </div>
                   </div>

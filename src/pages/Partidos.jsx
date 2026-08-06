@@ -3,6 +3,7 @@ import { api } from '../api.js'
 import {
   abrevAptitudes, etiquetaMotivo, etiquetaPartido, fechaCorta, lineaBloque, nombreCompleto,
 } from '../helpers.js'
+import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 
 const MAX_TIEMPOS = 6
 
@@ -95,6 +96,7 @@ function ArmadoPartido({ partido }) {
   const [tiempoSel, setTiempoSel] = useState({})
   const [editandoBloque, setEditandoBloque] = useState(null)
   const [listo, setListo] = useState(false)
+  const [sugerencias, recargarSugerencias] = useSugerencias()
 
   useEffect(() => {
     async function cargar() {
@@ -273,6 +275,7 @@ function ArmadoPartido({ partido }) {
               })
               setBloques((bs) => bs.map((x) => (x.id === actualizado.id ? actualizado : x)))
               setEditandoBloque(null)
+              recargarSugerencias()
             }}
           >
             <div className="fila entre" style={{ marginBottom: 12 }}>
@@ -281,8 +284,12 @@ function ArmadoPartido({ partido }) {
             </div>
             <div className="campo">
               <label>Rival</label>
-              <input value={editandoBloque.rival || ''}
-                onChange={(e) => setEditandoBloque({ ...editandoBloque, rival: e.target.value })} />
+              <CampoSugerido
+                placeholder="Ej.: Tucumán Rugby"
+                value={editandoBloque.rival || ''}
+                opciones={sugerencias.rivales}
+                onChange={(v) => setEditandoBloque({ ...editandoBloque, rival: v })}
+              />
             </div>
             <div className="grid2">
               <div className="campo">
@@ -292,8 +299,12 @@ function ArmadoPartido({ partido }) {
               </div>
               <div className="campo">
                 <label>Lugar de juego</label>
-                <input value={editandoBloque.lugar || ''}
-                  onChange={(e) => setEditandoBloque({ ...editandoBloque, lugar: e.target.value })} />
+                <CampoSugerido
+                  placeholder="Ej.: sede Marcos Paz"
+                  value={editandoBloque.lugar || ''}
+                  opciones={sugerencias.lugares}
+                  onChange={(v) => setEditandoBloque({ ...editandoBloque, lugar: v })}
+                />
               </div>
             </div>
             <button className="btn" style={{ width: '100%' }}>Guardar</button>
