@@ -18,11 +18,33 @@ function normalizarPosicion(p) {
 }
 const COLS_LESION = `id, jugador_id, fecha::text as fecha, descripcion,
   fecha_retorno_estimada::text as fecha_retorno_estimada, recuperado`
-const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora, rival, lugar, notas`
+const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora,
+  hora_fin::text as hora_fin, modalidad, rival, lugar, notas,
+  suspendido, motivo_suspension, nota_suspension`
 const COLS_SEGUIMIENTO = `id, jugador_id, fecha::text as fecha, area, valoracion, comentario, autor_email`
 const COLS_EVALUACION = `id, jugador_id, fecha::text as fecha, valores, comentario, autor_email`
 const COLS_BLOQUE = `id, evento_id, numero, nombre, rival, lugar,
-  hora_convocatoria::text as hora_convocatoria, valoracion, cronica`
+  hora_convocatoria::text as hora_convocatoria, valoracion, cronica,
+  suspendido, motivo_suspension, nota_suspension`
+
+const MOTIVOS_SUSPENSION = ['clima', 'feriado', 'otro']
+
+// Horario del entrenamiento de rutina (lunes y miércoles)
+const RUTINA = { hora: '19:30', hora_fin: '21:00' }
+
+function validarMotivo(m) {
+  if (!m) return null
+  if (!MOTIVOS_SUSPENSION.includes(m)) throw { codigo: 400, error: 'motivo_invalido' }
+  return m
+}
+
+// Un evento cuenta para las estadísticas si no está suspendido del todo: los
+// partidos con un solo bloque suspendido siguen contando (el otro se jugó).
+function eventoVigente(alias) {
+  return `(not ${alias}.suspendido and (
+    not exists (select 1 from bloques bl where bl.evento_id = ${alias}.id)
+    or exists (select 1 from bloques bl where bl.evento_id = ${alias}.id and not bl.suspendido)))`
+}
 
 export async function handle(req, res) {
   try {
@@ -196,13 +218,15 @@ async function enrutar(metodo, p, b, req, url) {
                 count(*) filter (where e.tipo = 'partido')::int as par
          from eventos e
          where e.fecha <= current_date
-           and exists (select 1 from asistencias a where a.evento_id = e.id)`)
+           and exists (select 1 from asistencias a where a.evento_id = e.id)
+           and ${eventoVigente('e')}`)
       const [pres] = await query(
         `select count(*) filter (where ev.tipo = 'entrenamiento')::int as ent,
                 count(*) filter (where ev.tipo = 'partido')::int as par
          from asistencias a
          join eventos ev on ev.id = a.evento_id
-         where a.jugador_id = $1 and a.estado = 'presente' and ev.fecha <= current_date`,
+         where a.jugador_id = $1 and a.estado = 'presente' and ev.fecha <= current_date
+           and ${eventoVigente('ev')}`,
         [p[1]])
       const [{ total }] = await query(
         'select count(*)::int as total from tiempo_jugadores where jugador_id = $1', [p[1]])
@@ -321,16 +345,16 @@ async function enrutar(metodo, p, b, req, url) {
                 count(*) filter (where e.tipo = 'partido')::int as par
          from eventos e
          where e.fecha <= current_date
-           and exists (select 1 from asistencias a where a.evento_id = e.id)`)
+           and exists (select 1 from asistencias a where a.evento_id = e.id)
+           and ${eventoVigente('e')}`)
       const filas = await query(
         `select j.id, j.nombre, j.apellido,
-           count(a.id) filter (where ev.tipo = 'entrenamiento' and a.estado = 'presente'
-             and ev.fecha <= current_date)::int as ent_presentes,
-           count(a.id) filter (where ev.tipo = 'partido' and a.estado = 'presente'
-             and ev.fecha <= current_date)::int as par_presentes
+           count(a.id) filter (where ev.tipo = 'entrenamiento' and a.estado = 'presente')::int as ent_presentes,
+           count(a.id) filter (where ev.tipo = 'partido' and a.estado = 'presente')::int as par_presentes
          from jugadores j
          left join asistencias a on a.jugador_id = j.id
          left join eventos ev on ev.id = a.evento_id
+           and ev.fecha <= current_date and ${eventoVigente('ev')}
          where j.estado <> 'inactivo'
          group by j.id, j.nombre, j.apellido
          order by j.apellido, j.nombre`)
@@ -358,10 +382,18 @@ async function enrutar(metodo, p, b, req, url) {
       return eventos
     }
     if (metodo === 'POST' && !p[1]) {
+      // La modalidad (rutina/extra) es solo de los entrenamientos; el de rutina
+      // tiene horario fijo salvo que se mande otro explícitamente.
+      const modalidad = b.tipo === 'entrenamiento' && ['rutina', 'extra'].includes(b.modalidad)
+        ? b.modalidad
+        : null
+      const hora = modalidad === 'rutina' ? b.hora || RUTINA.hora : b.hora || null
+      const horaFin = modalidad === 'rutina' ? b.hora_fin || RUTINA.hora_fin : b.hora_fin || null
       const filas = await query(
-        `insert into eventos (tipo, fecha, hora, rival, lugar, notas)
-         values ($1,$2,$3,$4,$5,$6) returning ${COLS_EVENTO}`,
-        [b.tipo, b.fecha, b.hora || null, b.rival || null, b.lugar || null, b.notas || null])
+        `insert into eventos (tipo, fecha, hora, hora_fin, modalidad, rival, lugar, notas)
+         values ($1,$2,$3,$4,$5,$6,$7,$8) returning ${COLS_EVENTO}`,
+        [b.tipo, b.fecha, hora, horaFin, modalidad, b.rival || null, b.lugar || null,
+         b.notas || null])
       const evento = filas[0]
       // Un partido nace con sus 2 bloques, cada uno con rival/lugar/convocatoria
       if (b.tipo === 'partido') {
@@ -378,6 +410,50 @@ async function enrutar(metodo, p, b, req, url) {
              d.hora_convocatoria || null])
           if (bl) evento.bloques.push(bl)
         }
+      }
+      return evento
+    }
+    // Actualización parcial del evento: solo cambian los campos presentes en
+    // el cuerpo. Se usa sobre todo para suspender / reactivar.
+    if (metodo === 'PUT' && p[1] && !p[2]) {
+      const sets = []
+      const vals = []
+      const asignar = (campo, valor) => {
+        vals.push(valor)
+        sets.push(`${campo} = $${vals.length}`)
+      }
+      for (const campo of ['fecha', 'hora', 'hora_fin', 'lugar', 'notas', 'rival']) {
+        if (campo in b) asignar(campo, b[campo] || null)
+      }
+      if ('modalidad' in b) {
+        const m = b.modalidad || null
+        if (m && !['rutina', 'extra'].includes(m)) throw { codigo: 400, error: 'modalidad_invalida' }
+        asignar('modalidad', m)
+      }
+      if ('suspendido' in b) {
+        asignar('suspendido', !!b.suspendido)
+        // Al reactivar se limpian motivo y nota; no quedan datos huérfanos
+        if (!b.suspendido) {
+          asignar('motivo_suspension', null)
+          asignar('nota_suspension', null)
+        }
+      }
+      if ('motivo_suspension' in b && b.suspendido !== false) {
+        asignar('motivo_suspension', validarMotivo(b.motivo_suspension))
+      }
+      if ('nota_suspension' in b && b.suspendido !== false) {
+        asignar('nota_suspension', b.nota_suspension?.trim() || null)
+      }
+      if (!sets.length) throw { codigo: 400, error: 'faltan_datos' }
+      vals.push(p[1])
+      const filas = await query(
+        `update eventos set ${sets.join(', ')} where id = $${vals.length} returning ${COLS_EVENTO}`,
+        vals)
+      if (!filas.length) throw { codigo: 404, error: 'no_existe' }
+      const evento = filas[0]
+      if (evento.tipo === 'partido') {
+        evento.bloques = await query(
+          `select ${COLS_BLOQUE} from bloques where evento_id = $1 order by numero`, [evento.id])
       }
       return evento
     }
@@ -495,6 +571,22 @@ async function enrutar(metodo, p, b, req, url) {
         if (v !== null && !(v >= 1 && v <= 5)) throw { codigo: 400, error: 'valoracion_invalida' }
         vals.push(v)
         sets.push(`valoracion = $${vals.length}`)
+      }
+      // Suspensión de un solo bloque: el otro puede jugarse igual
+      if ('suspendido' in b) {
+        vals.push(!!b.suspendido)
+        sets.push(`suspendido = $${vals.length}`)
+        if (!b.suspendido) sets.push('motivo_suspension = null, nota_suspension = null')
+      }
+      if (b.suspendido !== false) {
+        if ('motivo_suspension' in b) {
+          vals.push(validarMotivo(b.motivo_suspension))
+          sets.push(`motivo_suspension = $${vals.length}`)
+        }
+        if ('nota_suspension' in b) {
+          vals.push(b.nota_suspension?.trim() || null)
+          sets.push(`nota_suspension = $${vals.length}`)
+        }
       }
       if (!sets.length) throw { codigo: 400, error: 'faltan_datos' }
       vals.push(p[2])

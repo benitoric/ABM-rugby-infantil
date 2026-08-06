@@ -106,7 +106,62 @@ export function lineaBloque(b) {
   if (b.hora_convocatoria) partes.push(`conv. ${b.hora_convocatoria.slice(0, 5)} hs`)
   if (b.lugar) partes.push(b.lugar)
   if (b.valoracion) partes.push('★'.repeat(b.valoracion))
+  if (b.suspendido) partes.push(`⛔ suspendido${b.motivo_suspension ? ` (${etiquetaMotivo(b.motivo_suspension)})` : ''}`)
   return partes.join(' · ')
+}
+
+// ---------- entrenamientos de rutina ----------
+// El entrenamiento fijo de la división: lunes y miércoles de 19:30 a 21:00.
+export const RUTINA = { hora: '19:30', hora_fin: '21:00', dias: [1, 3] }
+
+export const MODALIDADES = {
+  rutina: 'Rutina',
+  extra: 'Extra',
+}
+
+// ¿La fecha cae un día de entrenamiento de rutina? (lunes o miércoles)
+export function esDiaDeRutina(fecha) {
+  if (!fecha) return true
+  return RUTINA.dias.includes(new Date(fecha + 'T00:00:00').getDay())
+}
+
+// "19:30 a 21:00 hs" / "19:30 hs" / '' si no hay horario cargado
+export function horarioEvento(ev) {
+  if (!ev?.hora) return ''
+  const desde = ev.hora.slice(0, 5)
+  return ev.hora_fin ? `${desde} a ${ev.hora_fin.slice(0, 5)} hs` : `${desde} hs`
+}
+
+// ---------- suspensiones ----------
+export const MOTIVOS_SUSPENSION = [
+  { value: 'clima', label: 'Clima' },
+  { value: 'feriado', label: 'Feriado' },
+  { value: 'otro', label: 'Otro' },
+]
+
+export function etiquetaMotivo(motivo) {
+  return MOTIVOS_SUSPENSION.find((m) => m.value === motivo)?.label || 'Sin motivo'
+}
+
+// Estado de suspensión de un evento. En los partidos puede caerse un solo
+// bloque: ahí el evento queda "parcial" (el otro bloque se juega igual).
+export function suspensionEvento(ev) {
+  const bloques = ev?.bloques || []
+  const caidos = bloques.filter((b) => b.suspendido)
+  if (ev?.suspendido || (bloques.length > 0 && caidos.length === bloques.length)) {
+    const motivo = ev?.suspendido ? ev.motivo_suspension : caidos[0]?.motivo_suspension
+    return {
+      estado: 'total',
+      texto: `Suspendido${motivo ? ` · ${etiquetaMotivo(motivo)}` : ''}`,
+    }
+  }
+  if (caidos.length) {
+    return {
+      estado: 'parcial',
+      texto: `Suspendido ${caidos.map((b) => `B${b.numero}`).join(' y ')}`,
+    }
+  }
+  return { estado: null, texto: '' }
 }
 
 export function etiquetaPartido(ev) {

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
-import { abrevAptitudes, etiquetaPartido, fechaCorta, lineaBloque, nombreCompleto } from '../helpers.js'
+import {
+  abrevAptitudes, etiquetaMotivo, etiquetaPartido, fechaCorta, lineaBloque, nombreCompleto,
+} from '../helpers.js'
 
 const MAX_TIEMPOS = 6
 
@@ -197,7 +199,7 @@ function ArmadoPartido({ partido }) {
         </button>
         {bloques.map((b) => (
           <button key={b.id} className={vista === b.id ? 'activo' : ''} onClick={() => setVista(b.id)}>
-            {b.nombre || `Bloque ${b.numero}`} ({conteoBloque(b.id)})
+            {b.suspendido ? '⛔ ' : ''}{b.nombre || `Bloque ${b.numero}`} ({conteoBloque(b.id)})
           </button>
         ))}
         <button className={vista === 'planilla' ? 'activo' : ''} onClick={() => setVista('planilla')}>
@@ -341,10 +343,12 @@ function Planilla({ partido, bloques, jugadores, asignacion, tiempos, enCancha }
             <div key={bl.id}>
               <h3>
                 {bl.nombre || `Bloque ${bl.numero}`} vs {bl.rival || 'a definir'} ({delBloque.length} jugadores)
+                {bl.suspendido ? ' · SUSPENDIDO' : ''}
               </h3>
               <p className="mini">
                 {bl.hora_convocatoria ? `Convocatoria: ${bl.hora_convocatoria.slice(0, 5)} hs` : ''}
                 {bl.lugar ? `${bl.hora_convocatoria ? ' · ' : ''}${bl.lugar}` : ''}
+                {bl.suspendido ? ` · Suspendido: ${etiquetaMotivo(bl.motivo_suspension)}${bl.nota_suspension ? ` (${bl.nota_suspension})` : ''}` : ''}
               </p>
               {!delBloque.length && <p className="mini">Sin jugadores asignados.</p>}
               {delBloque.length > 0 && (
@@ -454,16 +458,24 @@ function BalancePartido({ bloque, onActualizado }) {
 
 function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiempoSel, onSelTiempo, enCancha, onToggle, onAgregarTiempo }) {
   const infoBloque = (
-    <div className="tarjeta fila entre">
-      <div className="crece">
-        <b>vs {bloque.rival || 'rival a definir'}</b>
-        <div className="mini">
-          {bloque.hora_convocatoria ? `Convocatoria: ${bloque.hora_convocatoria.slice(0, 5)} hs` : 'Sin hora de convocatoria'}
-          {bloque.lugar ? ` · ${bloque.lugar}` : ' · sin lugar definido'}
+    <>
+      <div className="tarjeta fila entre">
+        <div className="crece">
+          <b>vs {bloque.rival || 'rival a definir'}</b>
+          <div className="mini">
+            {bloque.hora_convocatoria ? `Convocatoria: ${bloque.hora_convocatoria.slice(0, 5)} hs` : 'Sin hora de convocatoria'}
+            {bloque.lugar ? ` · ${bloque.lugar}` : ' · sin lugar definido'}
+          </div>
         </div>
+        <button className="btn sec chico" onClick={onEditar}>Editar datos</button>
       </div>
-      <button className="btn sec chico" onClick={onEditar}>Editar datos</button>
-    </div>
+      {bloque.suspendido && (
+        <p className="aviso">
+          ⛔ Bloque suspendido · {etiquetaMotivo(bloque.motivo_suspension)}
+          {bloque.nota_suspension ? ` · ${bloque.nota_suspension}` : ''}
+        </p>
+      )}
+    </>
   )
 
   if (!jugadores.length) {

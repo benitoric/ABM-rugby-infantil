@@ -67,9 +67,18 @@ create table if not exists eventos (
   tipo text not null check (tipo in ('entrenamiento','partido')),
   fecha date not null,
   hora time,
+  hora_fin time,
+  -- Solo para entrenamientos: 'rutina' es el de lunes y miércoles de 19:30 a
+  -- 21:00; 'extra' es cualquier otro (recuperatorio, doble turno, etc.).
+  modalidad text check (modalidad in ('rutina','extra')),
   rival text,
   lugar text,
   notas text,
+  -- Suspensión del evento entero. En los partidos se puede suspender un solo
+  -- bloque (ver tabla bloques); acá se marca cuando cae todo el partido.
+  suspendido boolean not null default false,
+  motivo_suspension text check (motivo_suspension in ('clima','feriado','otro')),
+  nota_suspension text,
   created_at timestamptz not null default now()
 );
 
@@ -99,6 +108,10 @@ create table if not exists bloques (
   hora_convocatoria time,
   valoracion int check (valoracion between 1 and 5),
   cronica text,
+  -- Un bloque se puede suspender solo (el otro puede jugarse igual)
+  suspendido boolean not null default false,
+  motivo_suspension text check (motivo_suspension in ('clima','feriado','otro')),
+  nota_suspension text,
   unique (evento_id, numero)
 );
 
