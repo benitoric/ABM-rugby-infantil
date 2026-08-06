@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { descargarCSV, etiquetaPartido, fechaCorta, lineaBloque, nombreCompleto, nombreStaff } from '../helpers.js'
+import {
+  descargarCSV, esDiaDeRutina, etiquetaPartido, fechaCorta, horarioEvento, lineaBloque,
+  MODALIDADES, MOTIVOS_SUSPENSION, nombreCompleto, nombreStaff, RUTINA, suspensionEvento,
+} from '../helpers.js'
 
 const BLOQUE_VACIO = { rival: '', lugar: '', hora_convocatoria: '' }
 
@@ -44,8 +47,8 @@ export default function Asistencia() {
           <button
             className="btn"
             onClick={() => setCreando({
-              tipo: 'entrenamiento', fecha: hoy, hora: '', lugar: '', notas: '',
-              b1: { ...BLOQUE_VACIO }, b2: { ...BLOQUE_VACIO },
+              tipo: 'entrenamiento', modalidad: 'rutina', fecha: hoy, hora: '', hora_fin: '',
+              lugar: '', notas: '', b1: { ...BLOQUE_VACIO }, b2: { ...BLOQUE_VACIO },
             })}
           >
             + Nuevo evento
@@ -60,25 +63,35 @@ export default function Asistencia() {
         </div>
       )}
 
-      {eventos.map((ev) => (
-        <button key={ev.id} className="jugador-item" onClick={() => setEventoSel(ev)}>
-          <div className="avatar">{ev.tipo === 'partido' ? '🏉' : '🏋️'}</div>
-          <div className="crece">
-            <div style={{ fontWeight: 600 }}>
-              {ev.tipo === 'partido' ? etiquetaPartido(ev) : 'Entrenamiento'}
+      {eventos.map((ev) => {
+        const susp = suspensionEvento(ev)
+        return (
+          <button
+            key={ev.id}
+            className="jugador-item"
+            style={susp.estado === 'total' ? { opacity: 0.7 } : undefined}
+            onClick={() => setEventoSel(ev)}
+          >
+            <div className="avatar">{ev.tipo === 'partido' ? '🏉' : '🏋️'}</div>
+            <div className="crece">
+              <div style={{ fontWeight: 600 }}>
+                {ev.tipo === 'partido' ? etiquetaPartido(ev) : 'Entrenamiento'}
+                {ev.modalidad && <span className={`badge ${ev.modalidad}`}>{MODALIDADES[ev.modalidad]}</span>}
+                {susp.estado && <span className={`badge susp-${susp.estado}`}>⛔ {susp.texto}</span>}
+              </div>
+              <div className="mini">
+                {fechaCorta(ev.fecha)}
+                {horarioEvento(ev) ? ` · ${horarioEvento(ev)}` : ''}
+                {ev.lugar ? ` · ${ev.lugar}` : ''}
+              </div>
+              {ev.tipo === 'partido' && (ev.bloques || []).map((bl) => (
+                <div key={bl.numero} className="mini">{lineaBloque(bl)}</div>
+              ))}
             </div>
-            <div className="mini">
-              {fechaCorta(ev.fecha)}
-              {ev.hora ? ` · ${ev.hora.slice(0, 5)} hs` : ''}
-              {ev.lugar ? ` · ${ev.lugar}` : ''}
-            </div>
-            {ev.tipo === 'partido' && (ev.bloques || []).map((bl) => (
-              <div key={bl.numero} className="mini">{lineaBloque(bl)}</div>
-            ))}
-          </div>
-          <span className="mini">→</span>
-        </button>
-      ))}
+            <span className="mini">→</span>
+          </button>
+        )
+      })}
 
       {creando && (
         <div className="modal-fondo" onClick={() => setCreando(null)}>
@@ -94,12 +107,15 @@ export default function Asistencia() {
                 lugar: d.lugar?.trim() || null,
                 hora_convocatoria: d.hora_convocatoria || null,
               })
+              const esRutina = !esPartido && creando.modalidad === 'rutina'
               const ev = await api('eventos', {
                 method: 'POST',
                 body: {
                   tipo: creando.tipo,
+                  modalidad: esPartido ? null : creando.modalidad,
                   fecha: creando.fecha,
-                  hora: esPartido ? null : creando.hora || null,
+                  hora: esPartido ? null : (esRutina ? RUTINA.hora : creando.hora || null),
+                  hora_fin: esPartido ? null : (esRutina ? RUTINA.hora_fin : creando.hora_fin || null),
                   lugar: esPartido ? null : creando.lugar?.trim() || null,
                   notas: creando.notas?.trim() || null,
                   bloques: esPartido ? [bloque(1, creando.b1), bloque(2, creando.b2)] : undefined,
@@ -127,18 +143,46 @@ export default function Asistencia() {
 
             {creando.tipo === 'entrenamiento' && (
               <>
-                <div className="grid2">
-                  <div className="campo">
-                    <label>Fecha</label>
-                    <input type="date" required value={creando.fecha}
-                      onChange={(e) => setCreando({ ...creando, fecha: e.target.value })} />
+                <div className="campo">
+                  <label>Modalidad</label>
+                  <div className="seg">
+                    <button type="button" className={creando.modalidad === 'rutina' ? 'activo' : ''}
+                      onClick={() => setCreando({ ...creando, modalidad: 'rutina' })}>De rutina</button>
+                    <button type="button" className={creando.modalidad === 'extra' ? 'activo' : ''}
+                      onClick={() => setCreando({ ...creando, modalidad: 'extra' })}>Extra</button>
                   </div>
-                  <div className="campo">
-                    <label>Hora</label>
-                    <input type="time" value={creando.hora}
-                      onChange={(e) => setCreando({ ...creando, hora: e.target.value })} />
-                  </div>
+                  <p className="mini">
+                    {creando.modalidad === 'rutina'
+                      ? `Lunes y miércoles de ${RUTINA.hora} a ${RUTINA.hora_fin} hs.`
+                      : 'Cualquier entrenamiento fuera del horario habitual.'}
+                  </p>
                 </div>
+
+                <div className="campo">
+                  <label>Fecha</label>
+                  <input type="date" required value={creando.fecha}
+                    onChange={(e) => setCreando({ ...creando, fecha: e.target.value })} />
+                </div>
+                {creando.modalidad === 'extra' && (
+                  <div className="grid2">
+                    <div className="campo">
+                      <label>Hora de inicio</label>
+                      <input type="time" value={creando.hora}
+                        onChange={(e) => setCreando({ ...creando, hora: e.target.value })} />
+                    </div>
+                    <div className="campo">
+                      <label>Hora de fin</label>
+                      <input type="time" value={creando.hora_fin}
+                        onChange={(e) => setCreando({ ...creando, hora_fin: e.target.value })} />
+                    </div>
+                  </div>
+                )}
+                {creando.modalidad === 'rutina' && !esDiaDeRutina(creando.fecha) && (
+                  <p className="aviso" style={{ marginBottom: 10 }}>
+                    ⚠️ La fecha elegida no cae lunes ni miércoles. Si es un entrenamiento
+                    fuera del horario habitual, marcalo como "Extra".
+                  </p>
+                )}
                 <div className="campo">
                   <label>Lugar</label>
                   <input placeholder="Ej.: cancha 2 TLT" value={creando.lugar}
@@ -192,7 +236,8 @@ export default function Asistencia() {
   )
 }
 
-function TomarAsistencia({ evento, onVolver }) {
+function TomarAsistencia({ evento: eventoInicial, onVolver }) {
+  const [evento, setEvento] = useState(eventoInicial)
   const [jugadores, setJugadores] = useState([])
   const [marcas, setMarcas] = useState({})
   const [staff, setStaff] = useState([])
@@ -258,15 +303,6 @@ function TomarAsistencia({ evento, onVolver }) {
     }
   }
 
-  async function marcarStaff(email) {
-    const nuevo = marcasStaff[email] === 'presente' ? 'ausente' : 'presente'
-    setMarcasStaff((m) => ({ ...m, [email]: nuevo }))
-    await api(`eventos/${evento.id}/asistencias-staff`, {
-      method: 'PUT',
-      body: { marcas: [{ staff_email: email, estado: nuevo }] },
-    })
-  }
-
   async function marcarTodosPresentes() {
     const nuevas = {}
     for (const j of jugadores) nuevas[j.id] = 'presente'
@@ -284,6 +320,7 @@ function TomarAsistencia({ evento, onVolver }) {
   }
 
   const presentes = jugadores.filter((j) => marcas[j.id] === 'presente').length
+  const suspension = suspensionEvento(evento)
 
   function descargarEvento() {
     const titulo = evento.tipo === 'partido' ? 'partido' : 'entrenamiento'
@@ -314,83 +351,71 @@ function TomarAsistencia({ evento, onVolver }) {
       <div className="tarjeta">
         <h2>
           {evento.tipo === 'partido' ? etiquetaPartido(evento) : 'Entrenamiento'}
+          {evento.modalidad && <span className={`badge ${evento.modalidad}`}>{MODALIDADES[evento.modalidad]}</span>}
         </h2>
         <div className="suave">
           {fechaCorta(evento.fecha)}
-          {evento.hora ? ` · ${evento.hora.slice(0, 5)} hs` : ''}
+          {horarioEvento(evento) ? ` · ${horarioEvento(evento)}` : ''}
           {evento.lugar ? ` · ${evento.lugar}` : ''}
         </div>
         {evento.tipo === 'partido' && (evento.bloques || []).map((bl) => (
           <div key={bl.numero} className="mini">{lineaBloque(bl)}</div>
         ))}
         {evento.notas && <p className="mini" style={{ marginTop: 6 }}>📝 {evento.notas}</p>}
+        {suspension.estado && (
+          <p className="aviso" style={{ marginTop: 8 }}>
+            ⛔ {suspension.texto}. {suspension.estado === 'total'
+              ? 'No se toma asistencia ni cuenta para los porcentajes.'
+              : 'El otro bloque se juega normalmente.'}
+          </p>
+        )}
         <div className="fila" style={{ marginTop: 8 }}>
           <span className="mini"><b style={{ color: 'var(--ok)' }}>Presentes: {presentes}</b></span>
           <span className="mini"><b style={{ color: 'var(--bad)' }}>Ausentes: {jugadores.length - presentes}</b></span>
         </div>
       </div>
 
-      <p className="mini">
-        Todos arrancan como ausentes: tocá a los que vinieron y quedan marcados
-        presentes (tocá de nuevo para deshacer).
-      </p>
+      <PanelSuspension evento={evento} onCambio={setEvento} />
 
-      <button className="btn sec" onClick={marcarTodosPresentes}>
-        Marcar presentes a todos
-      </button>
-
-      {cargando && <div className="vacio">Cargando…</div>}
-      {errorCarga && (
+      {suspension.estado === 'total' && (
         <div className="vacio">
-          <p>No se pudo cargar el listado{errorCarga.detalle ? `: ${errorCarga.detalle}` : '.'}</p>
-          <button className="btn sec" style={{ marginTop: 8 }} onClick={() => setIntento((n) => n + 1)}>
-            Reintentar
-          </button>
+          Evento suspendido: no hace falta tomar asistencia. Si al final se hizo,
+          reactivalo arriba y marcá a los presentes.
         </div>
       )}
-      {jugadores.map((j) => {
-        const presente = marcas[j.id] === 'presente'
-        return (
-          <button
-            key={j.id}
-            className="jugador-item compacto"
-            style={presente ? { borderLeft: '4px solid var(--ok)' } : { opacity: 0.65 }}
-            onClick={() => marcar(j.id)}
-          >
-            <div className="crece">
-              <div style={{ fontWeight: 600 }}>{nombreCompleto(j)}</div>
-              {j.estado === 'lesionado' && <span className="badge lesionado">lesionado</span>}
-            </div>
-            <span style={{ fontWeight: 800, color: presente ? 'var(--ok)' : 'var(--bad)' }}>
-              {presente ? 'PRESENTE ✓' : 'AUSENTE'}
-            </span>
-          </button>
-        )
-      })}
 
-      {!cargando && staff.length > 0 && (
+      {suspension.estado !== 'total' && (
         <>
-          <div className="fila entre" style={{ marginTop: 12 }}>
-            <h3>Staff</h3>
-            <span className="mini">
-              <b style={{ color: 'var(--ok)' }}>
-                Presentes: {staff.filter((s) => marcasStaff[s.email] === 'presente').length}
-              </b>
-              {' / '}{staff.length}
-            </span>
-          </div>
-          {staff.map((s) => {
-            const presente = marcasStaff[s.email] === 'presente'
+          <p className="mini">
+            Todos arrancan como ausentes: tocá a los que vinieron y quedan marcados
+            presentes (tocá de nuevo para deshacer).
+          </p>
+
+          <button className="btn sec" onClick={marcarTodosPresentes}>
+            Marcar presentes a todos
+          </button>
+
+          {cargando && <div className="vacio">Cargando…</div>}
+          {errorCarga && (
+            <div className="vacio">
+              <p>No se pudo cargar el listado{errorCarga.detalle ? `: ${errorCarga.detalle}` : '.'}</p>
+              <button className="btn sec" style={{ marginTop: 8 }} onClick={() => setIntento((n) => n + 1)}>
+                Reintentar
+              </button>
+            </div>
+          )}
+          {jugadores.map((j) => {
+            const presente = marcas[j.id] === 'presente'
             return (
               <button
-                key={s.email}
+                key={j.id}
                 className="jugador-item compacto"
                 style={presente ? { borderLeft: '4px solid var(--ok)' } : { opacity: 0.65 }}
-                onClick={() => marcarStaff(s.email)}
+                onClick={() => marcar(j.id)}
               >
                 <div className="crece">
-                  <div style={{ fontWeight: 600 }}>{nombreStaff(s)}</div>
-                  {s.rol && <div className="mini">{s.rol}</div>}
+                  <div style={{ fontWeight: 600 }}>{nombreCompleto(j)}</div>
+                  {j.estado === 'lesionado' && <span className="badge lesionado">lesionado</span>}
                 </div>
                 <span style={{ fontWeight: 800, color: presente ? 'var(--ok)' : 'var(--bad)' }}>
                   {presente ? 'PRESENTE ✓' : 'AUSENTE'}
@@ -398,6 +423,181 @@ function TomarAsistencia({ evento, onVolver }) {
               </button>
             )
           })}
+
+          {!cargando && staff.length > 0 && (
+            <>
+              <div className="fila entre" style={{ marginTop: 12 }}>
+                <h3>Staff</h3>
+                <span className="mini">
+                  <b style={{ color: 'var(--ok)' }}>
+                    Presentes: {staff.filter((s) => marcasStaff[s.email] === 'presente').length}
+                  </b>
+                  {' / '}{staff.length}
+                </span>
+              </div>
+              {staff.map((s) => {
+                const presente = marcasStaff[s.email] === 'presente'
+                return (
+                  <button
+                    key={s.email}
+                    className="jugador-item compacto"
+                    style={presente ? { borderLeft: '4px solid var(--ok)' } : { opacity: 0.65 }}
+                    onClick={() => marcarStaff(s.email)}
+                  >
+                    <div className="crece">
+                      <div style={{ fontWeight: 600 }}>{nombreStaff(s)}</div>
+                      {s.rol && <div className="mini">{s.rol}</div>}
+                    </div>
+                    <span style={{ fontWeight: 800, color: presente ? 'var(--ok)' : 'var(--bad)' }}>
+                      {presente ? 'PRESENTE ✓' : 'AUSENTE'}
+                    </span>
+                  </button>
+                )
+              })}
+            </>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// Suspensión del evento. En un entrenamiento se suspende todo; en un partido,
+// bloque por bloque (puede caerse uno solo y jugarse el otro).
+function PanelSuspension({ evento, onCambio }) {
+  const esPartido = evento.tipo === 'partido'
+
+  async function guardarEvento(cambios) {
+    onCambio(await api(`eventos/${evento.id}`, { method: 'PUT', body: cambios }))
+  }
+
+  async function guardarBloque(bloqueId, cambios) {
+    const nuevo = await api(`partido/bloque/${bloqueId}`, { method: 'PUT', body: cambios })
+    onCambio({
+      ...evento,
+      bloques: (evento.bloques || []).map((x) => (x.id === nuevo.id ? nuevo : x)),
+    })
+  }
+
+  return (
+    <div className="tarjeta">
+      <h3>Suspensión</h3>
+      {esPartido ? (
+        <>
+          <p className="mini">
+            Se puede suspender un bloque solo: el otro sigue jugándose y cuenta
+            para la asistencia.
+          </p>
+          {(evento.bloques || []).map((bl) => (
+            <FormSuspension
+              key={bl.id}
+              titulo={`Bloque ${bl.numero}${bl.rival ? ` · vs ${bl.rival}` : ''}`}
+              item={bl}
+              onGuardar={(cambios) => guardarBloque(bl.id, cambios)}
+            />
+          ))}
+          {!(evento.bloques || []).length && (
+            <p className="mini">Abrí el partido en "Día de partido" para generar los bloques.</p>
+          )}
+        </>
+      ) : (
+        <FormSuspension titulo="Entrenamiento" item={evento} onGuardar={guardarEvento} />
+      )}
+    </div>
+  )
+}
+
+function FormSuspension({ titulo, item, onGuardar }) {
+  const [abierto, setAbierto] = useState(false)
+  const [motivo, setMotivo] = useState(item.motivo_suspension || 'clima')
+  const [nota, setNota] = useState(item.nota_suspension || '')
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => {
+    setMotivo(item.motivo_suspension || 'clima')
+    setNota(item.nota_suspension || '')
+    setAbierto(false)
+  }, [item.suspendido, item.motivo_suspension, item.nota_suspension])
+
+  const cambiado = motivo !== (item.motivo_suspension || 'clima') ||
+    nota.trim() !== (item.nota_suspension || '')
+
+  async function accion(cambios) {
+    setGuardando(true)
+    try {
+      await onGuardar(cambios)
+    } catch {
+      alert('No se pudo guardar. Probá de nuevo.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div className="suspension-item">
+      <div className="fila entre">
+        <b>{titulo}</b>
+        <span className={`badge ${item.suspendido ? 'susp-total' : 'activo'}`}>
+          {item.suspendido ? '⛔ Suspendido' : 'Se realiza'}
+        </span>
+      </div>
+
+      {!item.suspendido && !abierto && (
+        <button className="btn sec chico" style={{ marginTop: 8 }} onClick={() => setAbierto(true)}>
+          Suspender
+        </button>
+      )}
+
+      {(item.suspendido || abierto) && (
+        <>
+          <div className="campo" style={{ marginTop: 8 }}>
+            <label>Motivo</label>
+            <select value={motivo} onChange={(e) => setMotivo(e.target.value)}>
+              {MOTIVOS_SUSPENSION.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="campo">
+            <label>Notas</label>
+            <textarea
+              placeholder="Ej.: cancha anegada, se recupera el viernes"
+              value={nota}
+              onChange={(e) => setNota(e.target.value)}
+            />
+          </div>
+          <div className="fila">
+            {item.suspendido ? (
+              <>
+                <button
+                  className="btn chico"
+                  disabled={!cambiado || guardando}
+                  onClick={() => accion({ motivo_suspension: motivo, nota_suspension: nota.trim() || null })}
+                >
+                  Guardar cambios
+                </button>
+                <button className="btn sec chico" disabled={guardando}
+                  onClick={() => accion({ suspendido: false })}>
+                  Reactivar
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className="btn peligro chico"
+                  disabled={guardando}
+                  onClick={() => accion({
+                    suspendido: true,
+                    motivo_suspension: motivo,
+                    nota_suspension: nota.trim() || null,
+                  })}
+                >
+                  Confirmar suspensión
+                </button>
+                <button className="btn sec chico" onClick={() => setAbierto(false)}>Cancelar</button>
+              </>
+            )}
+          </div>
         </>
       )}
     </div>

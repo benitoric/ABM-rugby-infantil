@@ -32,7 +32,9 @@ async function inicializar() {
   // fallar igual en Postgres por la carrera en el catálogo.
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
-    "select to_regclass('public.asistencias_staff') is not null as aplicadas")
+    `select exists (select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'eventos'
+         and column_name = 'suspendido') as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -44,7 +46,8 @@ async function inicializar() {
   return (texto, params) => pool.query(texto, params)
 }
 
-async function migrar(pool) {
+// Exportada para poder probarla contra una base con el esquema viejo
+export async function migrar(pool) {
   await pool.query('alter table staff add column if not exists rol text')
   await pool.query('alter table staff add column if not exists apellido text')
   await pool.query('alter table jugadores add column if not exists ficha_medica_vence date')
@@ -85,6 +88,20 @@ async function migrar(pool) {
     estado text not null check (estado in ('presente','ausente')),
     unique (evento_id, staff_email)
   )`)
+  // Entrenamientos de rutina vs. extra, y suspensión de eventos y bloques
+  await pool.query('alter table eventos add column if not exists hora_fin time')
+  await pool.query('alter table eventos add column if not exists modalidad text')
+  await pool.query('alter table eventos drop constraint if exists eventos_modalidad_check')
+  await pool.query(`alter table eventos add constraint eventos_modalidad_check
+    check (modalidad in ('rutina','extra'))`)
+  for (const tabla of ['eventos', 'bloques']) {
+    await pool.query(`alter table ${tabla} add column if not exists suspendido boolean not null default false`)
+    await pool.query(`alter table ${tabla} add column if not exists motivo_suspension text`)
+    await pool.query(`alter table ${tabla} add column if not exists nota_suspension text`)
+    await pool.query(`alter table ${tabla} drop constraint if exists ${tabla}_motivo_suspension_check`)
+    await pool.query(`alter table ${tabla} add constraint ${tabla}_motivo_suspension_check
+      check (motivo_suspension in ('clima','feriado','otro'))`)
+  }
   await pool.query(`create table if not exists lesiones (
     id uuid primary key default gen_random_uuid(),
     jugador_id uuid not null references jugadores(id) on delete cascade,
