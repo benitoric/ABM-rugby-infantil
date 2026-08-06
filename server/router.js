@@ -38,6 +38,23 @@ const COLS_BLOQUE = `id, evento_id, numero, nombre, rival, lugar,
 
 const MOTIVOS_SUSPENSION = ['clima', 'feriado', 'otro']
 
+// Quiénes evalúan: entrenadores. Quedan afuera managers y preparadores
+// físicos que no entrenan (los roles salen de ROLES_STAFF en src/helpers.js).
+const ROLES_EVALUADORES = ['Cabeza de división', 'Entrenador', 'PF/entrenador']
+
+// Jugadores que necesitan evaluación: sin evaluar o con la última de hace más
+// de 30 días, sin contar a los dados de baja ni a los ya repartidos.
+const DIAS_EVALUACION = 30
+const SIN_EVALUAR = `
+  left join lateral (
+    select max(e.fecha) as fecha from evaluaciones e where e.jugador_id = j.id
+  ) ult on true
+  where j.estado <> 'inactivo'
+    and (ult.fecha is null or ult.fecha < current_date - ${DIAS_EVALUACION})
+    and not exists (
+      select 1 from asignaciones_evaluacion a where a.jugador_id = j.id
+    )`
+
 // Horario del entrenamiento de rutina (lunes y miércoles)
 const RUTINA = { hora: '19:30', hora_fin: '21:00' }
 
@@ -296,10 +313,64 @@ async function enrutar(metodo, p, b, req, url) {
          values ($1, $2, $3, $4, $5) returning ${COLS_EVALUACION}`,
         [b.jugador_id, b.fecha || new Date().toISOString().slice(0, 10),
          JSON.stringify(valores), b.comentario?.trim() || null, yo.email])
+      // Cargada la evaluación, el jugador deja de estar pendiente de reparto
+      await query('delete from asignaciones_evaluacion where jugador_id = $1', [b.jugador_id])
       return filas[0]
     }
     if (metodo === 'DELETE' && p[1]) {
       await query('delete from evaluaciones where id = $1', [p[1]])
+      return { ok: true }
+    }
+  }
+
+  // ---------- reparto de evaluaciones ----------
+  if (p[0] === 'asignaciones') {
+    if (metodo === 'GET' && !p[1]) {
+      const mias = await query(
+        `select a.jugador_id, j.nombre, j.apellido, j.posicion,
+                ue.fecha::text as ultima_evaluacion
+         from asignaciones_evaluacion a
+         join jugadores j on j.id = a.jugador_id
+         left join lateral (
+           select max(e.fecha) as fecha from evaluaciones e where e.jugador_id = j.id
+         ) ue on true
+         where a.staff_email = $1
+         order by j.apellido, j.nombre`, [yo.email])
+      const porEvaluador = await query(
+        `select a.staff_email, s.nombre, s.apellido, count(*)::int as pendientes
+         from asignaciones_evaluacion a
+         join staff s on s.email = a.staff_email
+         group by a.staff_email, s.nombre, s.apellido
+         order by s.nombre, s.apellido`)
+      const [{ n }] = await query(
+        `select count(*)::int as n from jugadores j ${SIN_EVALUAR}`)
+      return { mias, por_evaluador: porEvaluador, sin_repartir: n }
+    }
+
+    // Reparte al azar, en partes parejas, entre los entrenadores
+    if (metodo === 'POST' && p[1] === 'repartir') {
+      const evaluadores = await query(
+        `select email from staff where activo and rol = any($1) order by email`,
+        [ROLES_EVALUADORES])
+      if (!evaluadores.length) throw { codigo: 409, error: 'sin_evaluadores' }
+      const pendientes = await query(
+        `select j.id from jugadores j ${SIN_EVALUAR} order by random()`)
+      if (!pendientes.length) return { asignados: 0, evaluadores: evaluadores.length }
+      // Se empieza en un evaluador al azar para que el resto no reciba
+      // siempre uno menos cuando el reparto no es exacto.
+      const inicio = Math.floor(Math.random() * evaluadores.length)
+      for (let i = 0; i < pendientes.length; i++) {
+        const quien = evaluadores[(inicio + i) % evaluadores.length].email
+        await query(
+          `insert into asignaciones_evaluacion (jugador_id, staff_email, asignado_por)
+           values ($1, $2, $3) on conflict (jugador_id) do nothing`,
+          [pendientes[i].id, quien, yo.email])
+      }
+      return { asignados: pendientes.length, evaluadores: evaluadores.length }
+    }
+
+    if (metodo === 'DELETE' && !p[1]) {
+      await query('delete from asignaciones_evaluacion')
       return { ok: true }
     }
   }

@@ -69,6 +69,17 @@ create table if not exists documentos (
   created_at timestamptz not null default now()
 );
 
+-- Reparto de evaluaciones: cada fila es un jugador que le toca evaluar a un
+-- miembro del staff. La fila se borra sola cuando esa evaluación se carga, así
+-- que "tener fila" equivale a "pendiente".
+create table if not exists asignaciones_evaluacion (
+  jugador_id uuid not null references jugadores(id) on delete cascade,
+  staff_email text not null references staff(email) on delete cascade,
+  asignado_por text,
+  created_at timestamptz not null default now(),
+  primary key (jugador_id)
+);
+
 create table if not exists lesiones (
   id uuid primary key default gen_random_uuid(),
   jugador_id uuid not null references jugadores(id) on delete cascade,
