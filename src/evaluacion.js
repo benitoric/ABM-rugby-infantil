@@ -245,6 +245,14 @@ export function areasParaEdad(edad) {
     .filter((a) => a.variables.length > 0)
 }
 
+// Promedio general (1 decimal) de una evaluación: todas las variables
+// cargadas pesan igual. Devuelve null si no hay ninguna.
+export function promedioGeneral(valores) {
+  const notas = Object.values(valores || {}).filter((n) => n >= 1)
+  if (!notas.length) return null
+  return Math.round((notas.reduce((x, y) => x + y, 0) / notas.length) * 10) / 10
+}
+
 // Promedio (1 decimal) por área de una evaluación guardada
 export function promediosPorArea(valores) {
   const res = []

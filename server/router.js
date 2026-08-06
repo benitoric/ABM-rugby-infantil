@@ -114,9 +114,15 @@ async function enrutar(metodo, p, b, req, url) {
   if (p[0] === 'jugadores') {
     if (metodo === 'GET' && !p[1]) {
       return query(`select ${COLS_JUGADOR},
-        (select max(e.fecha)::text from evaluaciones e where e.jugador_id = jugadores.id)
-          as ultima_evaluacion
-        from jugadores order by apellido, nombre`)
+        ue.fecha::text as ultima_evaluacion,
+        ue.valores as ultima_evaluacion_valores
+        from jugadores
+        left join lateral (
+          select e.fecha, e.valores from evaluaciones e
+          where e.jugador_id = jugadores.id
+          order by e.fecha desc, e.created_at desc limit 1
+        ) ue on true
+        order by apellido, nombre`)
     }
     if (metodo === 'POST' && !p[1]) {
       const d = datosJugador(b)

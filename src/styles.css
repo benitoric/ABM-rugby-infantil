@@ -238,14 +238,22 @@ h3 { font-size: 1rem; }
 /* Listado de jugadores como tabla: mismas columnas en encabezado y filas */
 .fila-jugador {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 54px 74px 74px;
+  grid-template-columns: minmax(0, 1fr) 52px 70px 72px;
   align-items: center;
   gap: 4px;
 }
 .col-eval { display: none; }
-.eval-fecha-movil { font-size: 0.66rem; color: var(--texto-suave); }
+.col-eval .badge { margin-top: 2px; }
+.eval-fecha-movil {
+  font-size: 0.62rem;
+  color: var(--texto-suave);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.eval-fecha-movil b { color: var(--primario); }
 @media (min-width: 520px) {
-  .fila-jugador { grid-template-columns: minmax(0, 1fr) 90px 110px 90px 80px; }
+  .fila-jugador { grid-template-columns: minmax(0, 1fr) 88px 104px 88px 84px; }
   .col-eval { display: block; }
   .eval-fecha-movil { display: none; }
 }
@@ -433,6 +441,7 @@ h3 { font-size: 1rem; }
   border-top: 1px solid var(--borde);
 }
 .eval-prom { background: var(--celeste); color: var(--primario); font-weight: 600; }
+.eval-general { background: var(--primario); color: #fff; }
 .eval-detalle-fila { font-size: 0.85rem; padding: 3px 0; }
 .eval-estrellas-off { color: #d5d9e2; letter-spacing: 2px; }
 .eval-delta { margin-left: 6px; font-size: 0.75rem; }
