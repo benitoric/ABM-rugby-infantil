@@ -62,6 +62,9 @@ create table if not exists documentos (
   nombre text not null,
   mime text not null,
   datos bytea not null,
+  -- Versión chica (160px) de las imágenes, para el listado de jugadores: así
+  -- la lista no tiene que bajar los archivos completos. Nula en los PDF.
+  miniatura bytea,
   subido_por text,
   created_at timestamptz not null default now()
 );
