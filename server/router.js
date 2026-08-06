@@ -25,7 +25,8 @@ const COLS_SEGUIMIENTO = `id, jugador_id, fecha::text as fecha, area, valoracion
 const COLS_EVALUACION = `id, jugador_id, fecha::text as fecha, valores, comentario, autor_email`
 // Metadatos del documento: nunca el contenido (se pide aparte al abrirlo)
 const COLS_DOCUMENTO = `id, jugador_id, tipo, nombre, mime,
-  octet_length(datos) as bytes, created_at::date::text as fecha, subido_por`
+  octet_length(datos) as bytes, created_at::date::text as fecha, subido_por,
+  miniatura is not null as tiene_miniatura`
 
 // Formatos aceptados para la documentación escaneada
 const MIMES_DOC = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
@@ -143,15 +144,25 @@ async function enrutar(metodo, p, b, req, url) {
   // ---------- jugadores ----------
   if (p[0] === 'jugadores') {
     if (metodo === 'GET' && !p[1]) {
+      // La miniatura del primer documento con imagen acompaña al listado: son
+      // unos pocos KB por jugador, contra cientos si se mandara el archivo.
       return query(`select ${COLS_JUGADOR},
         ue.fecha::text as ultima_evaluacion,
-        ue.valores as ultima_evaluacion_valores
+        ue.valores as ultima_evaluacion_valores,
+        doc.documento_id,
+        doc.miniatura
         from jugadores
         left join lateral (
           select e.fecha, e.valores from evaluaciones e
           where e.jugador_id = jugadores.id
           order by e.fecha desc, e.created_at desc limit 1
         ) ue on true
+        left join lateral (
+          select d.id as documento_id, encode(d.miniatura, 'base64') as miniatura
+          from documentos d
+          where d.jugador_id = jugadores.id and d.miniatura is not null
+          order by d.created_at limit 1
+        ) doc on true
         order by apellido, nombre`)
     }
     if (metodo === 'POST' && !p[1]) {
@@ -350,11 +361,22 @@ async function enrutar(metodo, p, b, req, url) {
       const bytes = Math.floor((datos.length * 3) / 4)
       if (bytes > MAX_DOC_BYTES) throw { codigo: 413, error: 'archivo_muy_grande' }
       const filas = await query(
-        `insert into documentos (jugador_id, tipo, nombre, mime, datos, subido_por)
-         values ($1, 'dni', $2, $3, decode($4, 'base64'), $5)
+        `insert into documentos (jugador_id, tipo, nombre, mime, datos, miniatura, subido_por)
+         values ($1, 'dni', $2, $3, decode($4, 'base64'),
+                 case when $5::text is null then null else decode($5, 'base64') end, $6)
          returning ${COLS_DOCUMENTO}`,
-        [b.jugador_id, b.nombre.trim().slice(0, 120), b.mime, datos, yo.email])
+        [b.jugador_id, b.nombre.trim().slice(0, 120), b.mime, datos,
+         b.miniatura || null, yo.email])
       return filas[0]
+    }
+    // Miniatura recortada por el navegador: al cambiar el encuadre de la cara,
+    // y para los documentos subidos antes de que las miniaturas existieran.
+    if (metodo === 'PUT' && p[1] && p[2] === 'miniatura') {
+      if (!b?.miniatura) throw { codigo: 400, error: 'faltan_datos' }
+      await query(
+        `update documentos set miniatura = decode($1, 'base64') where id = $2`,
+        [b.miniatura, p[1]])
+      return { ok: true }
     }
     if (metodo === 'DELETE' && p[1]) {
       await query('delete from documentos where id = $1', [p[1]])

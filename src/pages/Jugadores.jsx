@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { estadoJugador, fechaCompacta, fechaCorta, nombreCompleto, APTITUDES, ESTADOS } from '../helpers.js'
 import { promedioGeneral } from '../evaluacion.js'
+import { base64ABlob } from '../archivos.js'
 import Ficha from './Ficha.jsx'
 
 const VACIO = {
@@ -19,6 +20,27 @@ export default function Jugadores() {
   const [importando, setImportando] = useState(false)
   const [cargando, setCargando] = useState(true)
   const [orden, setOrden] = useState({ campo: 'nombre', asc: true })
+  const [foto, setFoto] = useState(null)
+
+  // Ampliación de la foto del DNI: se baja el archivo completo recién al tocarla
+  async function abrirFoto(j) {
+    setFoto({ jugador: j, url: null })
+    try {
+      const r = await api(`documentos/${j.documento_id}`)
+      setFoto({ jugador: j, url: URL.createObjectURL(base64ABlob(r.datos, r.mime)) })
+    } catch {
+      setFoto(null)
+    }
+  }
+  function cerrarFoto() {
+    setFoto((f) => { if (f?.url) URL.revokeObjectURL(f.url); return null })
+  }
+  useEffect(() => {
+    if (!foto) return
+    const salir = (e) => { if (e.key === 'Escape') cerrarFoto() }
+    document.addEventListener('keydown', salir)
+    return () => document.removeEventListener('keydown', salir)
+  }, [foto])
 
   async function cargar() {
     setJugadores(await api('jugadores'))
@@ -144,7 +166,17 @@ export default function Jugadores() {
       {ordenados.map((j) => (
         <button key={j.id} className="jugador-item compacto fila-jugador" onClick={() => setFichaDe(j.id)}>
           <div className="fila celda-nombre">
-            <div className="avatar">{j.nombre[0]}{j.apellido[0]}</div>
+            {j.miniatura ? (
+              <img
+                className="avatar-foto"
+                src={`data:image/jpeg;base64,${j.miniatura}`}
+                alt={`DNI de ${nombreCompleto(j)}`}
+                title="Tocá para ampliar el DNI"
+                onClick={(e) => { e.stopPropagation(); abrirFoto(j) }}
+              />
+            ) : (
+              <div className="avatar">{j.nombre[0]}{j.apellido[0]}</div>
+            )}
             <div className="crece" style={{ minWidth: 0 }}>
               <div className="nombre-jugador">{nombreCompleto(j)}</div>
               <div className="eval-fecha-movil">
@@ -193,6 +225,21 @@ export default function Jugadores() {
           onCerrar={() => setEditando(null)}
           onGuardado={() => { setEditando(null); cargar() }}
         />
+      )}
+
+      {foto && (
+        <div className="lightbox" onClick={cerrarFoto}>
+          <button className="lightbox-cerrar" onClick={cerrarFoto} aria-label="Cerrar">✕</button>
+          {foto.url ? (
+            <img
+              src={foto.url}
+              alt={`DNI de ${nombreCompleto(foto.jugador)}`}
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <div className="lightbox-cargando">Cargando…</div>
+          )}
+        </div>
       )}
 
       {importando && (

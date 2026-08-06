@@ -1,16 +1,44 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api.js'
 import { fechaCorta } from '../helpers.js'
-import { base64ABlob, prepararArchivo, tamanoLegible } from '../archivos.js'
+import { base64ABlob, generarMiniatura, prepararArchivo, tamanoLegible } from '../archivos.js'
+import RecorteCara from './RecorteCara.jsx'
 
 export default function Documentos({ jugadorId, documentos, onCambio }) {
   const [subiendo, setSubiendo] = useState(false)
   const [error, setError] = useState('')
   const [viendo, setViendo] = useState(null)
+  // Archivo elegido esperando que se encuadre la cara, y recorte de uno ya subido
+  const [aEncuadrar, setAEncuadrar] = useState(null)
+  const [reencuadrando, setReencuadrando] = useState(null)
   const entrada = useRef(null)
+  const rellenadas = useRef(new Set())
 
   // Las URLs de los blobs se liberan al cerrar la vista o salir de la ficha
   useEffect(() => () => { if (viendo) URL.revokeObjectURL(viendo.url) }, [viendo])
+
+  // Los documentos subidos antes de que existieran las miniaturas no tienen
+  // una: se genera acá, una sola vez, para que aparezcan en el listado.
+  useEffect(() => {
+    const pendientes = documentos.filter((d) =>
+      !d.tiene_miniatura && d.mime.startsWith('image/') && !rellenadas.current.has(d.id))
+    if (!pendientes.length) return
+    let cancelado = false
+    ;(async () => {
+      let alguna = false
+      for (const d of pendientes) {
+        rellenadas.current.add(d.id)
+        try {
+          const r = await api(`documentos/${d.id}`)
+          const miniatura = await generarMiniatura(base64ABlob(r.datos, r.mime))
+          await api(`documentos/${d.id}/miniatura`, { method: 'PUT', body: { miniatura } })
+          alguna = true
+        } catch { /* si falla se reintenta la próxima vez que se abra la ficha */ }
+      }
+      if (alguna && !cancelado) onCambio()
+    })()
+    return () => { cancelado = true }
+  }, [documentos])
 
   async function subir(e) {
     const file = e.target.files?.[0]
@@ -20,17 +48,42 @@ export default function Documentos({ jugadorId, documentos, onCambio }) {
     setError('')
     try {
       const preparado = await prepararArchivo(file)
+      // Las imágenes pasan primero por el encuadre de la cara
+      if (preparado.esImagen) {
+        setAEncuadrar(preparado)
+        setSubiendo(false)
+        return
+      }
+      await guardar(preparado, null)
+    } catch (err) {
+      setError(err?.message || 'No se pudo subir el archivo.')
+      setSubiendo(false)
+    }
+  }
+
+  async function guardar({ nombre, mime, datos }, miniatura) {
+    setSubiendo(true)
+    try {
       await api('documentos', {
         method: 'POST',
-        body: { jugador_id: jugadorId, ...preparado },
+        body: { jugador_id: jugadorId, nombre, mime, datos, miniatura },
       })
       onCambio()
-    } catch (err) {
-      setError(err?.message === 'archivo_muy_grande'
-        ? 'El archivo es demasiado grande.'
-        : err?.message || 'No se pudo subir el archivo.')
+    } catch {
+      setError('No se pudo subir el archivo.')
     }
     setSubiendo(false)
+  }
+
+  // Rehacer el encuadre de un documento ya subido
+  async function reencuadrar(d) {
+    setError('')
+    try {
+      const r = await api(`documentos/${d.id}`)
+      setReencuadrando({ doc: d, blob: base64ABlob(r.datos, r.mime) })
+    } catch {
+      setError('No se pudo abrir el archivo.')
+    }
   }
 
   async function ver(d) {
@@ -109,9 +162,13 @@ export default function Documentos({ jugadorId, documentos, onCambio }) {
               {d.mime === 'application/pdf' ? (
                 <button className="btn sec chico" onClick={() => descargar(d)}>⬇ Abrir</button>
               ) : (
-                <button className="btn sec chico" onClick={() => ver(d)}>
-                  {viendo?.id === d.id ? 'Ocultar' : 'Ver'}
-                </button>
+                <>
+                  <button className="btn sec chico" title="Cambiar el encuadre de la cara"
+                          onClick={() => reencuadrar(d)}>◻</button>
+                  <button className="btn sec chico" onClick={() => ver(d)}>
+                    {viendo?.id === d.id ? 'Ocultar' : 'Ver'}
+                  </button>
+                </>
               )}
               <button className="btn peligro chico" onClick={() => borrar(d)}>Borrar</button>
             </div>
@@ -128,6 +185,27 @@ export default function Documentos({ jugadorId, documentos, onCambio }) {
           )}
         </div>
       ))}
+
+      {aEncuadrar && (
+        <RecorteCara
+          blob={aEncuadrar.blob}
+          onCancelar={() => setAEncuadrar(null)}
+          onListo={(miniatura) => { const p = aEncuadrar; setAEncuadrar(null); guardar(p, miniatura) }}
+        />
+      )}
+
+      {reencuadrando && (
+        <RecorteCara
+          blob={reencuadrando.blob}
+          onCancelar={() => setReencuadrando(null)}
+          onListo={async (miniatura) => {
+            const id = reencuadrando.doc.id
+            setReencuadrando(null)
+            await api(`documentos/${id}/miniatura`, { method: 'PUT', body: { miniatura } })
+            onCambio()
+          }}
+        />
+      )}
     </>
   )
 }
