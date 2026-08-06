@@ -442,6 +442,8 @@ h3 { font-size: 1rem; }
 
 /* ---------- aviso de evaluaciones asignadas ---------- */
 .aviso-evaluar { border-left: 4px solid var(--dorado); }
+.aviso-revisar { border-left: 4px solid var(--info); }
+.eval-detalle-fila.discrepa { background: #fff4f4; border-radius: 6px; padding: 3px 6px; }
 .asignado-item {
   display: flex;
   align-items: center;

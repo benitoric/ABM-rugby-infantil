@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { estadoJugador, fechaCompacta, fechaCorta, nombreCompleto, APTITUDES, ESTADOS } from '../helpers.js'
-import { promedioGeneral } from '../evaluacion.js'
+import { promedioGeneral, valoresConsolidados } from '../evaluacion.js'
 import { base64ABlob } from '../archivos.js'
 import Ficha from './Ficha.jsx'
 
@@ -23,6 +23,7 @@ export default function Jugadores() {
   const [foto, setFoto] = useState(null)
   const [asign, setAsign] = useState(null)
   const [autoEvaluar, setAutoEvaluar] = useState(false)
+  const [revisar, setRevisar] = useState(null)
   const [repartiendo, setRepartiendo] = useState(false)
 
   // Ampliación de la foto del DNI: se baja el archivo completo recién al tocarla
@@ -56,13 +57,15 @@ export default function Jugadores() {
   async function repartir() {
     if (!confirm(
       `¿Repartir al azar los ${asign.sin_repartir} jugadores que necesitan evaluación ` +
-      'entre los entrenadores?\n\nA cada uno le va a aparecer el aviso con los chicos ' +
-      'que le tocan. Quedan afuera los managers y los preparadores físicos que no entrenan.'
+      'entre los entrenadores?\n\nCada uno evalúa a su grupo y después su pareja ' +
+      'cruzada revisa ese trabajo, a ciegas. Quedan afuera los managers y los ' +
+      'preparadores físicos que no entrenan.'
     )) return
     setRepartiendo(true)
     try {
       const r = await api('asignaciones/repartir', { method: 'POST' })
-      alert(`Listo: ${r.asignados} jugadores repartidos entre ${r.evaluadores} entrenadores.`)
+      alert(`Listo: ${r.asignados} jugadores repartidos entre ${r.evaluadores} entrenadores.` +
+        (r.cruzado ? '' : '\n\nHay un solo entrenador cargado, así que esta vuelta no hay revisión cruzada.'))
       await cargar()
     } catch (e) {
       alert(e?.error === 'sin_evaluadores'
@@ -78,9 +81,27 @@ export default function Jugadores() {
     cargar()
   }
 
+  // Nota final del jugador: promedia las dos miradas cuando hubo revisión
+  function promedioFinal(j) {
+    return promedioGeneral(valoresConsolidados({
+      valores: j.ultima_evaluacion_valores,
+      valores_revisor: j.ultima_evaluacion_revisor,
+    }))
+  }
+
   function evaluarA(jugadorId) {
+    setRevisar(null)
     setAutoEvaluar(true)
     setFichaDe(jugadorId)
+  }
+
+  function revisarA(a) {
+    setAutoEvaluar(false)
+    setRevisar({
+      evaluacion_id: a.evaluacion_id,
+      quien: [a.evaluo_nombre, a.evaluo_apellido].filter(Boolean).join(' ') || a.evaluo,
+    })
+    setFichaDe(a.jugador_id)
   }
 
   const visibles = jugadores.filter((j) => {
@@ -118,7 +139,8 @@ export default function Jugadores() {
       <Ficha
         jugadorId={fichaDe}
         evaluarAlAbrir={autoEvaluar}
-        onVolver={() => { setFichaDe(null); setAutoEvaluar(false); cargar() }}
+        revisar={revisar}
+        onVolver={() => { setFichaDe(null); setAutoEvaluar(false); setRevisar(null); cargar() }}
       />
     )
   }
@@ -142,13 +164,31 @@ export default function Jugadores() {
         <div className="tarjeta aviso-evaluar">
           <h3>📋 Te toca evaluar a {asign.mias.length} {asign.mias.length === 1 ? 'jugador' : 'jugadores'}</h3>
           <p className="mini" style={{ margin: '4px 0 8px' }}>
-            Tocá cada nombre para cargar su evaluación. Van saliendo de la lista a medida que las completás.
+            Tocá cada nombre para cargar su evaluación. Después tu pareja la revisa.
           </p>
           {asign.mias.map((a) => (
             <button key={a.jugador_id} className="asignado-item" onClick={() => evaluarA(a.jugador_id)}>
               <span className="crece">{a.apellido}, {a.nombre}</span>
               <span className="mini">
                 {a.ultima_evaluacion ? `últ. ${fechaCompacta(a.ultima_evaluacion)}` : 'sin evaluar'} →
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {asign?.revisar?.length > 0 && (
+        <div className="tarjeta aviso-revisar">
+          <h3>🙈 Te toca revisar {asign.revisar.length} {asign.revisar.length === 1 ? 'evaluación' : 'evaluaciones'}</h3>
+          <p className="mini" style={{ margin: '4px 0 8px' }}>
+            Cargás tu propia mirada sin ver la del primer evaluador. Recién al
+            guardar aparecen las dos juntas y se marcan las diferencias.
+          </p>
+          {asign.revisar.map((a) => (
+            <button key={a.jugador_id} className="asignado-item" onClick={() => revisarA(a)}>
+              <span className="crece">{a.apellido}, {a.nombre}</span>
+              <span className="mini">
+                evaluó {[a.evaluo_nombre, a.evaluo_apellido].filter(Boolean).join(' ') || a.evaluo} →
               </span>
             </button>
           ))}
@@ -175,11 +215,13 @@ export default function Jugadores() {
           )}
           {asign.por_evaluador.length > 0 && (
             <>
-              <div className="mini" style={{ marginTop: 10, fontWeight: 700 }}>Pendientes por entrenador</div>
+              <div className="mini" style={{ marginTop: 10, fontWeight: 700 }}>
+                Pendientes por entrenador (evaluar · revisar)
+              </div>
               {asign.por_evaluador.map((e) => (
                 <div key={e.staff_email} className="fila entre mini" style={{ marginTop: 3 }}>
                   <span>{[e.nombre, e.apellido].filter(Boolean).join(' ') || e.staff_email}</span>
-                  <b>{e.pendientes}</b>
+                  <b>{e.evaluar} · {e.revisar}</b>
                 </div>
               ))}
               <button className="btn peligro chico" style={{ marginTop: 10 }} onClick={cancelarReparto}>
@@ -271,8 +313,8 @@ export default function Jugadores() {
                 {j.ultima_evaluacion ? (
                   <>
                     📋 {fechaCompacta(j.ultima_evaluacion)}
-                    {promedioGeneral(j.ultima_evaluacion_valores) != null && (
-                      <b> · {promedioGeneral(j.ultima_evaluacion_valores)}★</b>
+                    {promedioFinal(j) != null && (
+                      <b> · {promedioFinal(j)}★</b>
                     )}
                   </>
                 ) : 'Sin evaluar'}
@@ -296,9 +338,9 @@ export default function Jugadores() {
             {j.ultima_evaluacion ? (
               <>
                 <div>{fechaCorta(j.ultima_evaluacion)}</div>
-                {promedioGeneral(j.ultima_evaluacion_valores) != null && (
+                {promedioFinal(j) != null && (
                   <span className="badge eval-prom">
-                    {promedioGeneral(j.ultima_evaluacion_valores)}★
+                    {promedioFinal(j)}★
                   </span>
                 )}
               </>

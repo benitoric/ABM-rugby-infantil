@@ -22,7 +22,8 @@ const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora,
   hora_fin::text as hora_fin, modalidad, rival, lugar, notas,
   suspendido, motivo_suspension, nota_suspension`
 const COLS_SEGUIMIENTO = `id, jugador_id, fecha::text as fecha, area, valoracion, comentario, autor_email`
-const COLS_EVALUACION = `id, jugador_id, fecha::text as fecha, valores, comentario, autor_email`
+const COLS_EVALUACION = `id, jugador_id, fecha::text as fecha, valores, comentario, autor_email,
+  revisor_email, valores_revisor, comentario_revisor, revisado_en::date::text as revisado_en`
 // Metadatos del documento: nunca el contenido (se pide aparte al abrirlo)
 const COLS_DOCUMENTO = `id, jugador_id, tipo, nombre, mime,
   octet_length(datos) as bytes, created_at::date::text as fecha, subido_por,
@@ -57,6 +58,43 @@ const SIN_EVALUAR = `
 
 // Horario del entrenamiento de rutina (lunes y miércoles)
 const RUTINA = { hora: '19:30', hora_fin: '21:00' }
+
+// Del cuerpo solo se guardan puntajes enteros de 1 a 5
+function puntajesValidos(crudo) {
+  const valores = {}
+  for (const [k, v] of Object.entries(crudo || {})) {
+    const n = Number(v)
+    if (Number.isInteger(n) && n >= 1 && n <= 5) valores[k] = n
+  }
+  return valores
+}
+
+// Parejas cruzadas al azar: cada uno revisa lo que evaluó el otro. Con un
+// número impar, los tres últimos forman una ronda (A→B→C→A).
+function armarParejas(emails) {
+  const mezclados = [...emails]
+  for (let i = mezclados.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[mezclados[i], mezclados[j]] = [mezclados[j], mezclados[i]]
+  }
+  const revisorDe = {}
+  let i = 0
+  while (mezclados.length - i >= 2) {
+    // Los tres últimos, cuando sobra uno: ronda de a tres
+    if (mezclados.length - i === 3) {
+      const [a, b, c] = mezclados.slice(i)
+      revisorDe[a] = b; revisorDe[b] = c; revisorDe[c] = a
+      i += 3
+      break
+    }
+    const a = mezclados[i]
+    const b = mezclados[i + 1]
+    revisorDe[a] = b
+    revisorDe[b] = a
+    i += 2
+  }
+  return revisorDe
+}
 
 function validarMotivo(m) {
   if (!m) return null
@@ -166,11 +204,12 @@ async function enrutar(metodo, p, b, req, url) {
       return query(`select ${COLS_JUGADOR},
         ue.fecha::text as ultima_evaluacion,
         ue.valores as ultima_evaluacion_valores,
+        ue.valores_revisor as ultima_evaluacion_revisor,
         doc.documento_id,
         doc.miniatura
         from jugadores
         left join lateral (
-          select e.fecha, e.valores from evaluaciones e
+          select e.fecha, e.valores, e.valores_revisor from evaluaciones e
           where e.jugador_id = jugadores.id
           order by e.fecha desc, e.created_at desc limit 1
         ) ue on true
@@ -299,22 +338,39 @@ async function enrutar(metodo, p, b, req, url) {
 
   // ---------- evaluaciones periódicas ----------
   if (p[0] === 'evaluaciones') {
+    // Segunda mirada, a ciegas: el revisor puntúa sin ver la nota del primero
+    if (metodo === 'POST' && p[1] && p[2] === 'revision') {
+      const valores = puntajesValidos(b?.valores)
+      if (!Object.keys(valores).length) throw { codigo: 400, error: 'faltan_datos' }
+      const filas = await query(
+        `update evaluaciones
+         set revisor_email = $1, valores_revisor = $2, comentario_revisor = $3,
+             revisado_en = now()
+         where id = $4 returning ${COLS_EVALUACION}`,
+        [yo.email, JSON.stringify(valores), b.comentario_revisor?.trim() || null, p[1]])
+      if (!filas.length) throw { codigo: 404, error: 'no_existe' }
+      await query('delete from asignaciones_evaluacion where evaluacion_id = $1', [p[1]])
+      return filas[0]
+    }
     if (metodo === 'POST' && !p[1]) {
       if (!b?.jugador_id) throw { codigo: 400, error: 'faltan_datos' }
-      // Solo se guardan valores enteros de 1 a 5
-      const valores = {}
-      for (const [k, v] of Object.entries(b.valores || {})) {
-        const n = Number(v)
-        if (Number.isInteger(n) && n >= 1 && n <= 5) valores[k] = n
-      }
+      const valores = puntajesValidos(b.valores)
       if (!Object.keys(valores).length) throw { codigo: 400, error: 'faltan_datos' }
       const filas = await query(
         `insert into evaluaciones (jugador_id, fecha, valores, comentario, autor_email)
          values ($1, $2, $3, $4, $5) returning ${COLS_EVALUACION}`,
         [b.jugador_id, b.fecha || new Date().toISOString().slice(0, 10),
          JSON.stringify(valores), b.comentario?.trim() || null, yo.email])
-      // Cargada la evaluación, el jugador deja de estar pendiente de reparto
-      await query('delete from asignaciones_evaluacion where jugador_id = $1', [b.jugador_id])
+      // Con la primera nota cargada, el jugador pasa a manos de su revisor.
+      // Si no hay pareja asignada, la asignación se cierra acá.
+      const paso = await query(
+        `update asignaciones_evaluacion
+         set etapa = 'revisar', evaluacion_id = $1
+         where jugador_id = $2 and etapa = 'evaluar' and revisor_email is not null
+         returning jugador_id`, [filas[0].id, b.jugador_id])
+      if (!paso.length) {
+        await query('delete from asignaciones_evaluacion where jugador_id = $1', [b.jugador_id])
+      }
       return filas[0]
     }
     if (metodo === 'DELETE' && p[1]) {
@@ -327,24 +383,38 @@ async function enrutar(metodo, p, b, req, url) {
   if (p[0] === 'asignaciones') {
     if (metodo === 'GET' && !p[1]) {
       const mias = await query(
-        `select a.jugador_id, j.nombre, j.apellido, j.posicion,
+        `select a.jugador_id, j.nombre, j.apellido, j.posicion, a.evaluacion_id,
                 ue.fecha::text as ultima_evaluacion
          from asignaciones_evaluacion a
          join jugadores j on j.id = a.jugador_id
          left join lateral (
            select max(e.fecha) as fecha from evaluaciones e where e.jugador_id = j.id
          ) ue on true
-         where a.staff_email = $1
+         where a.etapa = 'evaluar' and a.staff_email = $1
+         order by j.apellido, j.nombre`, [yo.email])
+      // Segunda etapa: lo que me toca revisar de mi pareja
+      const revisar = await query(
+        `select a.jugador_id, j.nombre, j.apellido, a.evaluacion_id, a.staff_email as evaluo,
+                s.nombre as evaluo_nombre, s.apellido as evaluo_apellido
+         from asignaciones_evaluacion a
+         join jugadores j on j.id = a.jugador_id
+         left join staff s on s.email = a.staff_email
+         where a.etapa = 'revisar' and a.revisor_email = $1
          order by j.apellido, j.nombre`, [yo.email])
       const porEvaluador = await query(
-        `select a.staff_email, s.nombre, s.apellido, count(*)::int as pendientes
-         from asignaciones_evaluacion a
-         join staff s on s.email = a.staff_email
-         group by a.staff_email, s.nombre, s.apellido
+        `select quien as staff_email, s.nombre, s.apellido,
+                count(*) filter (where etapa = 'evaluar')::int as evaluar,
+                count(*) filter (where etapa = 'revisar')::int as revisar
+         from (
+           select case when etapa = 'evaluar' then staff_email else revisor_email end as quien, etapa
+           from asignaciones_evaluacion
+         ) a
+         join staff s on s.email = a.quien
+         group by quien, s.nombre, s.apellido
          order by s.nombre, s.apellido`)
       const [{ n }] = await query(
         `select count(*)::int as n from jugadores j ${SIN_EVALUAR}`)
-      return { mias, por_evaluador: porEvaluador, sin_repartir: n }
+      return { mias, revisar, por_evaluador: porEvaluador, sin_repartir: n }
     }
 
     // Reparte al azar, en partes parejas, entre los entrenadores
@@ -356,17 +426,24 @@ async function enrutar(metodo, p, b, req, url) {
       const pendientes = await query(
         `select j.id from jugadores j ${SIN_EVALUAR} order by random()`)
       if (!pendientes.length) return { asignados: 0, evaluadores: evaluadores.length }
+      // Cada evaluador queda cruzado con una pareja, que después revisa su
+      // trabajo. Con un solo entrenador no hay con quién cruzar.
+      const revisorDe = armarParejas(evaluadores.map((e) => e.email))
       // Se empieza en un evaluador al azar para que el resto no reciba
       // siempre uno menos cuando el reparto no es exacto.
       const inicio = Math.floor(Math.random() * evaluadores.length)
       for (let i = 0; i < pendientes.length; i++) {
         const quien = evaluadores[(inicio + i) % evaluadores.length].email
         await query(
-          `insert into asignaciones_evaluacion (jugador_id, staff_email, asignado_por)
-           values ($1, $2, $3) on conflict (jugador_id) do nothing`,
-          [pendientes[i].id, quien, yo.email])
+          `insert into asignaciones_evaluacion (jugador_id, staff_email, revisor_email, asignado_por)
+           values ($1, $2, $3, $4) on conflict (jugador_id) do nothing`,
+          [pendientes[i].id, quien, revisorDe[quien] || null, yo.email])
       }
-      return { asignados: pendientes.length, evaluadores: evaluadores.length }
+      return {
+        asignados: pendientes.length,
+        evaluadores: evaluadores.length,
+        cruzado: Object.keys(revisorDe).length > 0,
+      }
     }
 
     if (metodo === 'DELETE' && !p[1]) {

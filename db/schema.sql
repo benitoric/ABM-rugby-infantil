@@ -49,6 +49,13 @@ create table if not exists evaluaciones (
   valores jsonb not null default '{}',
   comentario text,
   autor_email text,
+  -- Revisión cruzada: un segundo entrenador vuelve a puntuar al jugador sin
+  -- ver la primera nota. Donde los dos coinciden el dato es sólido; donde
+  -- difieren, queda marcado para conversarlo.
+  revisor_email text,
+  valores_revisor jsonb,
+  comentario_revisor text,
+  revisado_en timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -75,6 +82,11 @@ create table if not exists documentos (
 create table if not exists asignaciones_evaluacion (
   jugador_id uuid not null references jugadores(id) on delete cascade,
   staff_email text not null references staff(email) on delete cascade,
+  -- Pareja cruzada: quien revisa lo que evaluó staff_email
+  revisor_email text references staff(email) on delete set null,
+  -- 'evaluar' = le toca al primero; 'revisar' = le toca al revisor
+  etapa text not null default 'evaluar' check (etapa in ('evaluar','revisar')),
+  evaluacion_id uuid references evaluaciones(id) on delete cascade,
   asignado_por text,
   created_at timestamptz not null default now(),
   primary key (jugador_id)
