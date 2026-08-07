@@ -173,6 +173,11 @@ create table if not exists tiempos (
 create table if not exists tiempo_jugadores (
   tiempo_id uuid not null references tiempos(id) on delete cascade,
   jugador_id uuid not null references jugadores(id) on delete cascade,
+  -- Número de camiseta en la formación de 13 (sin 6 ni 7). Null = en cancha
+  -- sin puesto asignado (partidos viejos o carga rápida).
+  puesto smallint check (puesto between 1 and 15 and puesto not in (6, 7)),
+  -- Jugador prestado al rival ese tiempo (cuenta como tiempo jugado)
+  prestado boolean not null default false,
   primary key (tiempo_id, jugador_id)
 );
 

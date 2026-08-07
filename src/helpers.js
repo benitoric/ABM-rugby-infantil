@@ -41,6 +41,35 @@ export function abrevAptitudes(j) {
   return APTITUDES.filter((a) => lista.includes(a.value)).map((a) => a.abrev).join('·')
 }
 
+// Formación de 13 del rugby infantil: 6 forwards y 7 backs. El 9 y el 10
+// (pareja de medios) además deberían tener la aptitud de conducción.
+export const FORMACION = [
+  { num: 1, label: 'Pilar', tipo: 'forward' },
+  { num: 2, label: 'Hooker', tipo: 'forward' },
+  { num: 3, label: 'Pilar', tipo: 'forward' },
+  { num: 4, label: 'Segunda línea', tipo: 'forward' },
+  { num: 5, label: 'Segunda línea', tipo: 'forward' },
+  { num: 8, label: 'Octavo', tipo: 'forward' },
+  { num: 9, label: 'Medio scrum', tipo: 'back', conductor: true },
+  { num: 10, label: 'Apertura', tipo: 'back', conductor: true },
+  { num: 11, label: 'Win izquierdo', tipo: 'back' },
+  { num: 12, label: 'Primer centro', tipo: 'back' },
+  { num: 13, label: 'Segundo centro', tipo: 'back' },
+  { num: 14, label: 'Win derecho', tipo: 'back' },
+  { num: 15, label: 'Fullback', tipo: 'back' },
+]
+
+export function puestoFormacion(num) {
+  return FORMACION.find((f) => f.num === num)
+}
+
+// ¿El jugador puede ocupar ese puesto? Los mixtos juegan en cualquier lado.
+export function puedeJugarDe(jugador, puestoNum) {
+  const p = puestoFormacion(puestoNum)
+  if (!p || !jugador.posicion || jugador.posicion === 'Mixto') return true
+  return jugador.posicion.toLowerCase() === p.tipo
+}
+
 export const AREAS = [
   { value: 'tecnica', label: 'Técnica' },
   { value: 'fisica', label: 'Física' },
