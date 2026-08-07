@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
 import {
-  abrevAptitudes, DIFICULTADES, etiquetaDificultad, etiquetaMotivo, etiquetaPartido, fechaCorta,
-  FORMACION, nombreCompleto, puedeJugarDe,
+  abrevAptitudes, APTITUDES, DIFICULTADES, etiquetaDificultad, etiquetaMotivo, etiquetaPartido,
+  fechaCorta, FORMACION, nombreCompleto, puedeJugarDe,
 } from '../helpers.js'
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 
@@ -97,6 +97,8 @@ function ArmadoPartido({ partido }) {
   const [vista, setVista] = useState('bloques')
   const [tiempoSel, setTiempoSel] = useState({})
   const [editandoBloque, setEditandoBloque] = useState(null)
+  const [sugerencia, setSugerencia] = useState(null)
+  const [califs, setCalifs] = useState(null)
   const [listo, setListo] = useState(false)
   const [sugerencias, recargarSugerencias] = useSugerencias()
 
@@ -184,6 +186,53 @@ function ArmadoPartido({ partido }) {
     }
   }
 
+  // Pide al servidor una propuesta de reparto entre bloques. Van los
+  // presentes no lesionados (o todos los no lesionados si aún no se tomó
+  // asistencia). No persiste nada hasta tocar "Aplicar".
+  async function sugerirBloques() {
+    const presentes = jugadores.filter((j) => asistencia[j.id] === 'presente')
+    const base = presentes.length ? presentes : jugadores
+    const elegibles = base.filter((j) => j.estado !== 'lesionado')
+    const r = await api('partido/sugerir-bloques', {
+      method: 'POST',
+      body: { evento_id: partido.id, jugador_ids: elegibles.map((j) => j.id) },
+    })
+    setCalifs(r.califs)
+    setSugerencia(r)
+  }
+
+  async function aplicarSugerencia() {
+    const propuesta = sugerencia.asignacion
+    const cambios = Object.keys({ ...asignacion, ...propuesta })
+      .filter((jid) => (asignacion[jid] || null) !== (propuesta[jid] || null))
+      .map((jid) => [jid, propuesta[jid] || null])
+    setSugerencia(null)
+    setAsignacion((m) => {
+      const copia = { ...m }
+      for (const [jid, bid] of cambios) copia[jid] = bid
+      return copia
+    })
+    // el que cambia de bloque sale de los tiempos que tuviera cargados
+    setEnCancha((m) => {
+      const copia = { ...m }
+      for (const [jid] of cambios) {
+        for (const t of tiempos) {
+          if (copia[t.id]?.[jid]) {
+            copia[t.id] = { ...copia[t.id] }
+            delete copia[t.id][jid]
+          }
+        }
+      }
+      return copia
+    })
+    for (const [jid, bid] of cambios) {
+      await api('partido/asignar', {
+        method: 'POST',
+        body: { evento_id: partido.id, jugador_id: jid, bloque_id: bid },
+      })
+    }
+  }
+
   async function agregarTiempo(bloqueId) {
     const delBloque = tiempos.filter((t) => t.bloque_id === bloqueId)
     if (delBloque.length >= MAX_TIEMPOS) return
@@ -233,12 +282,55 @@ function ArmadoPartido({ partido }) {
 
       {vista === 'bloques' && (
         <>
-          <p className="mini">
-            Asigná cada jugador a un bloque. Los presentes aparecen primero.
-            Tocá de nuevo el mismo botón para sacarlo del bloque.
-          </p>
+          <div className="fila entre">
+            <p className="mini crece" style={{ margin: 0 }}>
+              Asigná cada jugador a un bloque. Los presentes aparecen primero.
+              Tocá de nuevo el mismo botón para sacarlo del bloque.
+            </p>
+            {!sugerencia && (
+              <button className="btn chico" onClick={sugerirBloques}>✨ Sugerir armado</button>
+            )}
+          </div>
+
+          {sugerencia && (
+            <div className="tarjeta" style={{ borderLeft: '4px solid var(--primario)' }}>
+              <div className="fila entre">
+                <b>Propuesta de armado</b>
+                <div className="fila" style={{ gap: 6 }}>
+                  <button className="btn chico" onClick={aplicarSugerencia}>Aplicar</button>
+                  <button className="btn sec chico" onClick={() => setSugerencia(null)}>Descartar</button>
+                </div>
+              </div>
+              <p className="mini" style={{ margin: '6px 0 0' }}>
+                Balancea fuerza (última evaluación), forwards/backs y aptitudes.
+                {sugerencia.sesgo !== 0 && ` Por la dificultad de los rivales, el Bloque ${sugerencia.sesgo > 0 ? bloques[1].numero : bloques[0].numero} queda ~${Math.abs(sugerencia.sesgo).toFixed(1)} pts más fuerte.`}
+                {' '}Podés retocarla con los botones B1/B2 antes de aplicar.
+              </p>
+              {sugerencia.sin_evaluacion.length > 0 && (
+                <p className="mini" style={{ margin: '6px 0 0', color: 'var(--warn)' }}>
+                  Sin evaluación (se les asume la mediana del grupo):{' '}
+                  {sugerencia.sin_evaluacion
+                    .map((id) => jugadores.find((j) => j.id === id)?.apellido)
+                    .filter(Boolean).join(', ')}
+                </p>
+              )}
+            </div>
+          )}
+
+          {califs && (
+            <BalanceBloques
+              bloques={bloques}
+              jugadores={jugadores}
+              asignacion={sugerencia ? sugerencia.asignacion : asignacion}
+              califs={califs}
+            />
+          )}
+
           {ordenados.map((j) => {
             const presente = asistencia[j.id] === 'presente'
+            const asignado = sugerencia
+              ? sugerencia.asignacion[j.id] || null
+              : asignacion[j.id] || null
             return (
               <div key={j.id} className="jugador-item" style={{ cursor: 'default', opacity: presente ? 1 : 0.6 }}>
                 <div className="crece">
@@ -250,14 +342,22 @@ function ArmadoPartido({ partido }) {
                     {presente ? 'Presente' : 'Ausente'}
                     {j.estado === 'lesionado' ? ' · 🤕 lesionado' : ''}
                     {abrevAptitudes(j) ? ` · ${abrevAptitudes(j)}` : ''}
+                    {califs?.[j.id] !== undefined && ` · ★${califs[j.id].toFixed(1)}`}
                   </div>
                 </div>
                 <div className="bloque-botones">
                   {bloques.map((b) => (
                     <button
                       key={b.id}
-                      className={`bloque-btn ${asignacion[j.id] === b.id ? 'sel' : ''}`}
-                      onClick={() => asignar(j.id, b.id)}
+                      className={`bloque-btn ${asignado === b.id ? 'sel' : ''} ${sugerencia && asignado === b.id && (asignacion[j.id] || null) !== b.id ? 'prop' : ''}`}
+                      onClick={() => {
+                        if (!sugerencia) return asignar(j.id, b.id)
+                        // con la propuesta abierta, los botones editan la propuesta
+                        setSugerencia((s) => ({
+                          ...s,
+                          asignacion: { ...s.asignacion, [j.id]: s.asignacion[j.id] === b.id ? null : b.id },
+                        }))
+                      }}
                     >
                       B{b.numero}
                     </button>
@@ -358,6 +458,57 @@ function ArmadoPartido({ partido }) {
         />
       ))}
     </>
+  )
+}
+
+// Comparación en vivo del balance de los dos bloques según una asignación
+// (la vigente o la propuesta): fuerza media, puestos y aptitudes.
+function BalanceBloques({ bloques, jugadores, asignacion, califs }) {
+  const stats = bloques.map((bl) => {
+    const del = jugadores.filter((j) => asignacion[j.id] === bl.id)
+    const conNota = del.filter((j) => califs[j.id] !== undefined)
+    const fuerza = conNota.length
+      ? conNota.reduce((s, j) => s + califs[j.id], 0) / conNota.length
+      : null
+    const c = (t) => del.filter((j) => j.posicion === t).length
+    return {
+      bl,
+      n: del.length,
+      fuerza,
+      fw: c('Forward'),
+      back: c('Back'),
+      mx: c('Mixto'),
+      apts: APTITUDES.map((a) => del.filter((j) => (j.aptitudes || []).includes(a.value)).length),
+    }
+  })
+  const fila = (nombre, valor) => (
+    <tr>
+      <td className="mini">{nombre}</td>
+      {stats.map((s) => <td key={s.bl.id} style={{ textAlign: 'center' }}>{valor(s)}</td>)}
+    </tr>
+  )
+  return (
+    <div className="tarjeta">
+      <table style={{ width: '100%' }}>
+        <thead>
+          <tr>
+            <th></th>
+            {stats.map((s) => (
+              <th key={s.bl.id} style={{ textAlign: 'center' }}>
+                B{s.bl.numero}{s.bl.rival ? ` vs ${s.bl.rival}` : ''}
+                {s.bl.dificultad ? ` (${etiquetaDificultad(s.bl.dificultad).toLowerCase()})` : ''}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {fila('Jugadores', (s) => <b>{s.n}</b>)}
+          {fila('Fuerza media', (s) => (s.fuerza === null ? '—' : <b>★{s.fuerza.toFixed(1)}</b>))}
+          {fila('Forwards / Backs', (s) => `${s.fw} / ${s.back}${s.mx ? ` +${s.mx} mixto${s.mx > 1 ? 's' : ''}` : ''}`)}
+          {fila('Cond / Pen / Def', (s) => s.apts.join(' / '))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
