@@ -22,6 +22,8 @@ export default function Jugadores() {
   const [orden, setOrden] = useState({ campo: 'nombre', asc: true })
   const [foto, setFoto] = useState(null)
   const [asign, setAsign] = useState(null)
+  // Lesionados durante un partido sin la lesión cargada todavía en su ficha
+  const [lesionesPendientes, setLesionesPendientes] = useState([])
   const [autoEvaluar, setAutoEvaluar] = useState(false)
   const [revisar, setRevisar] = useState(null)
   const [repartiendo, setRepartiendo] = useState(false)
@@ -47,9 +49,12 @@ export default function Jugadores() {
   }, [foto])
 
   async function cargar() {
-    const [lista, asignaciones] = await Promise.all([api('jugadores'), api('asignaciones')])
+    const [lista, asignaciones, lesiones] = await Promise.all([
+      api('jugadores'), api('asignaciones'), api('stats/lesiones-pendientes'),
+    ])
     setJugadores(lista)
     setAsign(asignaciones)
+    setLesionesPendientes(lesiones)
     setCargando(false)
   }
   useEffect(() => { cargar().catch(() => setCargando(false)) }, [])
@@ -159,6 +164,33 @@ export default function Jugadores() {
           <button className="btn" onClick={() => setEditando({ ...VACIO })}>+ Nuevo</button>
         </div>
       </div>
+
+      {lesionesPendientes.length > 0 && (
+        <div className="tarjeta aviso-lesion">
+          <h3>
+            🚑 {lesionesPendientes.length === 1
+              ? 'Un jugador se lesionó en un partido'
+              : `${lesionesPendientes.length} jugadores se lesionaron en partidos`}
+          </h3>
+          <p className="mini" style={{ margin: '4px 0 8px' }}>
+            Tocá cada nombre para cargar la lesión en su ficha y hacerle el
+            seguimiento. El recordatorio desaparece cuando la lesión queda
+            registrada (o si lo desmarcás en el día de partido).
+          </p>
+          {lesionesPendientes.map((l) => (
+            <button
+              key={`${l.jugador_id}-${l.evento_id}`}
+              className="asignado-item"
+              onClick={() => setFichaDe(l.jugador_id)}
+            >
+              <span className="crece">{l.apellido}, {l.nombre}</span>
+              <span className="mini">
+                {fechaCompacta(l.fecha)}{l.rival ? ` vs ${l.rival}` : ''} →
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {asign?.mias?.length > 0 && (
         <div className="tarjeta aviso-evaluar">

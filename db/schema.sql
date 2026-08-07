@@ -171,6 +171,10 @@ create table if not exists asistencias_partido (
   evento_id uuid not null references eventos(id) on delete cascade,
   jugador_id uuid not null references jugadores(id) on delete cascade,
   estado text not null check (estado in ('presente','ausente')),
+  -- Se golpeó durante el partido y no sigue jugando. 'golpeado' es
+  -- transitorio (se desmarca y vuelve); 'lesionado' además queda pendiente de
+  -- seguimiento en la sección Jugadores. Null = en condiciones de jugar.
+  condicion text check (condicion in ('golpeado','lesionado')),
   primary key (evento_id, jugador_id)
 );
 

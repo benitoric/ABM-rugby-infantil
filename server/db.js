@@ -34,7 +34,7 @@ async function inicializar() {
   const { rows: [testigo] } = await pool.query(
     `select exists (select 1 from information_schema.columns
        where table_schema = 'public' and table_name = 'asistencias_partido'
-         and column_name = 'estado') as aplicadas`)
+         and column_name = 'condicion') as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -154,6 +154,11 @@ export async function migrar(pool) {
     estado text not null check (estado in ('presente','ausente')),
     primary key (evento_id, jugador_id)
   )`)
+  // Golpeados y lesionados durante el partido
+  await pool.query('alter table asistencias_partido add column if not exists condicion text')
+  await pool.query('alter table asistencias_partido drop constraint if exists asistencias_partido_condicion_check')
+  await pool.query(`alter table asistencias_partido add constraint asistencias_partido_condicion_check
+    check (condicion in ('golpeado','lesionado'))`)
   // Staff a cargo de cada bloque, con su presencia efectiva del día
   await pool.query(`create table if not exists bloque_staff (
     bloque_id uuid not null references bloques(id) on delete cascade,
