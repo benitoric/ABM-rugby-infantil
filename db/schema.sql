@@ -163,6 +163,14 @@ create table if not exists bloque_jugadores (
   primary key (bloque_id, jugador_id)
 );
 
+-- Staff a cargo de cada bloque (los bloques suelen jugarse en canchas y
+-- horarios distintos, así que el cuerpo técnico también se reparte)
+create table if not exists bloque_staff (
+  bloque_id uuid not null references bloques(id) on delete cascade,
+  staff_email text not null references staff(email) on delete cascade,
+  primary key (bloque_id, staff_email)
+);
+
 create table if not exists tiempos (
   id uuid primary key default gen_random_uuid(),
   bloque_id uuid not null references bloques(id) on delete cascade,
