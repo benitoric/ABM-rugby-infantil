@@ -233,6 +233,17 @@ function ArmadoPartido({ partido }) {
     }
   }
 
+  // Reemplaza el equipo completo de un tiempo (para aplicar una sugerencia)
+  async function reemplazarTiempo(tiempoId, equipo) {
+    setEnCancha((m) => ({
+      ...m,
+      [tiempoId]: Object.fromEntries(equipo.map((e) => [
+        e.jugador_id, { puesto: e.prestado ? null : (e.puesto ?? null), prestado: !!e.prestado },
+      ])),
+    }))
+    await api('partido/tiempo-equipo', { method: 'POST', body: { tiempo_id: tiempoId, equipo } })
+  }
+
   async function agregarTiempo(bloqueId) {
     const delBloque = tiempos.filter((t) => t.bloque_id === bloqueId)
     if (delBloque.length >= MAX_TIEMPOS) return
@@ -454,6 +465,7 @@ function ArmadoPartido({ partido }) {
           onSelTiempo={(tid) => setTiempoSel((m) => ({ ...m, [b.id]: tid }))}
           enCancha={enCancha}
           onMover={moverEnCancha}
+          onReemplazar={reemplazarTiempo}
           onAgregarTiempo={() => agregarTiempo(b.id)}
         />
       ))}
@@ -690,8 +702,10 @@ function BalancePartido({ bloque, onActualizado }) {
   )
 }
 
-function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiempoSel, onSelTiempo, enCancha, onMover, onAgregarTiempo }) {
+function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiempoSel, onSelTiempo, enCancha, onMover, onReemplazar, onAgregarTiempo }) {
   const [sel, setSel] = useState(null)
+  const [nPrestar, setNPrestar] = useState(0)
+  const [sugiriendo, setSugiriendo] = useState(false)
 
   useEffect(() => setSel(null), [tiempoSel])
 
@@ -786,6 +800,31 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiem
     onMover(tiempo.id, [{ jugador_id: jid, ...cambio }])
   }
 
+  // préstamos al rival de hoy, por jugador, en este bloque
+  const prestadosHoy = {}
+  for (const t of tiempos) {
+    for (const [jid, e] of Object.entries(enCancha[t.id] || {})) {
+      if (e.prestado) prestadosHoy[jid] = (prestadosHoy[jid] || 0) + 1
+    }
+  }
+
+  // Pide y aplica la sugerencia de equipos desde el tiempo a la vista
+  async function sugerirEquipos() {
+    if (!tiempo || sugiriendo) return
+    setSugiriendo(true)
+    try {
+      const r = await api('partido/sugerir-tiempos', {
+        method: 'POST',
+        body: { bloque_id: bloque.id, desde_numero: tiempo.numero, prestamos_por_tiempo: nPrestar },
+      })
+      for (const t of tiempos.filter((x) => x.numero >= tiempo.numero)) {
+        if (r.tiempos[t.id]) await onReemplazar(t.id, r.tiempos[t.id].equipo)
+      }
+    } finally {
+      setSugiriendo(false)
+    }
+  }
+
   // Premisas que no se están cumpliendo en el tiempo a la vista
   const avisos = []
   if (tiempo) {
@@ -805,6 +844,21 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiem
     if (sinPuesto.length) {
       avisos.push(`En cancha sin puesto asignado: ${sinPuesto.map((j) => j.apellido).join(', ')}.`)
     }
+  }
+  // Premisas de la jornada completa (equidad de tiempos y rotación de préstamos)
+  const tiemposConDatos = tiempos.filter((t) => Object.keys(enCancha[t.id] || {}).length)
+  if (tiemposConDatos.length >= 2 && jugadores.length) {
+    const promedio = jugadores.reduce((s, j) => s + (jugados[j.id] || 0), 0) / jugadores.length
+    const rezagados = jugadores.filter((j) => (jugados[j.id] || 0) <= promedio - 1)
+    if (rezagados.length) {
+      avisos.push(`${rezagados.map((j) => j.apellido).join(', ')}: van abajo del promedio de tiempos (${promedio.toFixed(1)}).`)
+    }
+  }
+  const masPrestado = jugadores.reduce((mejor, j) =>
+    ((prestadosHoy[j.id] || 0) > (prestadosHoy[mejor?.id] || 0) ? j : mejor), null)
+  if (masPrestado && prestadosHoy[masPrestado.id] >= 2 &&
+      jugadores.some((j) => !prestadosHoy[j.id])) {
+    avisos.push(`${masPrestado.apellido} ya fue prestado ${prestadosHoy[masPrestado.id]} veces hoy y otros ninguna.`)
   }
 
   const chipJugador = (j, extra = '') => (
@@ -856,6 +910,21 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiem
         {tiempos.length < MAX_TIEMPOS && (
           <button className="btn sec chico" onClick={onAgregarTiempo}>+ Tiempo</button>
         )}
+      </div>
+
+      <div className="tarjeta fila entre">
+        <div className="crece">
+          <div className="mini">Sugerir equipos desde T{tiempo?.numero} hasta el final</div>
+          <label className="mini fila" style={{ gap: 6, alignItems: 'center', marginTop: 4 }}>
+            Prestar al rival por tiempo:
+            <select value={nPrestar} onChange={(e) => setNPrestar(Number(e.target.value))} style={{ width: 'auto' }}>
+              {[0, 1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+        </div>
+        <button className="btn chico" disabled={sugiriendo} onClick={sugerirEquipos}>
+          {sugiriendo ? 'Armando…' : '✨ Sugerir equipos'}
+        </button>
       </div>
 
       {avisos.length > 0 && (

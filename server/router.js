@@ -196,6 +196,135 @@ function sugerirReparto(jugadores, calif, sesgo) {
   return { A, B }
 }
 
+// ---------- sugerencia de equipos por tiempo ----------
+// Para cada tiempo pendiente elige quiénes juegan (repartiendo los tiempos lo
+// más parejo posible, con prioridad para los de mejor asistencia a
+// entrenamientos), quiénes se prestan al rival (rotando: no repetir siempre a
+// los mismos) y qué puesto ocupa cada uno (forwards a 1-8, backs a 9-15, los
+// mixtos donde falte; el 9 y el 10 para conductores; se intenta mantener el
+// puesto que cada uno ya venía jugando).
+function sugerirEquipos({ jugadores, tiempos, enCancha, desde, prestamos, asistencia, prestamosAnio }) {
+  const jugados = {}
+  const prestadosHoy = {}
+  for (const j of jugadores) { jugados[j.id] = 0; prestadosHoy[j.id] = 0 }
+  const ultimoPuesto = {}
+  const previos = tiempos.filter((t) => t.numero < desde)
+  for (const t of previos) {
+    for (const [jid, e] of Object.entries(enCancha[t.id] || {})) {
+      if (!(jid in jugados)) continue
+      jugados[jid]++
+      if (e.prestado) prestadosHoy[jid]++
+      else if (e.puesto) ultimoPuesto[jid] = e.puesto
+    }
+  }
+  let prestadosAnterior = new Set(Object.entries(enCancha[previos.at(-1)?.id] || {})
+    .filter(([, e]) => e.prestado).map(([jid]) => jid))
+  const esConductor = (j) => (j.aptitudes || []).includes('conduccion')
+  const resultado = {}
+  for (const t of tiempos.filter((x) => x.numero >= desde)) {
+    // Juegan (en cancha o prestados) los que menos tiempos llevan; a igualdad,
+    // los de mejor % de asistencia a entrenamientos
+    const puntaje = (j) => jugados[j.id] * 1000 - (asistencia[j.id] || 0)
+    const orden = [...jugadores].sort((a, b) => puntaje(a) - puntaje(b))
+    const corte = Math.min(13 + prestamos, jugadores.length)
+    let juegan = orden.slice(0, corte)
+    let banco = orden.slice(corte)
+    // La rotación pareja no puede dejar la cancha sin pareja de medios: si
+    // quedan menos de 2 conductores jugando, entra uno del banco por el no
+    // conductor que más tiempos lleva
+    while (juegan.filter(esConductor).length < 2) {
+      const entra = banco.find(esConductor)
+      const sale = [...juegan].reverse().find((j) => !esConductor(j))
+      if (!entra || !sale) break
+      juegan = juegan.filter((j) => j !== sale).concat(entra)
+      banco = banco.filter((j) => j !== entra).concat(sale)
+    }
+    // De los que juegan, se prestan los que vienen rotando menos préstamos
+    // (hoy y en el año) y no fueron prestados el tiempo anterior, cuidando
+    // que en cancha queden al menos 2 conductores
+    const ordenPrestar = [...juegan].sort((a, b) =>
+      (prestadosAnterior.has(a.id) - prestadosAnterior.has(b.id)) ||
+      (prestadosHoy[a.id] - prestadosHoy[b.id]) ||
+      ((prestamosAnio[a.id] || 0) - (prestamosAnio[b.id] || 0)) ||
+      (jugados[b.id] - jugados[a.id]))
+    const prestar = new Set()
+    let condQuedan = juegan.filter(esConductor).length
+    for (const j of ordenPrestar) {
+      if (prestar.size >= prestamos) break
+      if (esConductor(j)) {
+        if (condQuedan <= 2) continue
+        condQuedan--
+      }
+      prestar.add(j.id)
+    }
+    for (const j of ordenPrestar) {
+      if (prestar.size >= prestamos) break
+      prestar.add(j.id)
+    }
+    const enJuego = juegan.filter((j) => !prestar.has(j.id))
+    // Puestos
+    const porPuesto = {}
+    const usados = new Set()
+    const poner = (num, j) => { porPuesto[num] = j.id; usados.add(j.id) }
+    // 1) la pareja de medios primero, para que la estabilidad de los demás
+    // puestos no se lleve a los conductores: mantiene al que ya venía de 9
+    // o 10 y completa con conductores libres (idealmente backs o mixtos)
+    for (const num of [9, 10]) {
+      const previo = enJuego.find((j) => ultimoPuesto[j.id] === num)
+      if (previo && !usados.has(previo.id)) poner(num, previo)
+    }
+    for (const num of [9, 10]) {
+      if (porPuesto[num]) continue
+      const libres = enJuego.filter((j) => !usados.has(j.id))
+      const cand =
+        libres.find((j) => esConductor(j) && j.posicion !== 'Forward') ||
+        libres.find(esConductor)
+      if (cand) poner(num, cand)
+    }
+    // 2) los demás mantienen el puesto que ya venían jugando
+    for (const j of enJuego) {
+      const p = ultimoPuesto[j.id]
+      if (p && p !== 9 && p !== 10 && !porPuesto[p] && !usados.has(j.id)) poner(p, j)
+    }
+    // 3) forwards a los puestos de forwards, backs a los de backs; los mixtos
+    // tapan lo que falte y al final entra cualquiera antes que dejar huecos
+    for (const tipo of ['forward', 'back']) {
+      for (const f of PUESTOS_FORMACION.filter((x) => x.tipo === tipo)) {
+        if (porPuesto[f.num]) continue
+        const libres = enJuego.filter((j) => !usados.has(j.id))
+        const cand =
+          libres.find((j) => j.posicion === (tipo === 'forward' ? 'Forward' : 'Back')) ||
+          libres.find((j) => j.posicion === 'Mixto' || !j.posicion) ||
+          libres[0]
+        if (cand) poner(f.num, cand)
+      }
+    }
+    resultado[t.id] = {
+      equipo: [
+        ...enJuego.map((j) => {
+          const num = Object.keys(porPuesto).find((n) => porPuesto[n] === j.id)
+          return { jugador_id: j.id, puesto: num ? Number(num) : null, prestado: false }
+        }),
+        ...[...prestar].map((jid) => ({ jugador_id: jid, puesto: null, prestado: true })),
+      ],
+    }
+    for (const j of juegan) jugados[j.id]++
+    for (const jid of prestar) prestadosHoy[jid]++
+    for (const [num, jid] of Object.entries(porPuesto)) ultimoPuesto[jid] = Number(num)
+    prestadosAnterior = prestar
+  }
+  return resultado
+}
+
+// La formación de 13: 6 forwards y 7 backs (los números 6 y 7 no existen)
+const PUESTOS_FORMACION = [
+  { num: 1, tipo: 'forward' }, { num: 2, tipo: 'forward' }, { num: 3, tipo: 'forward' },
+  { num: 4, tipo: 'forward' }, { num: 5, tipo: 'forward' }, { num: 8, tipo: 'forward' },
+  { num: 9, tipo: 'back' }, { num: 10, tipo: 'back' }, { num: 11, tipo: 'back' },
+  { num: 12, tipo: 'back' }, { num: 13, tipo: 'back' }, { num: 14, tipo: 'back' },
+  { num: 15, tipo: 'back' },
+]
+
 // Promedio simple de un jsonb {variable: 1..5}
 function promedioValores(valores) {
   const vs = Object.values(valores || {}).map(Number).filter((n) => n > 0)
@@ -973,6 +1102,78 @@ async function enrutar(metodo, p, b, req, url) {
         vals)
       if (!filas.length) throw { codigo: 404, error: 'no_existe' }
       return filas[0]
+    }
+    if (metodo === 'POST' && p[1] === 'sugerir-tiempos') {
+      // Propone los equipos desde un tiempo en adelante (lo anterior no se
+      // toca). No persiste: el cliente aplica con partido/tiempo-equipo.
+      const desde = Number(b.desde_numero) || 1
+      const prestamos = Math.max(0, Math.min(6, Number(b.prestamos_por_tiempo) || 0))
+      const jugadores = await query(
+        `select j.id, j.posicion, j.aptitudes from bloque_jugadores bj
+         join jugadores j on j.id = bj.jugador_id where bj.bloque_id = $1`, [b.bloque_id])
+      if (!jugadores.length) throw { codigo: 400, error: 'faltan_jugadores' }
+      const tiempos = await query(
+        'select id, numero from tiempos where bloque_id = $1 order by numero', [b.bloque_id])
+      const filasCancha = await query(
+        `select tj.tiempo_id, tj.jugador_id, tj.puesto, tj.prestado from tiempo_jugadores tj
+         join tiempos t on t.id = tj.tiempo_id where t.bloque_id = $1`, [b.bloque_id])
+      const enCancha = {}
+      for (const f of filasCancha) {
+        if (!enCancha[f.tiempo_id]) enCancha[f.tiempo_id] = {}
+        enCancha[f.tiempo_id][f.jugador_id] = { puesto: f.puesto, prestado: f.prestado }
+      }
+      const ids = jugadores.map((j) => j.id)
+      // % de asistencia a entrenamientos (ausente por defecto: el total es
+      // la cantidad de entrenamientos con asistencia tomada)
+      const [totEnt] = await query(
+        `select count(*)::int as total from eventos e
+         where e.tipo = 'entrenamiento' and e.fecha <= current_date
+           and exists (select 1 from asistencias a where a.evento_id = e.id)
+           and ${eventoVigente('e')}`)
+      const filasAsis = await query(
+        `select a.jugador_id, count(*) filter (where a.estado = 'presente')::int as presentes
+         from asistencias a join eventos e on e.id = a.evento_id
+         where a.jugador_id = any($1) and e.tipo = 'entrenamiento'
+           and e.fecha <= current_date and ${eventoVigente('e')}
+         group by a.jugador_id`, [ids])
+      const asistencia = {}
+      for (const f of filasAsis) {
+        asistencia[f.jugador_id] = totEnt.total ? Math.round((f.presentes / totEnt.total) * 100) : 0
+      }
+      // préstamos acumulados en el año del partido, para rotar
+      const filasPrest = await query(
+        `select tj.jugador_id, count(*)::int as veces from tiempo_jugadores tj
+         join tiempos t on t.id = tj.tiempo_id
+         join bloques bl on bl.id = t.bloque_id
+         join eventos e on e.id = bl.evento_id
+         where tj.prestado and tj.jugador_id = any($1)
+           and extract(year from e.fecha) = (
+             select extract(year from e2.fecha) from eventos e2
+             join bloques bl2 on bl2.evento_id = e2.id where bl2.id = $2)
+         group by tj.jugador_id`, [ids, b.bloque_id])
+      const prestamosAnio = {}
+      for (const f of filasPrest) prestamosAnio[f.jugador_id] = f.veces
+      const propuesta = sugerirEquipos({
+        jugadores, tiempos, enCancha, desde, prestamos, asistencia, prestamosAnio,
+      })
+      return { tiempos: propuesta, asistencia }
+    }
+    if (metodo === 'POST' && p[1] === 'tiempo-equipo') {
+      // Reemplaza de una vez el equipo completo de un tiempo
+      const equipo = Array.isArray(b.equipo) ? b.equipo : []
+      for (const e of equipo) {
+        if (e.puesto != null && !PUESTOS_VALIDOS.includes(Number(e.puesto))) {
+          throw { codigo: 400, error: 'puesto_invalido' }
+        }
+      }
+      await query('delete from tiempo_jugadores where tiempo_id = $1', [b.tiempo_id])
+      for (const e of equipo) {
+        await query(
+          `insert into tiempo_jugadores (tiempo_id, jugador_id, puesto, prestado)
+           values ($1,$2,$3,$4)`,
+          [b.tiempo_id, e.jugador_id, e.prestado ? null : (e.puesto ?? null), !!e.prestado])
+      }
+      return { ok: true }
     }
     if (metodo === 'POST' && p[1] === 'tiempo') {
       const filas = await query(
