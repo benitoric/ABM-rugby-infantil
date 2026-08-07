@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import {
-  descargarCSV, esDiaDeRutina, etiquetaPartido, fechaCorta, horarioEvento, lineaBloque,
+  descargarCSV, DIFICULTADES, esDiaDeRutina, etiquetaPartido, fechaCorta, horarioEvento, lineaBloque,
   MODALIDADES, MOTIVOS_SUSPENSION, nombreCompleto, nombreStaff, RUTINA, suspensionEvento,
 } from '../helpers.js'
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 
-const BLOQUE_VACIO = { rival: '', lugar: '', hora_convocatoria: '' }
+const BLOQUE_VACIO = { rival: '', dificultad: '', lugar: '', hora_convocatoria: '' }
 
 export default function Asistencia() {
   const [eventos, setEventos] = useState([])
@@ -106,6 +106,7 @@ export default function Asistencia() {
               const bloque = (n, d) => ({
                 numero: n,
                 rival: d.rival?.trim() || null,
+                dificultad: d.dificultad || null,
                 lugar: d.lugar?.trim() || null,
                 hora_convocatoria: d.hora_convocatoria || null,
               })
@@ -216,6 +217,28 @@ export default function Asistencia() {
                         opciones={sugerencias.rivales}
                         onChange={(v) => setCreando({ ...creando, [clave]: { ...creando[clave], rival: v } })}
                       />
+                    </div>
+                    <div className="campo">
+                      <label>Grado de dificultad</label>
+                      <div className="seg">
+                        {DIFICULTADES.map((d) => (
+                          <button
+                            key={d.value}
+                            type="button"
+                            className={creando[clave].dificultad === d.value ? 'activo' : ''}
+                            // tocar la opción elegida la saca (queda sin indicar)
+                            onClick={() => setCreando({
+                              ...creando,
+                              [clave]: {
+                                ...creando[clave],
+                                dificultad: creando[clave].dificultad === d.value ? '' : d.value,
+                              },
+                            })}
+                          >
+                            {d.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <div className="grid2">
                       <div className="campo">

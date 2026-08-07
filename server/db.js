@@ -33,8 +33,8 @@ async function inicializar() {
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
     `select exists (select 1 from information_schema.columns
-       where table_schema = 'public' and table_name = 'evaluaciones'
-         and column_name = 'revisor_email') as aplicadas`)
+       where table_schema = 'public' and table_name = 'bloques'
+         and column_name = 'dificultad') as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -132,6 +132,11 @@ export async function migrar(pool) {
   await pool.query(`alter table asignaciones_evaluacion add constraint asignaciones_evaluacion_etapa_check
     check (etapa in ('evaluar','revisar'))`)
   await pool.query('alter table asignaciones_evaluacion add column if not exists evaluacion_id uuid')
+  // Grado de dificultad del rival de cada bloque
+  await pool.query('alter table bloques add column if not exists dificultad text')
+  await pool.query('alter table bloques drop constraint if exists bloques_dificultad_check')
+  await pool.query(`alter table bloques add constraint bloques_dificultad_check
+    check (dificultad in ('bueno','regular','malo'))`)
   await pool.query(`create table if not exists lesiones (
     id uuid primary key default gen_random_uuid(),
     jugador_id uuid not null references jugadores(id) on delete cascade,

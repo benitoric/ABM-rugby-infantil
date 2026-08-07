@@ -19,7 +19,9 @@ pantalla de inicio" del teléfono y queda como una app más).
    no cuenta para los porcentajes de asistencia.
 4. **Bloques del día de partido**: asignación de los presentes a los 2 bloques
    que presenta el club. Los campos de rival y lugar de juego autocompletan con
-   lo ya cargado: se escriben unas letras y aparecen las coincidencias.
+   lo ya cargado: se escriben unas letras y aparecen las coincidencias. Cada
+   bloque guarda además el grado de dificultad del rival (bueno / regular /
+   malo).
 5. **Equipos por tiempo**: cada bloque juega 4 a 6 tiempos; se arma el equipo de
    cada tiempo y la app avisa qué chicos todavía no jugaron ningún tiempo.
 

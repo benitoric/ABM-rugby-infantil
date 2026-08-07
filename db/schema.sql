@@ -144,6 +144,8 @@ create table if not exists bloques (
   numero int not null check (numero in (1,2)),
   nombre text,
   rival text,
+  -- Grado de dificultad del rival, para equilibrar los bloques
+  dificultad text check (dificultad in ('bueno','regular','malo')),
   lugar text,
   hora_convocatoria time,
   valoracion int check (valoracion between 1 and 5),

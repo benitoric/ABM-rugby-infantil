@@ -170,10 +170,14 @@ h3 { font-size: 1rem; }
 .badge.puesto-mixto { background: #f3e8ff; color: #7e22ce; }
 .badge.rutina { background: var(--celeste); color: var(--primario); }
 .badge.extra { background: #f3e8ff; color: #7e22ce; }
+.badge.dificultad-bueno { background: #dcfce7; color: #15803d; }
+.badge.dificultad-regular { background: #fef3c7; color: var(--warn); }
+.badge.dificultad-malo { background: #fee2e2; color: var(--bad); }
 .badge.susp-total { background: #fee2e2; color: var(--bad); }
 .badge.susp-parcial { background: #fef3c7; color: var(--warn); }
 /* separan del texto que los precede (van al lado del título del evento) */
-.badge.rutina, .badge.extra, .badge.susp-total, .badge.susp-parcial { margin-left: 6px; }
+.badge.rutina, .badge.extra, .badge.susp-total, .badge.susp-parcial,
+.badge[class*='dificultad-'] { margin-left: 6px; }
 
 /* ---------- suspensión de eventos ---------- */
 .suspension-item { border-top: 1px solid var(--borde); padding-top: 10px; margin-top: 10px; }
