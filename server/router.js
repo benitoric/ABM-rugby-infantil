@@ -33,11 +33,14 @@ const COLS_DOCUMENTO = `id, jugador_id, tipo, nombre, mime,
 const MIMES_DOC = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 // Vercel corta los cuerpos en 4,5 MB y base64 infla ~33%: 3 MB de archivo real
 const MAX_DOC_BYTES = 3 * 1024 * 1024
-const COLS_BLOQUE = `id, evento_id, numero, nombre, rival, lugar,
+const COLS_BLOQUE = `id, evento_id, numero, nombre, rival, dificultad, lugar,
   hora_convocatoria::text as hora_convocatoria, valoracion, cronica,
   suspendido, motivo_suspension, nota_suspension`
 
 const MOTIVOS_SUSPENSION = ['clima', 'feriado', 'otro']
+
+// Qué tan difícil se espera que sea el rival del bloque
+const DIFICULTADES = ['bueno', 'regular', 'malo']
 
 // Quiénes evalúan: entrenadores. Quedan afuera managers y preparadores
 // físicos que no entrenan (los roles salen de ROLES_STAFF en src/helpers.js).
@@ -100,6 +103,12 @@ function validarMotivo(m) {
   if (!m) return null
   if (!MOTIVOS_SUSPENSION.includes(m)) throw { codigo: 400, error: 'motivo_invalido' }
   return m
+}
+
+function validarDificultad(d) {
+  if (!d) return null
+  if (!DIFICULTADES.includes(d)) throw { codigo: 400, error: 'dificultad_invalida' }
+  return d
 }
 
 // Un evento cuenta para las estadísticas si no está suspendido del todo: los
@@ -636,11 +645,12 @@ async function enrutar(metodo, p, b, req, url) {
         for (const numero of [1, 2]) {
           const d = datos.find((x) => Number(x?.numero) === numero) || {}
           const [bl] = await query(
-            `insert into bloques (evento_id, numero, nombre, rival, lugar, hora_convocatoria)
-             values ($1, $2, $3, $4, $5, $6)
+            `insert into bloques (evento_id, numero, nombre, rival, dificultad, lugar, hora_convocatoria)
+             values ($1, $2, $3, $4, $5, $6, $7)
              on conflict (evento_id, numero) do nothing
              returning ${COLS_BLOQUE}`,
-            [evento.id, numero, `Bloque ${numero}`, d.rival || null, d.lugar || null,
+            [evento.id, numero, `Bloque ${numero}`, d.rival || null,
+             validarDificultad(d.dificultad), d.lugar || null,
              d.hora_convocatoria || null])
           if (bl) evento.bloques.push(bl)
         }
@@ -805,6 +815,10 @@ async function enrutar(metodo, p, b, req, url) {
         if (v !== null && !(v >= 1 && v <= 5)) throw { codigo: 400, error: 'valoracion_invalida' }
         vals.push(v)
         sets.push(`valoracion = $${vals.length}`)
+      }
+      if ('dificultad' in b) {
+        vals.push(validarDificultad(b.dificultad))
+        sets.push(`dificultad = $${vals.length}`)
       }
       // Suspensión de un solo bloque: el otro puede jugarse igual
       if ('suspendido' in b) {

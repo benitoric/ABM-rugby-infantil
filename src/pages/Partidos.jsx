@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
 import {
-  abrevAptitudes, etiquetaMotivo, etiquetaPartido, fechaCorta, lineaBloque, nombreCompleto,
+  abrevAptitudes, DIFICULTADES, etiquetaDificultad, etiquetaMotivo, etiquetaPartido, fechaCorta,
+  lineaBloque, nombreCompleto,
 } from '../helpers.js'
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 
@@ -269,6 +270,7 @@ function ArmadoPartido({ partido }) {
                 method: 'PUT',
                 body: {
                   rival: editandoBloque.rival?.trim() || null,
+                  dificultad: editandoBloque.dificultad || null,
                   lugar: editandoBloque.lugar?.trim() || null,
                   hora_convocatoria: editandoBloque.hora_convocatoria || null,
                 },
@@ -290,6 +292,24 @@ function ArmadoPartido({ partido }) {
                 opciones={sugerencias.rivales}
                 onChange={(v) => setEditandoBloque({ ...editandoBloque, rival: v })}
               />
+            </div>
+            <div className="campo">
+              <label>Grado de dificultad</label>
+              <div className="seg">
+                {DIFICULTADES.map((d) => (
+                  <button
+                    key={d.value}
+                    type="button"
+                    className={editandoBloque.dificultad === d.value ? 'activo' : ''}
+                    onClick={() => setEditandoBloque({
+                      ...editandoBloque,
+                      dificultad: editandoBloque.dificultad === d.value ? '' : d.value,
+                    })}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="grid2">
               <div className="campo">
@@ -359,6 +379,7 @@ function Planilla({ partido, bloques, jugadores, asignacion, tiempos, enCancha }
               <p className="mini">
                 {bl.hora_convocatoria ? `Convocatoria: ${bl.hora_convocatoria.slice(0, 5)} hs` : ''}
                 {bl.lugar ? `${bl.hora_convocatoria ? ' · ' : ''}${bl.lugar}` : ''}
+                {bl.dificultad ? ` · Dificultad: ${etiquetaDificultad(bl.dificultad)}` : ''}
                 {bl.suspendido ? ` · Suspendido: ${etiquetaMotivo(bl.motivo_suspension)}${bl.nota_suspension ? ` (${bl.nota_suspension})` : ''}` : ''}
               </p>
               {!delBloque.length && <p className="mini">Sin jugadores asignados.</p>}
@@ -473,6 +494,11 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiem
       <div className="tarjeta fila entre">
         <div className="crece">
           <b>vs {bloque.rival || 'rival a definir'}</b>
+          {bloque.dificultad && (
+            <span className={`badge dificultad-${bloque.dificultad}`}>
+              {etiquetaDificultad(bloque.dificultad)}
+            </span>
+          )}
           <div className="mini">
             {bloque.hora_convocatoria ? `Convocatoria: ${bloque.hora_convocatoria.slice(0, 5)} hs` : 'Sin hora de convocatoria'}
             {bloque.lugar ? ` · ${bloque.lugar}` : ' · sin lugar definido'}

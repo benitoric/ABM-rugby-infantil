@@ -100,9 +100,21 @@ export function descargarCSV(nombreArchivo, filas) {
   URL.revokeObjectURL(url)
 }
 
+// Grado de dificultad esperado del rival de un bloque
+export const DIFICULTADES = [
+  { value: 'bueno', label: 'Bueno' },
+  { value: 'regular', label: 'Regular' },
+  { value: 'malo', label: 'Malo' },
+]
+
+export function etiquetaDificultad(d) {
+  return DIFICULTADES.find((x) => x.value === d)?.label || ''
+}
+
 // Línea descriptiva de un bloque de partido: rival, convocatoria y lugar
 export function lineaBloque(b) {
   const partes = [`B${b.numero} vs ${b.rival || 'a definir'}`]
+  if (b.dificultad) partes.push(`dificultad ${etiquetaDificultad(b.dificultad).toLowerCase()}`)
   if (b.hora_convocatoria) partes.push(`conv. ${b.hora_convocatoria.slice(0, 5)} hs`)
   if (b.lugar) partes.push(b.lugar)
   if (b.valoracion) partes.push('★'.repeat(b.valoracion))
