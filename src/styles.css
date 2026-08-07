@@ -447,6 +447,7 @@ h3 { font-size: 1rem; }
 /* ---------- aviso de evaluaciones asignadas ---------- */
 .aviso-evaluar { border-left: 4px solid var(--dorado); }
 .aviso-revisar { border-left: 4px solid var(--info); }
+.aviso-lesion { border-left: 4px solid var(--bad); }
 .eval-detalle-fila.discrepa { background: #fff4f4; border-radius: 6px; padding: 3px 6px; }
 .asignado-item {
   display: flex;
@@ -679,3 +680,4 @@ details.tarjeta summary {
 .bloque-btn.prop { border-style: dashed; }
 .bloque-btn.sel.ok { background: var(--ok); border-color: var(--ok); }
 .bloque-btn.sel.no { background: var(--bad); border-color: var(--bad); }
+.barra-sel { flex-wrap: wrap; }

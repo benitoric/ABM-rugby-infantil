@@ -94,6 +94,8 @@ function ArmadoPartido({ partido }) {
   // asistencia: el control efectivo del día, tomado en la cancha.
   const [confirmacion, setConfirmacion] = useState({})
   const [asistencia, setAsistencia] = useState({})
+  // condicion: golpeado/lesionado durante el partido (queda fuera de juego)
+  const [condicion, setCondicion] = useState({})
   const [asignacion, setAsignacion] = useState({})
   const [staff, setStaff] = useState([])
   const [confirmacionStaff, setConfirmacionStaff] = useState({})
@@ -129,8 +131,13 @@ function ArmadoPartido({ partido }) {
       setConfirmacion(mConf)
 
       const mAsis = {}
-      for (const a of asisDia) mAsis[a.jugador_id] = a.estado
+      const mCond = {}
+      for (const a of asisDia) {
+        mAsis[a.jugador_id] = a.estado
+        if (a.condicion) mCond[a.jugador_id] = a.condicion
+      }
       setAsistencia(mAsis)
+      setCondicion(mCond)
 
       const mConfSf = {}
       for (const a of confSf) mConfSf[a.staff_email] = a.estado
@@ -222,6 +229,46 @@ function ArmadoPartido({ partido }) {
     await api(`eventos/${partido.id}/asistencias-partido`, {
       method: 'PUT',
       body: { marcas: [{ jugador_id: jugadorId, estado: nuevo }] },
+    })
+  }
+
+  // Golpe o lesión en pleno partido: el jugador queda fuera de juego y no se
+  // lo considera más para los equipos. Sale de los tiempos posteriores al que
+  // se está viendo; lo que ya jugó queda registrado. Al desmarcarlo vuelve a
+  // estar disponible.
+  async function marcarCondicion(jugadorId, nuevaCondicion, desdeNumero) {
+    const actual = condicion[jugadorId] || null
+    const nuevo = actual === nuevaCondicion ? null : nuevaCondicion
+    setCondicion((m) => {
+      const copia = { ...m }
+      if (nuevo) copia[jugadorId] = nuevo
+      else delete copia[jugadorId]
+      return copia
+    })
+    if (nuevo) {
+      const posteriores = tiempos.filter((t) => t.numero > desdeNumero)
+      setEnCancha((m) => {
+        const copia = { ...m }
+        for (const t of posteriores) {
+          if (copia[t.id]?.[jugadorId]) {
+            copia[t.id] = { ...copia[t.id] }
+            delete copia[t.id][jugadorId]
+          }
+        }
+        return copia
+      })
+      for (const t of posteriores) {
+        if (enCancha[t.id]?.[jugadorId]) {
+          await api('partido/cancha', {
+            method: 'POST',
+            body: { tiempo_id: t.id, jugador_id: jugadorId, dentro: false },
+          })
+        }
+      }
+    }
+    await api(`eventos/${partido.id}/asistencias-partido`, {
+      method: 'PUT',
+      body: { marcas: [{ jugador_id: jugadorId, estado: 'presente', condicion: nuevo }] },
     })
   }
 
@@ -381,6 +428,7 @@ function ArmadoPartido({ partido }) {
           asignacion={asignacion}
           asistencia={asistencia}
           confirmacion={confirmacion}
+          condicion={condicion}
           onMarcar={marcarAsistencia}
           staff={staff}
           asignacionStaff={asignacionStaff}
@@ -630,6 +678,8 @@ function ArmadoPartido({ partido }) {
           jugadores={sinTomar ? delBloque : presentes}
           ausentes={sinTomar ? [] : delBloque.filter((j) => asistencia[j.id] !== 'presente')}
           confirmacion={confirmacion}
+          condicion={condicion}
+          onCondicion={marcarCondicion}
           asistenciaSinTomar={sinTomar && delBloque.length > 0}
           staff={staff.filter((s) => asignacionStaff[s.email] === b.id && presenciaStaff[s.email] !== false)}
           onIrAPresentes={() => setVista('presentes')}
@@ -654,7 +704,7 @@ function ArmadoPartido({ partido }) {
 // quién de los convocados se presentó a jugar. La confirmación anticipada se
 // toma en la sección Asistencia durante la semana; acá solo se compara.
 function ControlAsistencia({
-  bloques, jugadores, asignacion, asistencia, confirmacion, onMarcar,
+  bloques, jugadores, asignacion, asistencia, confirmacion, condicion = {}, onMarcar,
   staff, asignacionStaff, confirmacionStaff, presenciaStaff, onMarcarStaff,
 }) {
   // Los convocados: asignados a un bloque, más los confirmados sin bloque
@@ -713,6 +763,8 @@ function ControlAsistencia({
         nombreCompleto(j),
         [
           j.posicion,
+          condicion[j.id] === 'golpeado' ? '🤕 golpeado en el partido' : null,
+          condicion[j.id] === 'lesionado' ? '🚑 lesionado en el partido' : null,
           etiquetaConfirmacion(j.id),
           j.estado === 'lesionado' ? '🤕 lesionado' : null,
         ].filter(Boolean).join(' · '),
@@ -1031,7 +1083,7 @@ function BalancePartido({ bloque, onActualizado }) {
   )
 }
 
-function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = [], confirmacion = {}, asistenciaSinTomar, staff = [], onIrAPresentes, tiempos, tiempoSel, onSelTiempo, enCancha, onMover, onReemplazar, onAgregarTiempo }) {
+function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = [], confirmacion = {}, condicion = {}, onCondicion, asistenciaSinTomar, staff = [], onIrAPresentes, tiempos, tiempoSel, onSelTiempo, enCancha, onMover, onReemplazar, onAgregarTiempo }) {
   const [sel, setSel] = useState(null)
   const [nPrestar, setNPrestar] = useState(0)
   const [sugiriendo, setSugiriendo] = useState(false)
@@ -1102,7 +1154,10 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
   for (const t of tiempos) {
     for (const jid of Object.keys(enCancha[t.id] || {})) jugados[jid] = (jugados[jid] || 0) + 1
   }
-  const sinJugar = jugadores.filter((j) => !jugados[j.id])
+  // Los que están fuera de juego no cuentan para los avisos de equidad: ya no
+  // pueden sumar tiempos hasta que vuelvan
+  const disponibles = jugadores.filter((j) => !condicion[j.id])
+  const sinJugar = disponibles.filter((j) => !jugados[j.id])
 
   const ocupante = {}
   for (const j of jugadores) {
@@ -1111,7 +1166,9 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
   }
   const prestados = jugadores.filter((j) => mapa[j.id]?.prestado)
   const sinPuesto = jugadores.filter((j) => mapa[j.id] && !mapa[j.id].prestado && !mapa[j.id].puesto)
-  const banco = jugadores.filter((j) => !mapa[j.id])
+  // Golpeados y lesionados: quedan fuera de juego, aparte del banco
+  const fueraDeJuego = jugadores.filter((j) => condicion[j.id])
+  const banco = jugadores.filter((j) => !mapa[j.id] && !condicion[j.id])
   const jSel = jugadores.find((j) => j.id === sel) || null
   const enJuego = jugadores.filter((j) => mapa[j.id] && !mapa[j.id].prestado)
 
@@ -1145,6 +1202,12 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
     const jid = jSel.id
     setSel(null)
     onMover(tiempo.id, [{ jugador_id: jid, ...cambio }])
+  }
+
+  function accionCondicion(nueva) {
+    const jid = jSel.id
+    setSel(null)
+    onCondicion(jid, nueva, tiempo.numero)
   }
 
   // préstamos al rival de hoy, por jugador, en este bloque
@@ -1191,12 +1254,17 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
     if (sinPuesto.length) {
       avisos.push(`En cancha sin puesto asignado: ${sinPuesto.map((j) => j.apellido).join(', ')}.`)
     }
+    // Quedó marcado fuera de juego pero sigue figurando en este tiempo
+    const tocadosEnCancha = enJuego.filter((j) => condicion[j.id])
+    for (const j of tocadosEnCancha) {
+      avisos.push(`${j.apellido} está ${condicion[j.id]} y todavía figura en cancha en este tiempo.`)
+    }
   }
   // Premisas de la jornada completa (equidad de tiempos y rotación de préstamos)
   const tiemposConDatos = tiempos.filter((t) => Object.keys(enCancha[t.id] || {}).length)
-  if (tiemposConDatos.length >= 2 && jugadores.length) {
-    const promedio = jugadores.reduce((s, j) => s + (jugados[j.id] || 0), 0) / jugadores.length
-    const rezagados = jugadores.filter((j) => (jugados[j.id] || 0) <= promedio - 1)
+  if (tiemposConDatos.length >= 2 && disponibles.length) {
+    const promedio = disponibles.reduce((s, j) => s + (jugados[j.id] || 0), 0) / disponibles.length
+    const rezagados = disponibles.filter((j) => (jugados[j.id] || 0) <= promedio - 1)
     if (rezagados.length) {
       avisos.push(`${rezagados.map((j) => j.apellido).join(', ')}: van abajo del promedio de tiempos (${promedio.toFixed(1)}).`)
     }
@@ -1224,7 +1292,7 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
 
   const celda = (f) => {
     const oc = ocupante[f.num]
-    const alerta = oc && (!puedeJugarDe(oc, f.num) ||
+    const alerta = oc && (!puedeJugarDe(oc, f.num) || !!condicion[oc.id] ||
       (f.conductor && !(oc.aptitudes || []).includes('conduccion')))
     const clases = ['puesto-celda']
     if (!oc) clases.push('vacia')
@@ -1295,9 +1363,15 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
             )}
             {!mapa[jSel.id]?.prestado && (
               <button className="btn sec chico" onClick={() => accionSel({ dentro: true, prestado: true })}>
-                Prestar al rival
+                Prestar
               </button>
             )}
+            <button className="btn sec chico" onClick={() => accionCondicion('golpeado')}>
+              {condicion[jSel.id] === 'golpeado' ? '↩ Vuelve' : '🤕 Golpeado'}
+            </button>
+            <button className="btn sec chico" onClick={() => accionCondicion('lesionado')}>
+              {condicion[jSel.id] === 'lesionado' ? '↩ Vuelve' : '🚑 Lesionado'}
+            </button>
             <button className="btn sec chico" onClick={() => setSel(null)}>✕</button>
           </>
         )}
@@ -1335,6 +1409,31 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
         {banco.length === 0 && <p className="mini">Sin jugadores en el banco.</p>}
         <div className="banco-lista">{banco.map((j) => chipJugador(j))}</div>
       </div>
+
+      {fueraDeJuego.length > 0 && (
+        <div className="tarjeta" style={{ borderLeft: '4px solid var(--bad)' }}>
+          <div className="mini" style={{ marginBottom: 6 }}>
+            🤕 Fuera de juego ({fueraDeJuego.length}) — no entran en los equipos hasta que vuelvan
+          </div>
+          {fueraDeJuego.map((j) => (
+            <div key={j.id} className="fila entre" style={{ marginTop: 6 }}>
+              <div className="crece">
+                <b style={{ fontSize: '0.9rem' }}>{nombreCompleto(j)}</b>
+                <div className="mini">
+                  {condicion[j.id] === 'lesionado' ? '🚑 Lesionado · queda para seguimiento' : '🤕 Golpeado'}
+                  {' · '}{jugados[j.id] || 0} {jugados[j.id] === 1 ? 'tiempo' : 'tiempos'}
+                </div>
+              </div>
+              <button
+                className="btn sec chico"
+                onClick={() => onCondicion(j.id, condicion[j.id], tiempo.numero)}
+              >
+                ↩ Vuelve a jugar
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="tarjeta">
         <div className="mini" style={{ marginBottom: 6 }}>
