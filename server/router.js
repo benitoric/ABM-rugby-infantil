@@ -537,15 +537,17 @@ async function enrutar(metodo, p, b, req, url) {
         [p[1]])
       const [{ total }] = await query(
         'select count(*)::int as total from tiempo_jugadores where jugador_id = $1', [p[1]])
-      // Rastro de los avisos incumplidos: dijo que iba y no apareció
+      // Rastro de las confirmaciones incumplidas: avisó que iba (asistencias,
+      // marcado en la semana) y el día del partido no apareció (asistencias_partido)
       const [faltas] = await query(
         `select count(*)::int as total
-         from convocatorias c
-         join eventos e on e.id = c.evento_id
-         left join asistencias a on a.evento_id = e.id and a.jugador_id = c.jugador_id
-         where c.jugador_id = $1 and c.estado = 'va' and e.fecha <= current_date
-           and coalesce(a.estado, 'ausente') = 'ausente'
-           and exists (select 1 from asistencias x where x.evento_id = e.id)
+         from asistencias a
+         join eventos e on e.id = a.evento_id
+         left join asistencias_partido ap on ap.evento_id = e.id and ap.jugador_id = a.jugador_id
+         where a.jugador_id = $1 and a.estado = 'presente' and e.tipo = 'partido'
+           and e.fecha <= current_date
+           and coalesce(ap.estado, 'ausente') = 'ausente'
+           and exists (select 1 from asistencias_partido x where x.evento_id = e.id)
            and ${eventoVigente('e')}`, [p[1]])
       const pct = (presentes, totales) =>
         totales ? Math.round((100 * presentes) / totales) : null
@@ -960,22 +962,22 @@ async function enrutar(metodo, p, b, req, url) {
         return { ok: true }
       }
     }
-    if (p[2] === 'convocatorias' && p[1]) {
+    if (p[2] === 'asistencias-partido' && p[1]) {
       if (metodo === 'GET') {
-        return query('select jugador_id, estado from convocatorias where evento_id = $1', [p[1]])
+        return query('select jugador_id, estado from asistencias_partido where evento_id = $1', [p[1]])
       }
       if (metodo === 'PUT') {
         // b.marcas: [{jugador_id, estado|null}] — null borra la marca
         for (const m of b.marcas || []) {
           if (m.estado === null) {
-            await query('delete from convocatorias where evento_id = $1 and jugador_id = $2',
+            await query('delete from asistencias_partido where evento_id = $1 and jugador_id = $2',
               [p[1], m.jugador_id])
           } else {
-            if (!['va', 'no_va'].includes(m.estado)) {
+            if (!['presente', 'ausente'].includes(m.estado)) {
               throw { codigo: 400, error: 'estado_invalido' }
             }
             await query(
-              `insert into convocatorias (evento_id, jugador_id, estado) values ($1,$2,$3)
+              `insert into asistencias_partido (evento_id, jugador_id, estado) values ($1,$2,$3)
                on conflict (evento_id, jugador_id) do update set estado = excluded.estado`,
               [p[1], m.jugador_id, m.estado])
           }
@@ -1035,7 +1037,7 @@ async function enrutar(metodo, p, b, req, url) {
       const asignaciones = await query(
         'select bloque_id, jugador_id from bloque_jugadores where bloque_id = any($1)', [ids])
       const staff = await query(
-        'select bloque_id, staff_email from bloque_staff where bloque_id = any($1)', [ids])
+        'select bloque_id, staff_email, presente from bloque_staff where bloque_id = any($1)', [ids])
       const enCancha = await query(
         `select tj.tiempo_id, tj.jugador_id, tj.puesto, tj.prestado from tiempo_jugadores tj
          join tiempos t on t.id = tj.tiempo_id where t.bloque_id = any($1)`, [ids])
@@ -1066,6 +1068,15 @@ async function enrutar(metodo, p, b, req, url) {
         await query('insert into bloque_staff (bloque_id, staff_email) values ($1,$2)',
           [b.bloque_id, b.staff_email])
       }
+      return { ok: true }
+    }
+    if (metodo === 'POST' && p[1] === 'staff-presente') {
+      // Presencia efectiva del staff el día del partido, sobre su bloque
+      // asignado (null vuelve a "sin marcar")
+      const bloques = await query('select id from bloques where evento_id = $1', [b.evento_id])
+      await query(
+        'update bloque_staff set presente = $1 where staff_email = $2 and bloque_id = any($3)',
+        [b.presente ?? null, b.staff_email, bloques.map((x) => x.id)])
       return { ok: true }
     }
     if (metodo === 'POST' && p[1] === 'sugerir-bloques') {
@@ -1155,18 +1166,21 @@ async function enrutar(metodo, p, b, req, url) {
       // toca). No persiste: el cliente aplica con partido/tiempo-equipo.
       const desde = Number(b.desde_numero) || 1
       const prestamos = Math.max(0, Math.min(6, Number(b.prestamos_por_tiempo) || 0))
-      // Solo los que efectivamente llegaron: el bloque se arma el día
-      // anterior y siempre falta alguno. Si todavía no se tomó asistencia
-      // (nadie marcado presente), se trabaja con el plantel completo.
+      // Los equipos se arman con los que efectivamente llegaron ese día
+      // (asistencias_partido, tomada en la cancha por el staff del bloque).
+      // Si todavía no se tomó, se usa el plantel del bloque, que ya viene de
+      // los que confirmaron en la semana.
       const delBloque = await query(
-        `select j.id, j.posicion, j.aptitudes, a.estado
+        `select j.id, j.posicion, j.aptitudes, ap.estado
          from bloque_jugadores bj
          join jugadores j on j.id = bj.jugador_id
          join bloques bl on bl.id = bj.bloque_id
-         left join asistencias a on a.evento_id = bl.evento_id and a.jugador_id = j.id
+         left join asistencias_partido ap
+           on ap.evento_id = bl.evento_id and ap.jugador_id = j.id
          where bj.bloque_id = $1`, [b.bloque_id])
       const presentes = delBloque.filter((j) => j.estado === 'presente')
-      const jugadores = presentes.length ? presentes : delBloque
+      const sinTomar = delBloque.every((j) => !j.estado)
+      const jugadores = sinTomar ? delBloque : presentes
       if (!jugadores.length) throw { codigo: 400, error: 'faltan_jugadores' }
       const tiempos = await query(
         'select id, numero from tiempos where bloque_id = $1 order by numero', [b.bloque_id])
