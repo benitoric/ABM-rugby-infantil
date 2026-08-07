@@ -602,3 +602,77 @@ details.tarjeta summary {
   font-weight: 600;
   color: var(--primario);
 }
+
+/* ---------- formación del día de partido ---------- */
+.formacion {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+@media (max-width: 480px) { .formacion { grid-template-columns: 1fr; } }
+.formacion-titulo { font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin: 4px 0; }
+.puesto-celda {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  box-shadow: var(--sombra);
+  cursor: pointer;
+}
+.puesto-celda .crece { display: flex; flex-direction: column; min-width: 0; }
+.puesto-celda b { font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.puesto-celda.vacia b { color: var(--texto-suave); font-weight: 400; }
+.puesto-celda.sel { border-color: var(--primario); background: var(--celeste); }
+.puesto-celda.destino { border-style: dashed; border-color: var(--primario); }
+.puesto-celda.alerta { border-color: var(--warn); background: #fffbeb; }
+.puesto-num {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--primario);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.puesto-celda.vacia .puesto-num { background: #d5d9e2; }
+
+.banco-lista { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-jugador {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  background: #fff;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+.chip-jugador b { font-size: 0.85rem; }
+.chip-jugador.sel { border-color: var(--primario); background: var(--celeste); }
+
+.barra-sel {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--primario);
+  color: #fff;
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+.barra-sel .mini { color: #dbe4ff; }
+.barra-sel.oculta { display: none; }

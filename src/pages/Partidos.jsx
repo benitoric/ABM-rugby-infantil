@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
 import {
   abrevAptitudes, DIFICULTADES, etiquetaDificultad, etiquetaMotivo, etiquetaPartido, fechaCorta,
-  lineaBloque, nombreCompleto,
+  FORMACION, nombreCompleto, puedeJugarDe,
 } from '../helpers.js'
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 
@@ -76,6 +76,7 @@ function RotacionAnual() {
           <span style={{ fontSize: '0.9rem' }}>{f.apellido}, {f.nombre}</span>
           <b style={{ color: f.tiempos === 0 ? 'var(--warn)' : 'var(--verde-oscuro)' }}>
             {f.tiempos} {f.tiempos === 1 ? 'tiempo' : 'tiempos'}
+            {f.prestados > 0 && <span className="mini"> ({f.prestados} prestado{f.prestados > 1 ? 's' : ''})</span>}
           </b>
         </div>
       ))}
@@ -118,10 +119,11 @@ function ArmadoPartido({ partido }) {
       for (const f of datos.asignaciones) mAsig[f.jugador_id] = f.bloque_id
       setAsignacion(mAsig)
 
+      // enCancha: tiempo_id → { jugador_id → { puesto, prestado } }
       const mCancha = {}
       for (const f of datos.en_cancha) {
-        if (!mCancha[f.tiempo_id]) mCancha[f.tiempo_id] = new Set()
-        mCancha[f.tiempo_id].add(f.jugador_id)
+        if (!mCancha[f.tiempo_id]) mCancha[f.tiempo_id] = {}
+        mCancha[f.tiempo_id][f.jugador_id] = { puesto: f.puesto, prestado: f.prestado }
       }
       setEnCancha(mCancha)
 
@@ -146,9 +148,9 @@ function ArmadoPartido({ partido }) {
       setEnCancha((m) => {
         const copia = { ...m }
         for (const tid of tiemposDelBloque) {
-          if (copia[tid]?.has(jugadorId)) {
-            copia[tid] = new Set(copia[tid])
-            copia[tid].delete(jugadorId)
+          if (copia[tid]?.[jugadorId]) {
+            copia[tid] = { ...copia[tid] }
+            delete copia[tid][jugadorId]
           }
         }
         return copia
@@ -160,18 +162,26 @@ function ArmadoPartido({ partido }) {
     })
   }
 
-  async function toggleEnCancha(tiempoId, jugadorId) {
-    const estaba = (enCancha[tiempoId] || new Set()).has(jugadorId)
+  // Aplica una tanda de movimientos sobre un tiempo (poner, sacar, cambiar
+  // puesto, prestar). Optimista: primero el estado, después la API en orden
+  // (el orden importa en los intercambios de puesto).
+  async function moverEnCancha(tiempoId, cambios) {
     setEnCancha((m) => {
-      const copia = { ...m, [tiempoId]: new Set(m[tiempoId] || []) }
-      if (estaba) copia[tiempoId].delete(jugadorId)
-      else copia[tiempoId].add(jugadorId)
-      return copia
+      const t = { ...(m[tiempoId] || {}) }
+      for (const c of cambios) {
+        if (!c.dentro) { delete t[c.jugador_id]; continue }
+        t[c.jugador_id] = { puesto: c.prestado ? null : (c.puesto ?? null), prestado: !!c.prestado }
+        if (c.puesto && !c.prestado) {
+          for (const [jid, e] of Object.entries(t)) {
+            if (jid !== c.jugador_id && e.puesto === c.puesto) t[jid] = { ...e, puesto: null }
+          }
+        }
+      }
+      return { ...m, [tiempoId]: t }
     })
-    await api('partido/cancha', {
-      method: 'POST',
-      body: { tiempo_id: tiempoId, jugador_id: jugadorId, dentro: !estaba },
-    })
+    for (const c of cambios) {
+      await api('partido/cancha', { method: 'POST', body: { tiempo_id: tiempoId, ...c } })
+    }
   }
 
   async function agregarTiempo(bloqueId) {
@@ -343,7 +353,7 @@ function ArmadoPartido({ partido }) {
           tiempoSel={tiempoSel[b.id]}
           onSelTiempo={(tid) => setTiempoSel((m) => ({ ...m, [b.id]: tid }))}
           enCancha={enCancha}
-          onToggle={toggleEnCancha}
+          onMover={moverEnCancha}
           onAgregarTiempo={() => agregarTiempo(b.id)}
         />
       ))}
@@ -369,7 +379,7 @@ function Planilla({ partido, bloques, jugadores, asignacion, tiempos, enCancha }
           const delBloque = jugadores.filter((j) => asignacion[j.id] === bl.id)
           const tiemposBloque = tiempos.filter((t) => t.bloque_id === bl.id)
           const jugados = (jid) =>
-            tiemposBloque.filter((t) => (enCancha[t.id] || new Set()).has(jid)).length
+            tiemposBloque.filter((t) => (enCancha[t.id] || {})[jid]).length
           return (
             <div key={bl.id}>
               <h3>
@@ -384,33 +394,74 @@ function Planilla({ partido, bloques, jugadores, asignacion, tiempos, enCancha }
               </p>
               {!delBloque.length && <p className="mini">Sin jugadores asignados.</p>}
               {delBloque.length > 0 && (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Jugador</th>
-                      {tiemposBloque.map((t) => <th key={t.id}>T{t.numero}</th>)}
-                      <th>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {delBloque.map((j) => (
-                      <tr key={j.id}>
-                        <td>{nombreCompleto(j)}</td>
-                        {tiemposBloque.map((t) => (
-                          <td key={t.id}>{(enCancha[t.id] || new Set()).has(j.id) ? '✔' : ''}</td>
-                        ))}
-                        <td><b>{jugados(j.id)}</b></td>
+                <>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Jugador</th>
+                        {tiemposBloque.map((t) => <th key={t.id}>T{t.numero}</th>)}
+                        <th>Total</th>
                       </tr>
-                    ))}
-                    <tr>
-                      <td><b>En cancha</b></td>
-                      {tiemposBloque.map((t) => (
-                        <td key={t.id}><b>{(enCancha[t.id] || new Set()).size}</b></td>
+                    </thead>
+                    <tbody>
+                      {delBloque.map((j) => (
+                        <tr key={j.id}>
+                          <td>{nombreCompleto(j)}</td>
+                          {tiemposBloque.map((t) => {
+                            const e = (enCancha[t.id] || {})[j.id]
+                            return <td key={t.id}>{e ? (e.prestado ? 'P' : (e.puesto || '✔')) : ''}</td>
+                          })}
+                          <td><b>{jugados(j.id)}</b></td>
+                        </tr>
                       ))}
-                      <td></td>
-                    </tr>
-                  </tbody>
-                </table>
+                      <tr>
+                        <td><b>En cancha</b></td>
+                        {tiemposBloque.map((t) => (
+                          <td key={t.id}>
+                            <b>{Object.values(enCancha[t.id] || {}).filter((e) => !e.prestado).length}</b>
+                          </td>
+                        ))}
+                        <td></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p className="mini">
+                    Número = camiseta · ✔ = en cancha sin puesto · P = prestado al rival.
+                  </p>
+                  <h4>Formación por tiempo</h4>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Puesto</th>
+                        {tiemposBloque.map((t) => <th key={t.id}>T{t.numero}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {FORMACION.map((f) => (
+                        <tr key={f.num}>
+                          <td><b>{f.num}</b> {f.label}</td>
+                          {tiemposBloque.map((t) => {
+                            const oc = delBloque.find((j) => {
+                              const e = (enCancha[t.id] || {})[j.id]
+                              return e && !e.prestado && e.puesto === f.num
+                            })
+                            return <td key={t.id}>{oc ? oc.apellido : ''}</td>
+                          })}
+                        </tr>
+                      ))}
+                      <tr>
+                        <td>Prestados</td>
+                        {tiemposBloque.map((t) => (
+                          <td key={t.id}>
+                            {delBloque
+                              .filter((j) => (enCancha[t.id] || {})[j.id]?.prestado)
+                              .map((j) => j.apellido).join(', ')}
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </>
               )}
             </div>
           )
@@ -488,7 +539,11 @@ function BalancePartido({ bloque, onActualizado }) {
   )
 }
 
-function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiempoSel, onSelTiempo, enCancha, onToggle, onAgregarTiempo }) {
+function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiempoSel, onSelTiempo, enCancha, onMover, onAgregarTiempo }) {
+  const [sel, setSel] = useState(null)
+
+  useEffect(() => setSel(null), [tiempoSel])
+
   const infoBloque = (
     <>
       <div className="tarjeta fila entre">
@@ -528,14 +583,113 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiem
   }
 
   const tiempo = tiempos.find((t) => t.id === tiempoSel) || tiempos[0]
-  const set = (tiempo && enCancha[tiempo.id]) || new Set()
+  const mapa = (tiempo && enCancha[tiempo.id]) || {}
 
-  // cuántos tiempos jugó cada jugador en este bloque
+  // cuántos tiempos jugó cada jugador en este bloque (prestado también cuenta)
   const jugados = {}
   for (const t of tiempos) {
-    for (const jid of enCancha[t.id] || []) jugados[jid] = (jugados[jid] || 0) + 1
+    for (const jid of Object.keys(enCancha[t.id] || {})) jugados[jid] = (jugados[jid] || 0) + 1
   }
   const sinJugar = jugadores.filter((j) => !jugados[j.id])
+
+  const ocupante = {}
+  for (const j of jugadores) {
+    const e = mapa[j.id]
+    if (e && !e.prestado && e.puesto) ocupante[e.puesto] = j
+  }
+  const prestados = jugadores.filter((j) => mapa[j.id]?.prestado)
+  const sinPuesto = jugadores.filter((j) => mapa[j.id] && !mapa[j.id].prestado && !mapa[j.id].puesto)
+  const banco = jugadores.filter((j) => !mapa[j.id])
+  const jSel = jugadores.find((j) => j.id === sel) || null
+  const enJuego = jugadores.filter((j) => mapa[j.id] && !mapa[j.id].prestado)
+
+  function tocarPuesto(num) {
+    const oc = ocupante[num]
+    if (!jSel) {
+      if (oc) setSel(oc.id)
+      return
+    }
+    if (oc?.id === jSel.id) { setSel(null); return }
+    const origen = mapa[jSel.id]
+    const cambios = [{ jugador_id: jSel.id, dentro: true, puesto: num }]
+    if (oc) {
+      // si el elegido venía de otro puesto se intercambian; si venía del
+      // banco (o prestado, o sin puesto), el que estaba sale al banco
+      if (origen && !origen.prestado && origen.puesto) {
+        cambios.push({ jugador_id: oc.id, dentro: true, puesto: origen.puesto })
+      } else {
+        cambios.push({ jugador_id: oc.id, dentro: false })
+      }
+    }
+    setSel(null)
+    onMover(tiempo.id, cambios)
+  }
+
+  function tocarJugador(jid) {
+    setSel(sel === jid ? null : jid)
+  }
+
+  function accionSel(cambio) {
+    const jid = jSel.id
+    setSel(null)
+    onMover(tiempo.id, [{ jugador_id: jid, ...cambio }])
+  }
+
+  // Premisas que no se están cumpliendo en el tiempo a la vista
+  const avisos = []
+  if (tiempo) {
+    if (enJuego.length !== 13) {
+      avisos.push(`Hay ${enJuego.length} jugadores en cancha: deberían ser 13.`)
+    }
+    for (const f of FORMACION) {
+      const oc = ocupante[f.num]
+      if (!oc) continue
+      if (!puedeJugarDe(oc, f.num)) {
+        avisos.push(`${oc.apellido} es ${oc.posicion} y está de ${f.num} (${f.label}).`)
+      }
+      if (f.conductor && !(oc.aptitudes || []).includes('conduccion')) {
+        avisos.push(`El ${f.num} (${oc.apellido}) no tiene aptitud de conducción.`)
+      }
+    }
+    if (sinPuesto.length) {
+      avisos.push(`En cancha sin puesto asignado: ${sinPuesto.map((j) => j.apellido).join(', ')}.`)
+    }
+  }
+
+  const chipJugador = (j, extra = '') => (
+    <button
+      key={j.id}
+      className={`chip-jugador ${sel === j.id ? 'sel' : ''}`}
+      onClick={() => tocarJugador(j.id)}
+    >
+      <b>{j.apellido}</b>
+      <span className="mini">
+        {j.posicion ? `${j.posicion[0]}` : '·'} · {jugados[j.id] || 0}t
+        {abrevAptitudes(j) ? ` · ${abrevAptitudes(j)}` : ''}{extra}
+      </span>
+    </button>
+  )
+
+  const celda = (f) => {
+    const oc = ocupante[f.num]
+    const alerta = oc && (!puedeJugarDe(oc, f.num) ||
+      (f.conductor && !(oc.aptitudes || []).includes('conduccion')))
+    const clases = ['puesto-celda']
+    if (!oc) clases.push('vacia')
+    if (sel && oc?.id === sel) clases.push('sel')
+    else if (jSel) clases.push('destino')
+    if (alerta) clases.push('alerta')
+    return (
+      <button key={f.num} className={clases.join(' ')} onClick={() => tocarPuesto(f.num)}>
+        <span className="puesto-num">{f.num}</span>
+        <span className="crece">
+          <span className="mini">{f.label}{f.conductor ? ' · Cond' : ''}</span>
+          <b>{oc ? nombreCompleto(oc) : '—'}</b>
+        </span>
+        {alerta && <span>⚠️</span>}
+      </button>
+    )
+  }
 
   return (
     <>
@@ -553,49 +707,80 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiem
         )}
       </div>
 
-      <div className="tarjeta fila entre">
-        <div>
-          <div className="mini">En cancha · Tiempo {tiempo?.numero}</div>
-          <div className="contador">{set.size} jugadores</div>
+      {avisos.length > 0 && (
+        <div className="aviso">
+          {avisos.map((a, i) => <div key={i}>⚠️ {a}</div>)}
         </div>
-        {sinJugar.length > 0 && (
-          <div className="mini" style={{ color: 'var(--warn)', maxWidth: '55%' }}>
-            ⚠️ Sin jugar todavía: {sinJugar.map((j) => j.apellido).join(', ')}
-          </div>
-        )}
-        {sinJugar.length === 0 && (
-          <div className="mini" style={{ color: 'var(--ok)' }}>✓ Todos jugaron al menos un tiempo</div>
+      )}
+      {avisos.length === 0 && enJuego.length === 13 && (
+        <p className="mini" style={{ color: 'var(--ok)' }}>✓ Formación completa, sin observaciones.</p>
+      )}
+
+      <div className={`barra-sel ${jSel ? '' : 'oculta'}`}>
+        {jSel && (
+          <>
+            <div className="crece">
+              <b>{nombreCompleto(jSel)}</b>
+              <div className="mini">Tocá un puesto para ubicarlo, o…</div>
+            </div>
+            {mapa[jSel.id] && (
+              <button className="btn sec chico" onClick={() => accionSel({ dentro: false })}>Al banco</button>
+            )}
+            {!mapa[jSel.id]?.prestado && (
+              <button className="btn sec chico" onClick={() => accionSel({ dentro: true, prestado: true })}>
+                Prestar al rival
+              </button>
+            )}
+            <button className="btn sec chico" onClick={() => setSel(null)}>✕</button>
+          </>
         )}
       </div>
 
-      <p className="mini">Tocá un jugador para ponerlo o sacarlo de la cancha en este tiempo.</p>
+      <div className="formacion">
+        <div>
+          <div className="mini formacion-titulo">Forwards</div>
+          {FORMACION.filter((f) => f.tipo === 'forward').map(celda)}
+        </div>
+        <div>
+          <div className="mini formacion-titulo">Backs</div>
+          {FORMACION.filter((f) => f.tipo === 'back').map(celda)}
+        </div>
+      </div>
 
-      {jugadores.map((j) => {
-        const dentro = set.has(j.id)
-        return (
-          <button
-            key={j.id}
-            className="jugador-item"
-            style={dentro ? { borderLeft: '4px solid var(--ok)' } : { opacity: 0.75 }}
-            onClick={() => tiempo && onToggle(tiempo.id, j.id)}
-          >
-            <div className="crece">
-              <div style={{ fontWeight: 600 }}>
-                {nombreCompleto(j)}
-                {j.posicion && <span className="mini"> · {j.posicion}</span>}
-              </div>
-              <div className="mini">
-                {jugados[j.id] || 0} {jugados[j.id] === 1 ? 'tiempo jugado' : 'tiempos jugados'} en este bloque
-                {!jugados[j.id] && ' ⚠️'}
-                {abrevAptitudes(j) ? ` · ${abrevAptitudes(j)}` : ''}
-              </div>
+      {sinPuesto.length > 0 && (
+        <div className="tarjeta">
+          <div className="mini" style={{ marginBottom: 6 }}>En cancha sin puesto (tocá para ubicar)</div>
+          <div className="banco-lista">{sinPuesto.map((j) => chipJugador(j))}</div>
+        </div>
+      )}
+
+      <div className="tarjeta">
+        <div className="fila entre" style={{ marginBottom: 6 }}>
+          <div className="mini">Banco · Tiempo {tiempo?.numero} ({banco.length})</div>
+          {sinJugar.length > 0 ? (
+            <div className="mini" style={{ color: 'var(--warn)' }}>
+              ⚠️ Sin jugar: {sinJugar.map((j) => j.apellido).join(', ')}
             </div>
-            <span style={{ fontWeight: 800, color: dentro ? 'var(--ok)' : 'var(--texto-suave)' }}>
-              {dentro ? 'EN CANCHA' : 'Banco'}
-            </span>
-          </button>
-        )
-      })}
+          ) : (
+            <div className="mini" style={{ color: 'var(--ok)' }}>✓ Todos jugaron al menos un tiempo</div>
+          )}
+        </div>
+        {banco.length === 0 && <p className="mini">Sin jugadores en el banco.</p>}
+        <div className="banco-lista">{banco.map((j) => chipJugador(j))}</div>
+      </div>
+
+      <div className="tarjeta">
+        <div className="mini" style={{ marginBottom: 6 }}>
+          🤝 Prestados al rival este tiempo ({prestados.length}) — les cuenta como tiempo jugado
+        </div>
+        {prestados.length === 0 && <p className="mini">Nadie prestado. Elegí un jugador y tocá "Prestar al rival".</p>}
+        <div className="banco-lista">{prestados.map((j) => chipJugador(j))}</div>
+      </div>
+
+      <p className="mini">
+        Tocá un jugador (del banco o de un puesto) y después el lugar de destino.
+        Si el destino está ocupado, intercambian; desde el banco, el que estaba sale.
+      </p>
 
       <BalancePartido bloque={bloque} onActualizado={onActualizado} />
     </>

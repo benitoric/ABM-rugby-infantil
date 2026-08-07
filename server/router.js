@@ -7,6 +7,9 @@ const COLS_JUGADOR = `id, nombre, apellido, fecha_nacimiento::text as fecha_naci
 
 const APTITUDES = ['conduccion', 'penetracion', 'definicion']
 
+// Números de camiseta válidos en la formación de 13 (sin 6 ni 7)
+const PUESTOS_VALIDOS = [1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15]
+
 // Normaliza la posición sin importar cómo venga escrita (forward, BACK, mixto…)
 function normalizarPosicion(p) {
   const t = (p || '').trim().toLowerCase()
@@ -546,7 +549,8 @@ async function enrutar(metodo, p, b, req, url) {
     if (metodo === 'GET' && p[1] === 'tiempos') {
       const anio = Number(url.searchParams.get('anio')) || new Date().getFullYear()
       return query(
-        `select j.id, j.nombre, j.apellido, count(tj.jugador_id)::int as tiempos
+        `select j.id, j.nombre, j.apellido, count(tj.jugador_id)::int as tiempos,
+           count(tj.jugador_id) filter (where tj.prestado)::int as prestados
          from jugadores j
          left join tiempo_jugadores tj on tj.jugador_id = j.id and tj.tiempo_id in (
            select t.id from tiempos t
@@ -780,7 +784,7 @@ async function enrutar(metodo, p, b, req, url) {
       const asignaciones = await query(
         'select bloque_id, jugador_id from bloque_jugadores where bloque_id = any($1)', [ids])
       const enCancha = await query(
-        `select tj.tiempo_id, tj.jugador_id from tiempo_jugadores tj
+        `select tj.tiempo_id, tj.jugador_id, tj.puesto, tj.prestado from tiempo_jugadores tj
          join tiempos t on t.id = tj.tiempo_id where t.bloque_id = any($1)`, [ids])
       return { bloques, tiempos, asignaciones, en_cancha: enCancha }
     }
@@ -853,9 +857,24 @@ async function enrutar(metodo, p, b, req, url) {
     }
     if (metodo === 'POST' && p[1] === 'cancha') {
       if (b.dentro) {
+        const puesto = b.puesto == null ? null : Number(b.puesto)
+        if (puesto !== null && !PUESTOS_VALIDOS.includes(puesto)) {
+          throw { codigo: 400, error: 'puesto_invalido' }
+        }
+        const prestado = !!b.prestado
+        if (puesto !== null) {
+          // Libera el puesto si lo ocupaba otro (el cliente reubica al otro
+          // en la llamada siguiente cuando se trata de un intercambio)
+          await query(
+            `update tiempo_jugadores set puesto = null
+             where tiempo_id = $1 and puesto = $2 and jugador_id <> $3`,
+            [b.tiempo_id, puesto, b.jugador_id])
+        }
         await query(
-          `insert into tiempo_jugadores (tiempo_id, jugador_id) values ($1,$2)
-           on conflict do nothing`, [b.tiempo_id, b.jugador_id])
+          `insert into tiempo_jugadores (tiempo_id, jugador_id, puesto, prestado)
+           values ($1,$2,$3,$4)
+           on conflict (tiempo_id, jugador_id) do update set puesto = $3, prestado = $4`,
+          [b.tiempo_id, b.jugador_id, prestado ? null : puesto, prestado])
       } else {
         await query('delete from tiempo_jugadores where tiempo_id = $1 and jugador_id = $2',
           [b.tiempo_id, b.jugador_id])
