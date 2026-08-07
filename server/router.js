@@ -114,6 +114,94 @@ function validarDificultad(d) {
   return d
 }
 
+// ---------- sugerencia de armado de bloques ----------
+// Reparte a los convocados en los dos bloques buscando: fuerza pareja según la
+// última evaluación (con un sesgo a favor del bloque que enfrenta al rival más
+// difícil), misma cantidad de forwards y de backs (los mixtos son comodines) y
+// misma cantidad de conductores, penetradores y definidores.
+
+// Sesgo de fuerza por escalón de diferencia de dificultad entre rivales
+const SESGO_POR_ESCALON = 0.3
+const ESCALA_DIFICULTAD = { malo: 0, regular: 1, bueno: 2 }
+
+function tipoJugador(j) {
+  if (j.posicion === 'Forward') return 'fw'
+  if (j.posicion === 'Back') return 'back'
+  return 'mx'
+}
+
+// Penalidad de un reparto: cuanto más baja, mejor. sesgo = cuánto más fuerte
+// (en promedio de calificación) debería quedar el bloque B respecto del A.
+function penalidadReparto(jugadores, calif, A, B, sesgo) {
+  const a = jugadores.filter((j) => A.has(j.id))
+  const b = jugadores.filter((j) => B.has(j.id))
+  const media = (l) => (l.length ? l.reduce((acc, j) => acc + calif[j.id], 0) / l.length : 0)
+  const cuenta = (l, t) => l.filter((j) => tipoJugador(j) === t).length
+  // Distancia entre los rangos posibles de cada lado (los mixtos estiran el rango)
+  const brecha = (min1, max1, min2, max2) => Math.max(min1 - max2, min2 - max1, 0)
+  const mxA = cuenta(a, 'mx')
+  const mxB = cuenta(b, 'mx')
+  let p = 3 * Math.abs(a.length - b.length)
+  for (const t of ['fw', 'back']) {
+    const cA = cuenta(a, t)
+    const cB = cuenta(b, t)
+    p += 2 * brecha(cA, cA + mxA, cB, cB + mxB)
+  }
+  p += 4 * Math.abs((media(b) - media(a)) - sesgo)
+  for (const apt of APTITUDES) {
+    const con = (l) => l.filter((j) => (j.aptitudes || []).includes(apt)).length
+    p += Math.abs(con(a) - con(b))
+  }
+  return p
+}
+
+function sugerirReparto(jugadores, calif, sesgo) {
+  const A = new Set()
+  const B = new Set()
+  // Reparto inicial en serpentina (A B B A…) por tipo, de mejor a peor
+  for (const t of ['fw', 'back', 'mx']) {
+    jugadores
+      .filter((j) => tipoJugador(j) === t)
+      .sort((x, y) => calif[y.id] - calif[x.id])
+      .forEach((j, i) => (i % 4 === 1 || i % 4 === 2 ? B : A).add(j.id))
+  }
+  // Refinamiento: intercambios y movimientos simples mientras mejoren
+  let mejorP = penalidadReparto(jugadores, calif, A, B, sesgo)
+  for (let pasada = 0; pasada < 20; pasada++) {
+    let mejoro = false
+    const deA = jugadores.filter((j) => A.has(j.id))
+    const deB = jugadores.filter((j) => B.has(j.id))
+    const movimientos = []
+    for (const x of deA) movimientos.push([x, null])
+    for (const y of deB) movimientos.push([null, y])
+    for (const x of deA) for (const y of deB) movimientos.push([x, y])
+    for (const [x, y] of movimientos) {
+      // las listas se arman al inicio de la pasada: un movimiento aceptado
+      // puede dejar obsoletos a los siguientes
+      if (x && !A.has(x.id)) continue
+      if (y && !B.has(y.id)) continue
+      if (x) { A.delete(x.id); B.add(x.id) }
+      if (y) { B.delete(y.id); A.add(y.id) }
+      const p = penalidadReparto(jugadores, calif, A, B, sesgo)
+      if (p < mejorP - 1e-9) {
+        mejorP = p
+        mejoro = true
+      } else {
+        if (x) { B.delete(x.id); A.add(x.id) }
+        if (y) { A.delete(y.id); B.add(y.id) }
+      }
+    }
+    if (!mejoro) break
+  }
+  return { A, B }
+}
+
+// Promedio simple de un jsonb {variable: 1..5}
+function promedioValores(valores) {
+  const vs = Object.values(valores || {}).map(Number).filter((n) => n > 0)
+  return vs.length ? vs.reduce((s, n) => s + n, 0) / vs.length : null
+}
+
 // Un evento cuenta para las estadísticas si no está suspendido del todo: los
 // partidos con un solo bloque suspendido siguen contando (el otro se jugó).
 function eventoVigente(alias) {
@@ -803,6 +891,44 @@ async function enrutar(metodo, p, b, req, url) {
           [b.bloque_id, b.jugador_id])
       }
       return { ok: true }
+    }
+    if (metodo === 'POST' && p[1] === 'sugerir-bloques') {
+      // Propone un reparto de los convocados entre los dos bloques. No
+      // persiste nada: el staff lo ve, lo retoca y recién ahí lo aplica.
+      const bloques = await query(
+        'select id, numero, dificultad from bloques where evento_id = $1 order by numero',
+        [b.evento_id])
+      if (bloques.length < 2) throw { codigo: 400, error: 'faltan_bloques' }
+      const ids = Array.isArray(b.jugador_ids) ? b.jugador_ids : []
+      if (ids.length < 2) throw { codigo: 400, error: 'faltan_jugadores' }
+      const jugadores = await query(
+        'select id, posicion, aptitudes from jugadores where id = any($1)', [ids])
+      // Última evaluación de cada uno; si hay revisión, promedia las dos miradas
+      const evs = await query(
+        `select distinct on (jugador_id) jugador_id, valores, valores_revisor
+         from evaluaciones where jugador_id = any($1)
+         order by jugador_id, fecha desc, created_at desc`, [ids])
+      const calif = {}
+      for (const ev of evs) {
+        const notas = [promedioValores(ev.valores), promedioValores(ev.valores_revisor)]
+          .filter((n) => n !== null)
+        if (notas.length) calif[ev.jugador_id] = notas.reduce((s, n) => s + n, 0) / notas.length
+      }
+      // Sin evaluación: mediana del grupo, para que no desbalancee
+      const conocidas = Object.values(calif).sort((x, y) => x - y)
+      const mediana = conocidas.length
+        ? conocidas[Math.floor(conocidas.length / 2)]
+        : 3
+      const sinEvaluacion = jugadores.filter((j) => calif[j.id] === undefined).map((j) => j.id)
+      for (const id of sinEvaluacion) calif[id] = mediana
+      // Sesgo: el bloque que enfrenta al rival más difícil queda un poco más fuerte
+      const escala = (d) => ESCALA_DIFICULTAD[d] ?? 1
+      const sesgo = (escala(bloques[1].dificultad) - escala(bloques[0].dificultad)) * SESGO_POR_ESCALON
+      const { A, B } = sugerirReparto(jugadores, calif, sesgo)
+      const asignacion = {}
+      for (const id of A) asignacion[id] = bloques[0].id
+      for (const id of B) asignacion[id] = bloques[1].id
+      return { asignacion, califs: calif, sin_evaluacion: sinEvaluacion, sesgo }
     }
     if (metodo === 'PUT' && p[1] === 'bloque' && p[2]) {
       // Actualización parcial: solo cambian los campos presentes en el cuerpo
