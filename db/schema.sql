@@ -163,13 +163,14 @@ create table if not exists bloque_jugadores (
   primary key (bloque_id, jugador_id)
 );
 
--- Confirmación previa al partido: qué dijo cada jugador la víspera. Se guarda
--- aparte de la asistencia real para dejar el rastro de los que avisaron que
--- iban y finalmente no fueron.
-create table if not exists convocatorias (
+-- Control de asistencia del día del partido, tomado en la cancha por el staff
+-- de cada bloque. Es un registro aparte de la confirmación anticipada (la
+-- tabla asistencias, que se marca en la semana cuando los chicos avisan que
+-- van): así queda el rastro de los que confirmaron y finalmente no fueron.
+create table if not exists asistencias_partido (
   evento_id uuid not null references eventos(id) on delete cascade,
   jugador_id uuid not null references jugadores(id) on delete cascade,
-  estado text not null check (estado in ('va','no_va')),
+  estado text not null check (estado in ('presente','ausente')),
   primary key (evento_id, jugador_id)
 );
 
@@ -178,6 +179,8 @@ create table if not exists convocatorias (
 create table if not exists bloque_staff (
   bloque_id uuid not null references bloques(id) on delete cascade,
   staff_email text not null references staff(email) on delete cascade,
+  -- Presencia efectiva el día del partido (null = sin marcar todavía)
+  presente boolean,
   primary key (bloque_id, staff_email)
 );
 

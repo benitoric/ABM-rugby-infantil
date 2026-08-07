@@ -138,7 +138,7 @@ export default function Ficha({ jugadorId, evaluarAlAbrir = false, revisar = nul
           {stats.faltas_avisadas > 0 && (
             <div className="stat">
               <div className="valor" style={{ color: 'var(--warn)' }}>{stats.faltas_avisadas}</div>
-              <div className="etiqueta">Avisó que iba y faltó</div>
+              <div className="etiqueta">Confirmó y faltó</div>
             </div>
           )}
         </div>
