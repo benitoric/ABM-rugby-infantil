@@ -101,7 +101,7 @@ function ArmadoPartido({ partido }) {
   const [presenciaStaff, setPresenciaStaff] = useState({})
   const [tiempos, setTiempos] = useState([])
   const [enCancha, setEnCancha] = useState({})
-  const [vista, setVista] = useState('presentes')
+  const [vista, setVista] = useState('bloques')
   const [tiempoSel, setTiempoSel] = useState({})
   const [editandoBloque, setEditandoBloque] = useState(null)
   const [sugerencia, setSugerencia] = useState(null)
@@ -355,12 +355,14 @@ function ArmadoPartido({ partido }) {
 
   return (
     <>
+      {/* Las solapas siguen la secuencia del proceso: armar bloques en la
+          semana, tomar asistencia en la cancha, armar los equipos, imprimir */}
       <div className="seg no-imprimir">
-        <button className={vista === 'presentes' ? 'activo' : ''} onClick={() => setVista('presentes')}>
-          ✅ Presentes ({jugadores.filter((j) => asistencia[j.id] === 'presente').length})
-        </button>
         <button className={vista === 'bloques' ? 'activo' : ''} onClick={() => setVista('bloques')}>
           Armar bloques
+        </button>
+        <button className={vista === 'presentes' ? 'activo' : ''} onClick={() => setVista('presentes')}>
+          ✅ Tomar asistencia ({jugadores.filter((j) => asistencia[j.id] === 'presente').length})
         </button>
         {bloques.map((b) => (
           <button key={b.id} className={vista === b.id ? 'activo' : ''} onClick={() => setVista(b.id)}>
