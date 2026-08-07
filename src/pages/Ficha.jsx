@@ -135,6 +135,12 @@ export default function Ficha({ jugadorId, evaluarAlAbrir = false, revisar = nul
             <div className="valor">{stats.tiempos}</div>
             <div className="etiqueta">Tiempos jugados</div>
           </div>
+          {stats.faltas_avisadas > 0 && (
+            <div className="stat">
+              <div className="valor" style={{ color: 'var(--warn)' }}>{stats.faltas_avisadas}</div>
+              <div className="etiqueta">Avisó que iba y faltó</div>
+            </div>
+          )}
         </div>
       )}
 
