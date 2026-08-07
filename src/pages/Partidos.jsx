@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
 import {
   abrevAptitudes, APTITUDES, DIFICULTADES, etiquetaDificultad, etiquetaMotivo, etiquetaPartido,
-  fechaCorta, FORMACION, nombreCompleto, puedeJugarDe,
+  fechaCorta, FORMACION, nombreCompleto, nombreStaff, puedeJugarDe,
 } from '../helpers.js'
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 
@@ -92,9 +92,12 @@ function ArmadoPartido({ partido }) {
   const [jugadores, setJugadores] = useState([])
   const [asistencia, setAsistencia] = useState({})
   const [asignacion, setAsignacion] = useState({})
+  const [staff, setStaff] = useState([])
+  const [asistenciaStaff, setAsistenciaStaff] = useState({})
+  const [asignacionStaff, setAsignacionStaff] = useState({})
   const [tiempos, setTiempos] = useState([])
   const [enCancha, setEnCancha] = useState({})
-  const [vista, setVista] = useState('bloques')
+  const [vista, setVista] = useState('presentes')
   const [tiempoSel, setTiempoSel] = useState({})
   const [editandoBloque, setEditandoBloque] = useState(null)
   const [sugerencia, setSugerencia] = useState(null)
@@ -104,22 +107,33 @@ function ArmadoPartido({ partido }) {
 
   useEffect(() => {
     async function cargar() {
-      const [datos, js, asis] = await Promise.all([
+      const [datos, js, asis, sf, asisSf] = await Promise.all([
         api(`partido/${partido.id}`),
         api('jugadores'),
         api(`eventos/${partido.id}/asistencias`),
+        api('staff'),
+        api(`eventos/${partido.id}/asistencias-staff`),
       ])
       setBloques(datos.bloques)
       setTiempos(datos.tiempos)
       setJugadores(js.filter((j) => j.estado !== 'inactivo'))
+      setStaff(sf.filter((s) => s.activo))
 
       const mAsis = {}
       for (const a of asis) mAsis[a.jugador_id] = a.estado
       setAsistencia(mAsis)
 
+      const mAsisSf = {}
+      for (const a of asisSf) mAsisSf[a.staff_email] = a.estado
+      setAsistenciaStaff(mAsisSf)
+
       const mAsig = {}
       for (const f of datos.asignaciones) mAsig[f.jugador_id] = f.bloque_id
       setAsignacion(mAsig)
+
+      const mAsigSf = {}
+      for (const f of datos.staff || []) mAsigSf[f.staff_email] = f.bloque_id
+      setAsignacionStaff(mAsigSf)
 
       // enCancha: tiempo_id → { jugador_id → { puesto, prestado } }
       const mCancha = {}
@@ -161,6 +175,56 @@ function ArmadoPartido({ partido }) {
     await api('partido/asignar', {
       method: 'POST',
       body: { evento_id: partido.id, jugador_id: jugadorId, bloque_id: nuevo },
+    })
+  }
+
+  // Control de asistencia del día: el bloque se arma la víspera y siempre
+  // falta alguno. Al marcar ausente sale de los tiempos ya cargados, para
+  // que los equipos queden solo con los que efectivamente están.
+  async function marcarAsistencia(jugadorId, estado) {
+    const nuevo = asistencia[jugadorId] === estado ? null : estado
+    setAsistencia((m) => ({ ...m, [jugadorId]: nuevo }))
+    if (nuevo !== 'presente') {
+      setEnCancha((m) => {
+        const copia = { ...m }
+        for (const t of tiempos) {
+          if (copia[t.id]?.[jugadorId]) {
+            copia[t.id] = { ...copia[t.id] }
+            delete copia[t.id][jugadorId]
+          }
+        }
+        return copia
+      })
+      for (const t of tiempos) {
+        if (enCancha[t.id]?.[jugadorId]) {
+          await api('partido/cancha', {
+            method: 'POST',
+            body: { tiempo_id: t.id, jugador_id: jugadorId, dentro: false },
+          })
+        }
+      }
+    }
+    await api(`eventos/${partido.id}/asistencias`, {
+      method: 'PUT',
+      body: { marcas: [{ jugador_id: jugadorId, estado: nuevo }] },
+    })
+  }
+
+  async function marcarAsistenciaStaff(email, estado) {
+    const nuevo = asistenciaStaff[email] === estado ? null : estado
+    setAsistenciaStaff((m) => ({ ...m, [email]: nuevo }))
+    await api(`eventos/${partido.id}/asistencias-staff`, {
+      method: 'PUT',
+      body: { marcas: [{ staff_email: email, estado: nuevo }] },
+    })
+  }
+
+  async function asignarStaff(email, bloqueId) {
+    const nuevo = asignacionStaff[email] === bloqueId ? null : bloqueId
+    setAsignacionStaff((m) => ({ ...m, [email]: nuevo }))
+    await api('partido/asignar-staff', {
+      method: 'POST',
+      body: { evento_id: partido.id, staff_email: email, bloque_id: nuevo },
     })
   }
 
@@ -261,12 +325,20 @@ function ArmadoPartido({ partido }) {
 
   if (!listo) return <div className="vacio">Preparando bloques…</div>
 
-  const conteoBloque = (bloqueId) =>
-    Object.values(asignacion).filter((b) => b === bloqueId).length
+  // En la solapa de cada bloque: presentes sobre convocados una vez tomada
+  // la asistencia (antes, solo la cantidad de convocados)
+  const conteoBloque = (bloqueId) => {
+    const del = jugadores.filter((j) => asignacion[j.id] === bloqueId)
+    const presentes = del.filter((j) => asistencia[j.id] === 'presente').length
+    return presentes ? `${presentes}/${del.length}` : del.length
+  }
 
   return (
     <>
       <div className="seg no-imprimir">
+        <button className={vista === 'presentes' ? 'activo' : ''} onClick={() => setVista('presentes')}>
+          ✅ Presentes ({jugadores.filter((j) => asistencia[j.id] === 'presente').length})
+        </button>
         <button className={vista === 'bloques' ? 'activo' : ''} onClick={() => setVista('bloques')}>
           Armar bloques
         </button>
@@ -280,14 +352,31 @@ function ArmadoPartido({ partido }) {
         </button>
       </div>
 
+      {vista === 'presentes' && (
+        <ControlAsistencia
+          bloques={bloques}
+          jugadores={ordenados}
+          asignacion={asignacion}
+          asistencia={asistencia}
+          onMarcar={marcarAsistencia}
+          staff={staff}
+          asignacionStaff={asignacionStaff}
+          asistenciaStaff={asistenciaStaff}
+          onMarcarStaff={marcarAsistenciaStaff}
+        />
+      )}
+
       {vista === 'planilla' && (
         <Planilla
           partido={partido}
           bloques={bloques}
           jugadores={ordenados}
           asignacion={asignacion}
+          asistencia={asistencia}
           tiempos={tiempos}
           enCancha={enCancha}
+          staff={staff}
+          asignacionStaff={asignacionStaff}
         />
       )}
 
@@ -377,6 +466,32 @@ function ArmadoPartido({ partido }) {
               </div>
             )
           })}
+
+          <h3 style={{ marginTop: 16 }}>Staff a cargo</h3>
+          <p className="mini">
+            Los bloques suelen jugarse en canchas y horarios distintos: repartí
+            también al cuerpo técnico.
+          </p>
+          {!staff.length && <div className="vacio">No hay staff activo cargado.</div>}
+          {staff.map((s) => (
+            <div key={s.email} className="jugador-item" style={{ cursor: 'default' }}>
+              <div className="crece">
+                <div style={{ fontWeight: 600 }}>{nombreStaff(s)}</div>
+                <div className="mini">{s.rol || 'Sin rol'}</div>
+              </div>
+              <div className="bloque-botones">
+                {bloques.map((b) => (
+                  <button
+                    key={b.id}
+                    className={`bloque-btn ${asignacionStaff[s.email] === b.id ? 'sel' : ''}`}
+                    onClick={() => asignarStaff(s.email, b.id)}
+                  >
+                    B{b.numero}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </>
       )}
 
@@ -453,13 +568,25 @@ function ArmadoPartido({ partido }) {
         </div>
       )}
 
-      {bloques.map((b) => vista === b.id && (
+      {bloques.map((b) => {
+        if (vista !== b.id) return null
+        // Los equipos se arman con los que efectivamente llegaron. Si todavía
+        // no se tomó asistencia (nadie marcado presente), se trabaja con el
+        // plantel completo y se avisa, igual que hace el servidor.
+        const delBloque = ordenados.filter((j) => asignacion[j.id] === b.id)
+        const presentes = delBloque.filter((j) => asistencia[j.id] === 'presente')
+        const sinTomar = presentes.length === 0
+        return (
         <VistaBloque
           key={b.id}
           bloque={b}
           onEditar={() => setEditandoBloque({ ...b })}
           onActualizado={(nuevo) => setBloques((bs) => bs.map((x) => (x.id === nuevo.id ? nuevo : x)))}
-          jugadores={ordenados.filter((j) => asignacion[j.id] === b.id)}
+          jugadores={sinTomar ? delBloque : presentes}
+          ausentes={sinTomar ? [] : delBloque.filter((j) => asistencia[j.id] !== 'presente')}
+          asistenciaSinTomar={sinTomar && delBloque.length > 0}
+          staff={staff.filter((s) => asignacionStaff[s.email] === b.id)}
+          onIrAPresentes={() => setVista('presentes')}
           tiempos={tiempos.filter((t) => t.bloque_id === b.id)}
           tiempoSel={tiempoSel[b.id]}
           onSelTiempo={(tid) => setTiempoSel((m) => ({ ...m, [b.id]: tid }))}
@@ -468,7 +595,107 @@ function ArmadoPartido({ partido }) {
           onReemplazar={reemplazarTiempo}
           onAgregarTiempo={() => agregarTiempo(b.id)}
         />
+        )
+      })}
+    </>
+  )
+}
+
+// Control de asistencia del día de partido. Los bloques se arman la víspera
+// con los que avisaron que venían, así que lo primero al llegar a la cancha
+// es confirmar quién está: los equipos de cada tiempo salen de acá.
+function ControlAsistencia({
+  bloques, jugadores, asignacion, asistencia, onMarcar,
+  staff, asignacionStaff, asistenciaStaff, onMarcarStaff,
+}) {
+  const marcados = jugadores.filter((j) => asistencia[j.id]).length
+  const presentes = jugadores.filter((j) => asistencia[j.id] === 'presente').length
+
+  const fila = (clave, nombre, detalle, estado, marcar) => (
+    <div key={clave} className="jugador-item" style={{ cursor: 'default', opacity: estado ? 1 : 0.65 }}>
+      <div className="crece">
+        <div style={{ fontWeight: 600 }}>{nombre}</div>
+        <div className="mini">{detalle}</div>
+      </div>
+      <div className="bloque-botones">
+        <button
+          className={`bloque-btn ${estado === 'presente' ? 'sel ok' : ''}`}
+          onClick={() => marcar('presente')}
+        >
+          Vino
+        </button>
+        <button
+          className={`bloque-btn ${estado === 'ausente' ? 'sel no' : ''}`}
+          onClick={() => marcar('ausente')}
+        >
+          Faltó
+        </button>
+      </div>
+    </div>
+  )
+
+  const grupo = (titulo, subtitulo, lista) => (
+    <div key={titulo}>
+      <h3 style={{ marginTop: 16 }}>{titulo}</h3>
+      {subtitulo && <p className="mini">{subtitulo}</p>}
+      {!lista.length && <p className="mini">Sin jugadores asignados.</p>}
+      {lista.map((j) => fila(
+        j.id,
+        nombreCompleto(j),
+        [
+          j.posicion,
+          j.estado === 'lesionado' ? '🤕 lesionado' : null,
+          abrevAptitudes(j) || null,
+        ].filter(Boolean).join(' · ') || 'Sin datos',
+        asistencia[j.id],
+        (estado) => onMarcar(j.id, estado),
       ))}
+    </div>
+  )
+
+  return (
+    <>
+      <div className="tarjeta fila entre">
+        <div>
+          <div className="mini">Asistencia al partido</div>
+          <div className="contador">{presentes} presentes</div>
+        </div>
+        <div className="mini" style={{ textAlign: 'right', color: marcados < jugadores.length ? 'var(--warn)' : 'var(--ok)' }}>
+          {marcados < jugadores.length
+            ? `Faltan marcar ${jugadores.length - marcados} de ${jugadores.length}`
+            : '✓ Todos marcados'}
+        </div>
+      </div>
+      <p className="mini">
+        Confirmá quién llegó antes de armar los equipos: los tiempos se arman
+        solo con los presentes. Si marcás a alguien como ausente, sale de los
+        tiempos que ya tuviera cargados.
+      </p>
+
+      {bloques.map((b) => grupo(
+        `${b.nombre || `Bloque ${b.numero}`}${b.rival ? ` vs ${b.rival}` : ''}`,
+        b.hora_convocatoria ? `Convocatoria ${b.hora_convocatoria.slice(0, 5)} hs${b.lugar ? ` · ${b.lugar}` : ''}` : b.lugar,
+        jugadores.filter((j) => asignacion[j.id] === b.id),
+      ))}
+
+      {jugadores.some((j) => !asignacion[j.id]) && grupo(
+        'Sin bloque',
+        'Todavía no están asignados a ningún bloque.',
+        jugadores.filter((j) => !asignacion[j.id]),
+      )}
+
+      <h3 style={{ marginTop: 16 }}>Staff</h3>
+      {!staff.length && <p className="mini">No hay staff activo cargado.</p>}
+      {staff.map((s) => {
+        const bl = bloques.find((b) => b.id === asignacionStaff[s.email])
+        return fila(
+          s.email,
+          nombreStaff(s),
+          [s.rol || 'Sin rol', bl ? `B${bl.numero}` : 'sin bloque'].join(' · '),
+          asistenciaStaff[s.email],
+          (estado) => onMarcarStaff(s.email, estado),
+        )
+      })}
     </>
   )
 }
@@ -524,7 +751,7 @@ function BalanceBloques({ bloques, jugadores, asignacion, califs }) {
   )
 }
 
-function Planilla({ partido, bloques, jugadores, asignacion, tiempos, enCancha }) {
+function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, tiempos, enCancha, staff = [], asignacionStaff = {} }) {
   return (
     <div className="planilla">
       <div className="fila entre no-imprimir">
@@ -539,7 +766,12 @@ function Planilla({ partido, bloques, jugadores, asignacion, tiempos, enCancha }
         <h2>🏉 Rugby M12 · Día de partido · {fechaCorta(partido.fecha)}</h2>
 
         {bloques.map((bl) => {
-          const delBloque = jugadores.filter((j) => asignacion[j.id] === bl.id)
+          const todos = jugadores.filter((j) => asignacion[j.id] === bl.id)
+          const presentes = todos.filter((j) => asistencia[j.id] === 'presente')
+          // Si no se tomó asistencia, la planilla lista el plantel completo
+          const delBloque = presentes.length ? presentes : todos
+          const faltaron = presentes.length ? todos.filter((j) => asistencia[j.id] !== 'presente') : []
+          const staffBloque = staff.filter((s) => asignacionStaff[s.email] === bl.id)
           const tiemposBloque = tiempos.filter((t) => t.bloque_id === bl.id)
           const jugados = (jid) =>
             tiemposBloque.filter((t) => (enCancha[t.id] || {})[jid]).length
@@ -555,6 +787,12 @@ function Planilla({ partido, bloques, jugadores, asignacion, tiempos, enCancha }
                 {bl.dificultad ? ` · Dificultad: ${etiquetaDificultad(bl.dificultad)}` : ''}
                 {bl.suspendido ? ` · Suspendido: ${etiquetaMotivo(bl.motivo_suspension)}${bl.nota_suspension ? ` (${bl.nota_suspension})` : ''}` : ''}
               </p>
+              {staffBloque.length > 0 && (
+                <p className="mini">Staff: {staffBloque.map(nombreStaff).join(' · ')}</p>
+              )}
+              {faltaron.length > 0 && (
+                <p className="mini">No vinieron: {faltaron.map(nombreCompleto).join(' · ')}</p>
+              )}
               {!delBloque.length && <p className="mini">Sin jugadores asignados.</p>}
               {delBloque.length > 0 && (
                 <>
@@ -702,7 +940,7 @@ function BalancePartido({ bloque, onActualizado }) {
   )
 }
 
-function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiempoSel, onSelTiempo, enCancha, onMover, onReemplazar, onAgregarTiempo }) {
+function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = [], asistenciaSinTomar, staff = [], onIrAPresentes, tiempos, tiempoSel, onSelTiempo, enCancha, onMover, onReemplazar, onAgregarTiempo }) {
   const [sel, setSel] = useState(null)
   const [nPrestar, setNPrestar] = useState(0)
   const [sugiriendo, setSugiriendo] = useState(false)
@@ -723,9 +961,24 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiem
             {bloque.hora_convocatoria ? `Convocatoria: ${bloque.hora_convocatoria.slice(0, 5)} hs` : 'Sin hora de convocatoria'}
             {bloque.lugar ? ` · ${bloque.lugar}` : ' · sin lugar definido'}
           </div>
+          {staff.length > 0 && (
+            <div className="mini">🧑‍🏫 {staff.map(nombreStaff).join(' · ')}</div>
+          )}
         </div>
         <button className="btn sec chico" onClick={onEditar}>Editar datos</button>
       </div>
+      {asistenciaSinTomar && (
+        <p className="aviso">
+          ⚠️ Todavía no tomaste asistencia: se está trabajando con el plantel
+          completo del bloque.{' '}
+          <button className="btn sec chico" onClick={onIrAPresentes}>Tomar asistencia</button>
+        </p>
+      )}
+      {ausentes.length > 0 && (
+        <p className="mini" style={{ color: 'var(--warn)' }}>
+          🚫 No vinieron ({ausentes.length}): {ausentes.map((j) => j.apellido).join(', ')}
+        </p>
+      )}
       {bloque.suspendido && (
         <p className="aviso">
           ⛔ Bloque suspendido · {etiquetaMotivo(bloque.motivo_suspension)}
@@ -740,7 +993,9 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, tiempos, tiem
       <>
         {infoBloque}
         <div className="vacio">
-          Este bloque no tiene jugadores. Asignalos en "Armar bloques".
+          {ausentes.length
+            ? 'Ningún jugador de este bloque figura como presente. Revisá la asistencia.'
+            : 'Este bloque no tiene jugadores. Asignalos en "Armar bloques".'}
         </div>
         <BalancePartido bloque={bloque} onActualizado={onActualizado} />
       </>

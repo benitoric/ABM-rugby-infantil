@@ -677,3 +677,5 @@ details.tarjeta summary {
 .barra-sel .mini { color: #dbe4ff; }
 .barra-sel.oculta { display: none; }
 .bloque-btn.prop { border-style: dashed; }
+.bloque-btn.sel.ok { background: var(--ok); border-color: var(--ok); }
+.bloque-btn.sel.no { background: var(--bad); border-color: var(--bad); }

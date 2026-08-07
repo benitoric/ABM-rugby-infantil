@@ -1000,10 +1000,12 @@ async function enrutar(metodo, p, b, req, url) {
         'select id, bloque_id, numero from tiempos where bloque_id = any($1) order by numero', [ids])
       const asignaciones = await query(
         'select bloque_id, jugador_id from bloque_jugadores where bloque_id = any($1)', [ids])
+      const staff = await query(
+        'select bloque_id, staff_email from bloque_staff where bloque_id = any($1)', [ids])
       const enCancha = await query(
         `select tj.tiempo_id, tj.jugador_id, tj.puesto, tj.prestado from tiempo_jugadores tj
          join tiempos t on t.id = tj.tiempo_id where t.bloque_id = any($1)`, [ids])
-      return { bloques, tiempos, asignaciones, en_cancha: enCancha }
+      return { bloques, tiempos, asignaciones, staff, en_cancha: enCancha }
     }
     if (metodo === 'POST' && p[1] === 'asignar') {
       // saca al jugador de ambos bloques del evento (y de sus tiempos) y lo pone en el nuevo
@@ -1018,6 +1020,17 @@ async function enrutar(metodo, p, b, req, url) {
       if (b.bloque_id) {
         await query('insert into bloque_jugadores (bloque_id, jugador_id) values ($1,$2)',
           [b.bloque_id, b.jugador_id])
+      }
+      return { ok: true }
+    }
+    if (metodo === 'POST' && p[1] === 'asignar-staff') {
+      const bloques = await query('select id from bloques where evento_id = $1', [b.evento_id])
+      const ids = bloques.map((x) => x.id)
+      await query('delete from bloque_staff where staff_email = $1 and bloque_id = any($2)',
+        [b.staff_email, ids])
+      if (b.bloque_id) {
+        await query('insert into bloque_staff (bloque_id, staff_email) values ($1,$2)',
+          [b.bloque_id, b.staff_email])
       }
       return { ok: true }
     }
@@ -1108,9 +1121,18 @@ async function enrutar(metodo, p, b, req, url) {
       // toca). No persiste: el cliente aplica con partido/tiempo-equipo.
       const desde = Number(b.desde_numero) || 1
       const prestamos = Math.max(0, Math.min(6, Number(b.prestamos_por_tiempo) || 0))
-      const jugadores = await query(
-        `select j.id, j.posicion, j.aptitudes from bloque_jugadores bj
-         join jugadores j on j.id = bj.jugador_id where bj.bloque_id = $1`, [b.bloque_id])
+      // Solo los que efectivamente llegaron: el bloque se arma el día
+      // anterior y siempre falta alguno. Si todavía no se tomó asistencia
+      // (nadie marcado presente), se trabaja con el plantel completo.
+      const delBloque = await query(
+        `select j.id, j.posicion, j.aptitudes, a.estado
+         from bloque_jugadores bj
+         join jugadores j on j.id = bj.jugador_id
+         join bloques bl on bl.id = bj.bloque_id
+         left join asistencias a on a.evento_id = bl.evento_id and a.jugador_id = j.id
+         where bj.bloque_id = $1`, [b.bloque_id])
+      const presentes = delBloque.filter((j) => j.estado === 'presente')
+      const jugadores = presentes.length ? presentes : delBloque
       if (!jugadores.length) throw { codigo: 400, error: 'faltan_jugadores' }
       const tiempos = await query(
         'select id, numero from tiempos where bloque_id = $1 order by numero', [b.bloque_id])

@@ -33,8 +33,8 @@ async function inicializar() {
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
     `select exists (select 1 from information_schema.columns
-       where table_schema = 'public' and table_name = 'tiempo_jugadores'
-         and column_name = 'puesto') as aplicadas`)
+       where table_schema = 'public' and table_name = 'bloque_staff'
+         and column_name = 'staff_email') as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -144,6 +144,12 @@ export async function migrar(pool) {
     check (puesto between 1 and 15 and puesto not in (6, 7))`)
   await pool.query(`alter table tiempo_jugadores
     add column if not exists prestado boolean not null default false`)
+  // Staff a cargo de cada bloque
+  await pool.query(`create table if not exists bloque_staff (
+    bloque_id uuid not null references bloques(id) on delete cascade,
+    staff_email text not null references staff(email) on delete cascade,
+    primary key (bloque_id, staff_email)
+  )`)
   await pool.query(`create table if not exists lesiones (
     id uuid primary key default gen_random_uuid(),
     jugador_id uuid not null references jugadores(id) on delete cascade,
