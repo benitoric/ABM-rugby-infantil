@@ -537,6 +537,16 @@ async function enrutar(metodo, p, b, req, url) {
         [p[1]])
       const [{ total }] = await query(
         'select count(*)::int as total from tiempo_jugadores where jugador_id = $1', [p[1]])
+      // Rastro de los avisos incumplidos: dijo que iba y no apareció
+      const [faltas] = await query(
+        `select count(*)::int as total
+         from convocatorias c
+         join eventos e on e.id = c.evento_id
+         left join asistencias a on a.evento_id = e.id and a.jugador_id = c.jugador_id
+         where c.jugador_id = $1 and c.estado = 'va' and e.fecha <= current_date
+           and coalesce(a.estado, 'ausente') = 'ausente'
+           and exists (select 1 from asistencias x where x.evento_id = e.id)
+           and ${eventoVigente('e')}`, [p[1]])
       const pct = (presentes, totales) =>
         totales ? Math.round((100 * presentes) / totales) : null
       return {
@@ -545,6 +555,7 @@ async function enrutar(metodo, p, b, req, url) {
           entrenamientos: pct(pres.ent, tot.ent),
           partidos: pct(pres.par, tot.par),
           tiempos: total,
+          faltas_avisadas: faltas.total,
         },
       }
     }
@@ -942,6 +953,29 @@ async function enrutar(metodo, p, b, req, url) {
             }
             await query(
               `insert into asistencias (evento_id, jugador_id, estado) values ($1,$2,$3)
+               on conflict (evento_id, jugador_id) do update set estado = excluded.estado`,
+              [p[1], m.jugador_id, m.estado])
+          }
+        }
+        return { ok: true }
+      }
+    }
+    if (p[2] === 'convocatorias' && p[1]) {
+      if (metodo === 'GET') {
+        return query('select jugador_id, estado from convocatorias where evento_id = $1', [p[1]])
+      }
+      if (metodo === 'PUT') {
+        // b.marcas: [{jugador_id, estado|null}] — null borra la marca
+        for (const m of b.marcas || []) {
+          if (m.estado === null) {
+            await query('delete from convocatorias where evento_id = $1 and jugador_id = $2',
+              [p[1], m.jugador_id])
+          } else {
+            if (!['va', 'no_va'].includes(m.estado)) {
+              throw { codigo: 400, error: 'estado_invalido' }
+            }
+            await query(
+              `insert into convocatorias (evento_id, jugador_id, estado) values ($1,$2,$3)
                on conflict (evento_id, jugador_id) do update set estado = excluded.estado`,
               [p[1], m.jugador_id, m.estado])
           }

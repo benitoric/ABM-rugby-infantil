@@ -91,6 +91,7 @@ function ArmadoPartido({ partido }) {
   const [bloques, setBloques] = useState([])
   const [jugadores, setJugadores] = useState([])
   const [asistencia, setAsistencia] = useState({})
+  const [convocatoria, setConvocatoria] = useState({})
   const [asignacion, setAsignacion] = useState({})
   const [staff, setStaff] = useState([])
   const [asistenciaStaff, setAsistenciaStaff] = useState({})
@@ -107,12 +108,13 @@ function ArmadoPartido({ partido }) {
 
   useEffect(() => {
     async function cargar() {
-      const [datos, js, asis, sf, asisSf] = await Promise.all([
+      const [datos, js, asis, sf, asisSf, conv] = await Promise.all([
         api(`partido/${partido.id}`),
         api('jugadores'),
         api(`eventos/${partido.id}/asistencias`),
         api('staff'),
         api(`eventos/${partido.id}/asistencias-staff`),
+        api(`eventos/${partido.id}/convocatorias`),
       ])
       setBloques(datos.bloques)
       setTiempos(datos.tiempos)
@@ -126,6 +128,10 @@ function ArmadoPartido({ partido }) {
       const mAsisSf = {}
       for (const a of asisSf) mAsisSf[a.staff_email] = a.estado
       setAsistenciaStaff(mAsisSf)
+
+      const mConv = {}
+      for (const c of conv) mConv[c.jugador_id] = c.estado
+      setConvocatoria(mConv)
 
       const mAsig = {}
       for (const f of datos.asignaciones) mAsig[f.jugador_id] = f.bloque_id
@@ -210,6 +216,17 @@ function ArmadoPartido({ partido }) {
     })
   }
 
+  // Lo que avisó el jugador la víspera. Queda guardado aparte de la
+  // asistencia real: así se ve quién dijo que iba y después no apareció.
+  async function marcarConvocatoria(jugadorId, estado) {
+    const nuevo = convocatoria[jugadorId] === estado ? null : estado
+    setConvocatoria((m) => ({ ...m, [jugadorId]: nuevo }))
+    await api(`eventos/${partido.id}/convocatorias`, {
+      method: 'PUT',
+      body: { marcas: [{ jugador_id: jugadorId, estado: nuevo }] },
+    })
+  }
+
   async function marcarAsistenciaStaff(email, estado) {
     const nuevo = asistenciaStaff[email] === estado ? null : estado
     setAsistenciaStaff((m) => ({ ...m, [email]: nuevo }))
@@ -250,12 +267,13 @@ function ArmadoPartido({ partido }) {
     }
   }
 
-  // Pide al servidor una propuesta de reparto entre bloques. Van los
-  // presentes no lesionados (o todos los no lesionados si aún no se tomó
-  // asistencia). No persiste nada hasta tocar "Aplicar".
+  // Pide al servidor una propuesta de reparto entre bloques. Los bloques se
+  // arman la víspera, así que la base son los que confirmaron; si ya se tomó
+  // asistencia manda quién está, y si no hay nada cargado van todos.
   async function sugerirBloques() {
     const presentes = jugadores.filter((j) => asistencia[j.id] === 'presente')
-    const base = presentes.length ? presentes : jugadores
+    const confirmados = jugadores.filter((j) => convocatoria[j.id] === 'va')
+    const base = presentes.length ? presentes : (confirmados.length ? confirmados : jugadores)
     const elegibles = base.filter((j) => j.estado !== 'lesionado')
     const r = await api('partido/sugerir-bloques', {
       method: 'POST',
@@ -337,7 +355,9 @@ function ArmadoPartido({ partido }) {
     <>
       <div className="seg no-imprimir">
         <button className={vista === 'presentes' ? 'activo' : ''} onClick={() => setVista('presentes')}>
-          ✅ Presentes ({jugadores.filter((j) => asistencia[j.id] === 'presente').length})
+          {jugadores.some((j) => asistencia[j.id])
+            ? `✅ Presentes (${jugadores.filter((j) => asistencia[j.id] === 'presente').length})`
+            : `🗓 Avisos (${jugadores.filter((j) => convocatoria[j.id] === 'va').length})`}
         </button>
         <button className={vista === 'bloques' ? 'activo' : ''} onClick={() => setVista('bloques')}>
           Armar bloques
@@ -359,6 +379,8 @@ function ArmadoPartido({ partido }) {
           asignacion={asignacion}
           asistencia={asistencia}
           onMarcar={marcarAsistencia}
+          convocatoria={convocatoria}
+          onMarcarConvocatoria={marcarConvocatoria}
           staff={staff}
           asignacionStaff={asignacionStaff}
           asistenciaStaff={asistenciaStaff}
@@ -373,6 +395,7 @@ function ArmadoPartido({ partido }) {
           jugadores={ordenados}
           asignacion={asignacion}
           asistencia={asistencia}
+          convocatoria={convocatoria}
           tiempos={tiempos}
           enCancha={enCancha}
           staff={staff}
@@ -584,6 +607,7 @@ function ArmadoPartido({ partido }) {
           onActualizado={(nuevo) => setBloques((bs) => bs.map((x) => (x.id === nuevo.id ? nuevo : x)))}
           jugadores={sinTomar ? delBloque : presentes}
           ausentes={sinTomar ? [] : delBloque.filter((j) => asistencia[j.id] !== 'presente')}
+          convocatoria={convocatoria}
           asistenciaSinTomar={sinTomar && delBloque.length > 0}
           staff={staff.filter((s) => asignacionStaff[s.email] === b.id)}
           onIrAPresentes={() => setVista('presentes')}
@@ -605,34 +629,59 @@ function ArmadoPartido({ partido }) {
 // con los que avisaron que venían, así que lo primero al llegar a la cancha
 // es confirmar quién está: los equipos de cada tiempo salen de acá.
 function ControlAsistencia({
-  bloques, jugadores, asignacion, asistencia, onMarcar,
+  bloques, jugadores, asignacion, asistencia, onMarcar, convocatoria, onMarcarConvocatoria,
   staff, asignacionStaff, asistenciaStaff, onMarcarStaff,
 }) {
-  const marcados = jugadores.filter((j) => asistencia[j.id]).length
-  const presentes = jugadores.filter((j) => asistencia[j.id] === 'presente').length
+  // Dos momentos distintos: lo que avisaron la víspera y quién llegó de
+  // verdad. Arranca en avisos mientras no haya ninguna marca de asistencia.
+  const hayAsistencia = jugadores.some((j) => asistencia[j.id])
+  const [modo, setModo] = useState(hayAsistencia ? 'asistencia' : 'aviso')
+  const enAviso = modo === 'aviso'
 
-  const fila = (clave, nombre, detalle, estado, marcar) => (
-    <div key={clave} className="jugador-item" style={{ cursor: 'default', opacity: estado ? 1 : 0.65 }}>
+  const confirmados = jugadores.filter((j) => convocatoria[j.id] === 'va')
+  const presentes = jugadores.filter((j) => asistencia[j.id] === 'presente')
+  const marcados = jugadores.filter((j) => (enAviso ? convocatoria[j.id] : asistencia[j.id])).length
+  // El rastro que importa: avisaron que iban y no aparecieron
+  const faltaronTrasAvisar = confirmados.filter((j) => asistencia[j.id] === 'ausente')
+  const vinieronSinAvisar = presentes.filter((j) => convocatoria[j.id] === 'no_va')
+
+  const etiquetaAviso = (jid) => {
+    if (convocatoria[jid] === 'va') return 'avisó que iba'
+    if (convocatoria[jid] === 'no_va') return 'avisó que no iba'
+    return 'sin aviso'
+  }
+
+  const fila = (clave, nombre, detalle, estado, marcar, opciones, alerta) => (
+    <div
+      key={clave}
+      className="jugador-item"
+      style={{
+        cursor: 'default',
+        opacity: estado ? 1 : 0.65,
+        borderLeft: alerta ? '4px solid var(--warn)' : undefined,
+      }}
+    >
       <div className="crece">
-        <div style={{ fontWeight: 600 }}>{nombre}</div>
+        <div style={{ fontWeight: 600 }}>{alerta ? '⚠️ ' : ''}{nombre}</div>
         <div className="mini">{detalle}</div>
       </div>
       <div className="bloque-botones">
-        <button
-          className={`bloque-btn ${estado === 'presente' ? 'sel ok' : ''}`}
-          onClick={() => marcar('presente')}
-        >
-          Vino
-        </button>
-        <button
-          className={`bloque-btn ${estado === 'ausente' ? 'sel no' : ''}`}
-          onClick={() => marcar('ausente')}
-        >
-          Faltó
-        </button>
+        {opciones.map((o) => (
+          <button
+            key={o.value}
+            className={`bloque-btn ${estado === o.value ? `sel ${o.clase}` : ''}`}
+            onClick={() => marcar(o.value)}
+          >
+            {o.label}
+          </button>
+        ))}
       </div>
     </div>
   )
+
+  const opcionesJugador = enAviso
+    ? [{ value: 'va', label: 'Va', clase: 'ok' }, { value: 'no_va', label: 'No va', clase: 'no' }]
+    : [{ value: 'presente', label: 'Vino', clase: 'ok' }, { value: 'ausente', label: 'Faltó', clase: 'no' }]
 
   const grupo = (titulo, subtitulo, lista) => (
     <div key={titulo}>
@@ -645,20 +694,33 @@ function ControlAsistencia({
         [
           j.posicion,
           j.estado === 'lesionado' ? '🤕 lesionado' : null,
-          abrevAptitudes(j) || null,
+          // en el día del partido interesa ver qué había avisado cada uno
+          enAviso ? null : etiquetaAviso(j.id),
+          enAviso ? (abrevAptitudes(j) || null) : null,
         ].filter(Boolean).join(' · ') || 'Sin datos',
-        asistencia[j.id],
-        (estado) => onMarcar(j.id, estado),
+        enAviso ? convocatoria[j.id] : asistencia[j.id],
+        (estado) => (enAviso ? onMarcarConvocatoria(j.id, estado) : onMarcar(j.id, estado)),
+        opcionesJugador,
+        !enAviso && convocatoria[j.id] === 'va' && asistencia[j.id] === 'ausente',
       ))}
     </div>
   )
 
   return (
     <>
+      <div className="seg">
+        <button className={enAviso ? 'activo' : ''} onClick={() => setModo('aviso')}>
+          🗓 Avisos ({confirmados.length})
+        </button>
+        <button className={!enAviso ? 'activo' : ''} onClick={() => setModo('asistencia')}>
+          ✅ Vinieron ({presentes.length})
+        </button>
+      </div>
+
       <div className="tarjeta fila entre">
         <div>
-          <div className="mini">Asistencia al partido</div>
-          <div className="contador">{presentes} presentes</div>
+          <div className="mini">{enAviso ? 'Avisaron que iban' : 'Presentes en la cancha'}</div>
+          <div className="contador">{enAviso ? confirmados.length : presentes.length}</div>
         </div>
         <div className="mini" style={{ textAlign: 'right', color: marcados < jugadores.length ? 'var(--warn)' : 'var(--ok)' }}>
           {marcados < jugadores.length
@@ -666,11 +728,24 @@ function ControlAsistencia({
             : '✓ Todos marcados'}
         </div>
       </div>
+
       <p className="mini">
-        Confirmá quién llegó antes de armar los equipos: los tiempos se arman
-        solo con los presentes. Si marcás a alguien como ausente, sale de los
-        tiempos que ya tuviera cargados.
+        {enAviso
+          ? 'La víspera: marcá quién avisó que iba. Con esto se arman los bloques, y queda el registro para comparar con lo que pasó después.'
+          : 'El día del partido: confirmá quién llegó. Los equipos de cada tiempo se arman solo con los presentes, y si marcás a alguien como ausente sale de los tiempos que ya tuviera cargados.'}
       </p>
+
+      {!enAviso && faltaronTrasAvisar.length > 0 && (
+        <p className="aviso">
+          ⚠️ Avisaron que iban y no vinieron ({faltaronTrasAvisar.length}):{' '}
+          {faltaronTrasAvisar.map((j) => nombreCompleto(j)).join(' · ')}
+        </p>
+      )}
+      {!enAviso && vinieronSinAvisar.length > 0 && (
+        <p className="mini">
+          Vinieron después de avisar que no iban: {vinieronSinAvisar.map((j) => j.apellido).join(', ')}
+        </p>
+      )}
 
       {bloques.map((b) => grupo(
         `${b.nombre || `Bloque ${b.numero}`}${b.rival ? ` vs ${b.rival}` : ''}`,
@@ -684,18 +759,26 @@ function ControlAsistencia({
         jugadores.filter((j) => !asignacion[j.id]),
       )}
 
-      <h3 style={{ marginTop: 16 }}>Staff</h3>
-      {!staff.length && <p className="mini">No hay staff activo cargado.</p>}
-      {staff.map((s) => {
-        const bl = bloques.find((b) => b.id === asignacionStaff[s.email])
-        return fila(
-          s.email,
-          nombreStaff(s),
-          [s.rol || 'Sin rol', bl ? `B${bl.numero}` : 'sin bloque'].join(' · '),
-          asistenciaStaff[s.email],
-          (estado) => onMarcarStaff(s.email, estado),
-        )
-      })}
+      {!enAviso && (
+        <>
+          <h3 style={{ marginTop: 16 }}>Staff</h3>
+          {!staff.length && <p className="mini">No hay staff activo cargado.</p>}
+          {staff.map((s) => {
+            const bl = bloques.find((b) => b.id === asignacionStaff[s.email])
+            return fila(
+              s.email,
+              nombreStaff(s),
+              [s.rol || 'Sin rol', bl ? `B${bl.numero}` : 'sin bloque'].join(' · '),
+              asistenciaStaff[s.email],
+              (estado) => onMarcarStaff(s.email, estado),
+              [
+                { value: 'presente', label: 'Vino', clase: 'ok' },
+                { value: 'ausente', label: 'Faltó', clase: 'no' },
+              ],
+            )
+          })}
+        </>
+      )}
     </>
   )
 }
@@ -751,7 +834,7 @@ function BalanceBloques({ bloques, jugadores, asignacion, califs }) {
   )
 }
 
-function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, tiempos, enCancha, staff = [], asignacionStaff = {} }) {
+function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, convocatoria = {}, tiempos, enCancha, staff = [], asignacionStaff = {} }) {
   return (
     <div className="planilla">
       <div className="fila entre no-imprimir">
@@ -791,7 +874,10 @@ function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, ti
                 <p className="mini">Staff: {staffBloque.map(nombreStaff).join(' · ')}</p>
               )}
               {faltaron.length > 0 && (
-                <p className="mini">No vinieron: {faltaron.map(nombreCompleto).join(' · ')}</p>
+                <p className="mini">
+                  No vinieron: {faltaron.map((j) =>
+                    `${nombreCompleto(j)}${convocatoria[j.id] === 'va' ? ' (había avisado que iba)' : ''}`).join(' · ')}
+                </p>
               )}
               {!delBloque.length && <p className="mini">Sin jugadores asignados.</p>}
               {delBloque.length > 0 && (
@@ -940,7 +1026,7 @@ function BalancePartido({ bloque, onActualizado }) {
   )
 }
 
-function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = [], asistenciaSinTomar, staff = [], onIrAPresentes, tiempos, tiempoSel, onSelTiempo, enCancha, onMover, onReemplazar, onAgregarTiempo }) {
+function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = [], convocatoria = {}, asistenciaSinTomar, staff = [], onIrAPresentes, tiempos, tiempoSel, onSelTiempo, enCancha, onMover, onReemplazar, onAgregarTiempo }) {
   const [sel, setSel] = useState(null)
   const [nPrestar, setNPrestar] = useState(0)
   const [sugiriendo, setSugiriendo] = useState(false)
@@ -976,7 +1062,8 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
       )}
       {ausentes.length > 0 && (
         <p className="mini" style={{ color: 'var(--warn)' }}>
-          🚫 No vinieron ({ausentes.length}): {ausentes.map((j) => j.apellido).join(', ')}
+          🚫 No vinieron ({ausentes.length}):{' '}
+          {ausentes.map((j) => `${j.apellido}${convocatoria[j.id] === 'va' ? ' (había avisado que iba)' : ''}`).join(', ')}
         </p>
       )}
       {bloque.suspendido && (

@@ -33,8 +33,8 @@ async function inicializar() {
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
     `select exists (select 1 from information_schema.columns
-       where table_schema = 'public' and table_name = 'bloque_staff'
-         and column_name = 'staff_email') as aplicadas`)
+       where table_schema = 'public' and table_name = 'convocatorias'
+         and column_name = 'estado') as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -144,6 +144,13 @@ export async function migrar(pool) {
     check (puesto between 1 and 15 and puesto not in (6, 7))`)
   await pool.query(`alter table tiempo_jugadores
     add column if not exists prestado boolean not null default false`)
+  // Confirmación previa al partido, separada de la asistencia real
+  await pool.query(`create table if not exists convocatorias (
+    evento_id uuid not null references eventos(id) on delete cascade,
+    jugador_id uuid not null references jugadores(id) on delete cascade,
+    estado text not null check (estado in ('va','no_va')),
+    primary key (evento_id, jugador_id)
+  )`)
   // Staff a cargo de cada bloque
   await pool.query(`create table if not exists bloque_staff (
     bloque_id uuid not null references bloques(id) on delete cascade,
