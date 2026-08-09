@@ -95,6 +95,8 @@ function ArmadoPartido({ partido }) {
   // asistencia: el control efectivo del día, tomado en la cancha.
   const [confirmacion, setConfirmacion] = useState({})
   const [asistencia, setAsistencia] = useState({})
+  // tarde: marcado "vino" pasada la convocatoria + 15' (presente sin prioridad)
+  const [tarde, setTarde] = useState({})
   // condicion: golpeado/lesionado durante el partido (queda fuera de juego)
   const [condicion, setCondicion] = useState({})
   const [asignacion, setAsignacion] = useState({})
@@ -133,12 +135,15 @@ function ArmadoPartido({ partido }) {
       setConfirmacion(mConf)
 
       const mAsis = {}
+      const mTarde = {}
       const mCond = {}
       for (const a of asisDia) {
         mAsis[a.jugador_id] = a.estado
+        if (a.tarde) mTarde[a.jugador_id] = true
         if (a.condicion) mCond[a.jugador_id] = a.condicion
       }
       setAsistencia(mAsis)
+      setTarde(mTarde)
       setCondicion(mCond)
 
       const mConfSf = {}
@@ -228,9 +233,30 @@ function ArmadoPartido({ partido }) {
         }
       }
     }
+    // ¿Llegó tarde? Se compara la hora de la marca "vino" con la hora de
+    // convocatoria de su bloque + 15 minutos de tolerancia (solo si se está
+    // marcando el mismo día del partido). Cuenta como presente a todos los
+    // efectos, pero pierde prioridad al armar los equipos.
+    let esTarde = false
+    if (nuevo === 'presente') {
+      const bl = bloques.find((x) => x.id === asignacion[jugadorId])
+      const hoy = new Date().toISOString().slice(0, 10)
+      if (bl?.hora_convocatoria && partido.fecha === hoy) {
+        const [h, m] = bl.hora_convocatoria.split(':').map(Number)
+        const limite = new Date()
+        limite.setHours(h, m + 15, 0, 0)
+        esTarde = new Date() > limite
+      }
+    }
+    setTarde((t) => {
+      const copia = { ...t }
+      if (esTarde) copia[jugadorId] = true
+      else delete copia[jugadorId]
+      return copia
+    })
     await api(`eventos/${partido.id}/asistencias-partido`, {
       method: 'PUT',
-      body: { marcas: [{ jugador_id: jugadorId, estado: nuevo }] },
+      body: { marcas: [{ jugador_id: jugadorId, estado: nuevo, tarde: esTarde }] },
     })
   }
 
@@ -388,6 +414,7 @@ function ArmadoPartido({ partido }) {
     if (!marcados.length && !staffMarcado.length) return
     if (!confirm('¿Borrar todas las marcas de asistencia del día (jugadores y staff)?')) return
     setAsistencia({})
+    setTarde({})
     setCondicion({})
     setPresenciaStaff({})
     if (marcados.length) {
@@ -473,6 +500,7 @@ function ArmadoPartido({ partido }) {
           staff={staff}
           asignacionStaff={asignacionStaff}
           confirmacionStaff={confirmacionStaff}
+          tarde={tarde}
           presenciaStaff={presenciaStaff}
           onMarcarStaff={marcarPresenciaStaff}
           onLimpiar={limpiarAsistencia}
@@ -737,24 +765,23 @@ function ArmadoPartido({ partido }) {
 
       {bloques.map((b) => {
         if (vista !== b.id) return null
-        // Los equipos se arman con los que efectivamente llegaron. Si todavía
-        // no se tomó asistencia (nadie marcado presente), se trabaja con el
-        // plantel completo y se avisa, igual que hace el servidor.
+        // Elegibles: SOLO los marcados "vino" en Tomar asistencia (sin marca
+        // cuenta como faltó, igual que en el servidor)
         const delBloque = ordenados.filter((j) => asignacion[j.id] === b.id)
         const presentes = delBloque.filter((j) => asistencia[j.id] === 'presente')
-        const sinTomar = presentes.length === 0
         return (
         <VistaBloque
           key={b.id}
           bloque={b}
           onEditar={() => setEditandoBloque({ ...b })}
           onActualizado={(nuevo) => setBloques((bs) => bs.map((x) => (x.id === nuevo.id ? nuevo : x)))}
-          jugadores={sinTomar ? delBloque : presentes}
-          ausentes={sinTomar ? [] : delBloque.filter((j) => asistencia[j.id] !== 'presente')}
+          jugadores={presentes}
+          ausentes={delBloque.filter((j) => asistencia[j.id] !== 'presente')}
           confirmacion={confirmacion}
+          tarde={tarde}
           condicion={condicion}
           onCondicion={marcarCondicion}
-          asistenciaSinTomar={sinTomar && delBloque.length > 0}
+          asistenciaSinTomar={presentes.length === 0 && delBloque.length > 0}
           staff={staff.filter((s) => asignacionStaff[s.email] === b.id && presenciaStaff[s.email] !== false)}
           onIrAPresentes={() => setVista('presentes')}
           tiempos={tiempos.filter((t) => t.bloque_id === b.id)}
@@ -778,14 +805,14 @@ function ArmadoPartido({ partido }) {
 // quién de los convocados se presentó a jugar. La confirmación anticipada se
 // toma en la sección Asistencia durante la semana; acá solo se compara.
 function ControlAsistencia({
-  bloques, jugadores, asignacion, asistencia, confirmacion, condicion = {}, onMarcar,
+  bloques, jugadores, asignacion, asistencia, confirmacion, tarde = {}, condicion = {}, onMarcar,
   staff, asignacionStaff, confirmacionStaff, presenciaStaff, onMarcarStaff, onLimpiar,
 }) {
   // Los convocados: asignados a un bloque, más los confirmados sin bloque
   const convocados = jugadores.filter((j) =>
     asignacion[j.id] || confirmacion[j.id] === 'presente')
   const presentes = convocados.filter((j) => asistencia[j.id] === 'presente')
-  const marcados = convocados.filter((j) => asistencia[j.id]).length
+  const sinMarcar = convocados.filter((j) => !asistencia[j.id]).length
   // El rastro: confirmaron en la semana y el día del partido no aparecieron
   const faltaronTrasConfirmar = convocados.filter((j) =>
     confirmacion[j.id] === 'presente' && asistencia[j.id] === 'ausente')
@@ -811,8 +838,9 @@ function ControlAsistencia({
         >
           Vino
         </button>
+        {/* Faltó es el valor por defecto: sin marca se muestra igual */}
         <button
-          className={`bloque-btn ${estado === 'ausente' ? 'sel no' : ''}`}
+          className={`bloque-btn ${estado !== 'presente' ? 'sel no' : ''}`}
           onClick={() => marcar('ausente')}
         >
           Faltó
@@ -837,6 +865,7 @@ function ControlAsistencia({
         nombreCompleto(j),
         [
           etiquetaPuestos(j) || null,
+          tarde[j.id] ? '🕑 llegó tarde' : null,
           condicion[j.id] === 'golpeado' ? '🤕 golpeado en el partido' : null,
           condicion[j.id] === 'lesionado' ? '🚑 lesionado en el partido' : null,
           etiquetaConfirmacion(j.id),
@@ -857,9 +886,9 @@ function ControlAsistencia({
           <div className="contador">{presentes.length} de {convocados.length}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div className="mini" style={{ color: marcados < convocados.length ? 'var(--warn)' : 'var(--ok)' }}>
-            {marcados < convocados.length
-              ? `Faltan marcar ${convocados.length - marcados}`
+          <div className="mini" style={{ color: sinMarcar ? 'var(--warn)' : 'var(--ok)' }}>
+            {sinMarcar
+              ? `Sin marcar (cuentan como Faltó): ${sinMarcar}`
               : '✓ Todos marcados'}
           </div>
           <button className="btn sec chico" style={{ marginTop: 6 }} onClick={onLimpiar}>
@@ -870,9 +899,10 @@ function ControlAsistencia({
 
       <p className="mini">
         El día del partido: cada staff marca quién de su bloque se presentó a
-        jugar. Los equipos de cada tiempo se arman solo con los presentes; si
-        marcás a alguien como ausente, sale de los tiempos que ya tuviera
-        cargados. La confirmación previa se toma en la sección Asistencia.
+        jugar. Todos arrancan como "Faltó": alcanza con marcar a los que van
+        llegando. Los equipos de cada tiempo se arman solo con los marcados
+        "Vino"; una marca pasada la convocatoria + 15' queda como 🕑 llegó
+        tarde (juega igual, pero pierde prioridad en el armado).
       </p>
 
       {faltaronTrasConfirmar.length > 0 && (
@@ -1369,7 +1399,7 @@ function BalancePartido({ bloque, onActualizado }) {
   )
 }
 
-function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = [], confirmacion = {}, condicion = {}, onCondicion, asistenciaSinTomar, staff = [], onIrAPresentes, tiempos, tiempoSel, onSelTiempo, enCancha, onMover, onReemplazar, onAgregarTiempo }) {
+function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = [], confirmacion = {}, tarde = {}, condicion = {}, onCondicion, asistenciaSinTomar, staff = [], onIrAPresentes, tiempos, tiempoSel, onSelTiempo, enCancha, onMover, onReemplazar, onAgregarTiempo }) {
   const [sel, setSel] = useState(null)
   const [nPrestar, setNPrestar] = useState(0)
   const [sugiriendo, setSugiriendo] = useState(false)
@@ -1401,8 +1431,8 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
       </div>
       {asistenciaSinTomar && (
         <p className="aviso">
-          ⚠️ Todavía no tomaste asistencia: se está trabajando con el plantel
-          completo del bloque.{' '}
+          ⚠️ Nadie del bloque está marcado como "Vino" todavía: los equipos se
+          arman solo con los presentes.{' '}
           <button className="btn sec chico" onClick={onIrAPresentes}>Tomar asistencia</button>
         </p>
       )}
@@ -1603,7 +1633,8 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
         <b>{j.apellido}</b>
         <span className="mini">
           {abrevPuestos(j) ? `${abrevPuestos(j).length > 10 ? tipoJugador(j)[0] : abrevPuestos(j)}` : '·'} · {jugados[j.id] || 0}t
-          {abrevAptitudes(j) ? ` · ${abrevAptitudes(j)}` : ''}{extra}
+          {abrevAptitudes(j) ? ` · ${abrevAptitudes(j)}` : ''}
+          {tarde[j.id] ? ' · 🕑' : ''}{extra}
         </span>
         <span className="progreso" style={{ width: `${progreso(j.id) * 100}%` }} />
       </button>
