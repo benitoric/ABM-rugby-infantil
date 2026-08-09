@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { estadoJugador, fechaCompacta, fechaCorta, nombreCompleto, APTITUDES, ESTADOS } from '../helpers.js'
+import {
+  estadoJugador, etiquetaPuestos, fechaCompacta, fechaCorta, nombreCompleto,
+  tipoJugador, APTITUDES, ESTADOS, PUESTOS,
+} from '../helpers.js'
 import { promedioGeneral, valoresConsolidados } from '../evaluacion.js'
 import { base64ABlob } from '../archivos.js'
 import Ficha from './Ficha.jsx'
 
 const VACIO = {
-  nombre: '', apellido: '', fecha_nacimiento: '', dni: '', posicion: '',
+  nombre: '', apellido: '', fecha_nacimiento: '', dni: '', posicion: '', puestos: [],
   aptitudes: [], estado: 'activo', tutor_nombre: '', tutor_telefono: '',
   ficha_medica_vigente: false, ficha_medica_vence: '', observaciones: '',
 }
@@ -119,7 +122,7 @@ export default function Jugadores() {
   const RANGO_ESTADO = { activo: 0, inhabilitado: 1, lesionado: 2, inactivo: 3 }
   const ordenados = [...visibles].sort((a, b) => {
     let cmp = 0
-    if (orden.campo === 'puesto') cmp = (a.posicion || 'zz').localeCompare(b.posicion || 'zz')
+    if (orden.campo === 'puesto') cmp = (etiquetaPuestos(a) || 'zz').localeCompare(etiquetaPuestos(b) || 'zz')
     else if (orden.campo === 'aptitudes') cmp = (a.aptitudes || []).length - (b.aptitudes || []).length
     else if (orden.campo === 'estado') cmp = RANGO_ESTADO[estadoJugador(a)] - RANGO_ESTADO[estadoJugador(b)]
     else if (orden.campo === 'evaluacion') cmp = (a.ultima_evaluacion || '').localeCompare(b.ultima_evaluacion || '')
@@ -354,8 +357,13 @@ export default function Jugadores() {
             </div>
           </div>
           <div>
-            {j.posicion && (
-              <span className={`badge puesto-${j.posicion.toLowerCase()}`}>{j.posicion}</span>
+            {tipoJugador(j) && (
+              <span
+                className={`badge puesto-${tipoJugador(j).toLowerCase()}`}
+                title={etiquetaPuestos(j)}
+              >
+                {etiquetaPuestos(j).length > 14 ? tipoJugador(j) : (etiquetaPuestos(j) || tipoJugador(j))}
+              </span>
             )}
           </div>
           <div className="etiquetas">
@@ -598,14 +606,37 @@ export function FormJugador({ inicial, onCerrar, onGuardado }) {
             <label>DNI</label>
             <input inputMode="numeric" {...campo('dni')} />
           </div>
-          <div className="campo">
-            <label>Posición</label>
-            <select {...campo('posicion')}>
-              <option value="">Sin definir</option>
-              <option>Forward</option>
-              <option>Back</option>
-              <option>Mixto</option>
-            </select>
+          <div className="campo" style={{ gridColumn: '1 / -1' }}>
+            <label>Puestos (marcá todos los que puede jugar)</label>
+            {['forward', 'back'].map((tipo) => (
+              <div key={tipo} className="fila" style={{ gap: '4px 14px', marginTop: 4 }}>
+                <span className="mini" style={{ width: 68 }}>{tipo === 'forward' ? 'Forwards' : 'Backs'}</span>
+                {PUESTOS.filter((pu) => pu.tipo === tipo).map((pu) => (
+                  <label key={pu.value} className="fila" style={{ gap: 6, fontWeight: 400 }}>
+                    <input
+                      type="checkbox"
+                      style={{ width: 17, height: 17 }}
+                      checked={(f.puestos || []).includes(pu.value)}
+                      onChange={(e) => {
+                        const actuales = f.puestos || []
+                        setF({
+                          ...f,
+                          puestos: e.target.checked
+                            ? [...actuales, pu.value]
+                            : actuales.filter((x) => x !== pu.value),
+                        })
+                      }}
+                    />
+                    {pu.label}
+                  </label>
+                ))}
+              </div>
+            ))}
+            {!(f.puestos || []).length && f.posicion && (
+              <p className="mini" style={{ margin: '4px 0 0' }}>
+                Sin puestos cargados vale la posición genérica anterior: {f.posicion}.
+              </p>
+            )}
           </div>
           <div className="campo" style={{ gridColumn: '1 / -1' }}>
             <label>Aptitudes (marcá todas las que correspondan)</label>

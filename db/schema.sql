@@ -17,7 +17,12 @@ create table if not exists jugadores (
   apellido text not null,
   fecha_nacimiento date,
   dni text,
+  -- Posición genérica (Forward/Back/Mixto). Derivada de `puestos` cuando
+  -- están cargados; queda para jugadores viejos y para el balance de bloques.
   posicion text,
+  -- Puestos específicos en los que puede jugar (uno o más):
+  -- pilar/hooker/segunda/octavo/medio_scrum/apertura/centro/wing/fullback
+  puestos jsonb not null default '[]',
   aptitudes jsonb not null default '[]',
   estado text not null default 'activo' check (estado in ('activo','inactivo','lesionado')),
   tutor_nombre text,

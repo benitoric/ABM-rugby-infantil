@@ -41,32 +41,74 @@ export function abrevAptitudes(j) {
   return APTITUDES.filter((a) => lista.includes(a.value)).map((a) => a.abrev).join('·')
 }
 
+// Puestos del rugby infantil. Cada jugador tiene en `puestos` la lista de
+// los que puede ocupar (puede ser más de uno); la clasificación forward/
+// back/mixto se deriva de ahí.
+export const PUESTOS = [
+  { value: 'pilar', label: 'Pilar', abrev: 'Pil', tipo: 'forward' },
+  { value: 'hooker', label: 'Hooker', abrev: 'Hoo', tipo: 'forward' },
+  { value: 'segunda', label: 'Segunda línea', abrev: '2ª', tipo: 'forward' },
+  { value: 'octavo', label: 'Octavo', abrev: '8vo', tipo: 'forward' },
+  { value: 'medio_scrum', label: 'Medio scrum', abrev: 'MS', tipo: 'back' },
+  { value: 'apertura', label: 'Apertura', abrev: 'Ap', tipo: 'back' },
+  { value: 'centro', label: 'Centro', abrev: 'Ce', tipo: 'back' },
+  { value: 'wing', label: 'Wing', abrev: 'Wg', tipo: 'back' },
+  { value: 'fullback', label: 'Fullback', abrev: 'FB', tipo: 'back' },
+]
+
+const TIPO_PUESTO = Object.fromEntries(PUESTOS.map((p) => [p.value, p.tipo]))
+
+// Forward / Back / Mixto derivado de los puestos cargados; si no hay
+// puestos, vale la posición genérica vieja (jugadores sin actualizar).
+export function tipoJugador(j) {
+  const tipos = new Set((j.puestos || []).map((k) => TIPO_PUESTO[k]).filter(Boolean))
+  if (tipos.size === 2) return 'Mixto'
+  if (tipos.has('forward')) return 'Forward'
+  if (tipos.has('back')) return 'Back'
+  return j.posicion || null
+}
+
+// "Pilar/Hooker" para listados; abreviado "Pil·Hoo" para renglones chicos
+export function etiquetaPuestos(j) {
+  const propios = PUESTOS.filter((p) => (j.puestos || []).includes(p.value))
+  return propios.length ? propios.map((p) => p.label).join('/') : (j.posicion || '')
+}
+
+export function abrevPuestos(j) {
+  const propios = PUESTOS.filter((p) => (j.puestos || []).includes(p.value))
+  return propios.length ? propios.map((p) => p.abrev).join('·') : (j.posicion || '')
+}
+
 // Formación de 13 del rugby infantil: 6 forwards y 7 backs. El 9 y el 10
 // (pareja de medios) además deberían tener la aptitud de conducción.
 export const FORMACION = [
-  { num: 1, label: 'Pilar', tipo: 'forward' },
-  { num: 2, label: 'Hooker', tipo: 'forward' },
-  { num: 3, label: 'Pilar', tipo: 'forward' },
-  { num: 4, label: 'Segunda línea', tipo: 'forward' },
-  { num: 5, label: 'Segunda línea', tipo: 'forward' },
-  { num: 8, label: 'Octavo', tipo: 'forward' },
-  { num: 9, label: 'Medio scrum', tipo: 'back', conductor: true },
-  { num: 10, label: 'Apertura', tipo: 'back', conductor: true },
-  { num: 11, label: 'Win izquierdo', tipo: 'back' },
-  { num: 12, label: 'Primer centro', tipo: 'back' },
-  { num: 13, label: 'Segundo centro', tipo: 'back' },
-  { num: 14, label: 'Win derecho', tipo: 'back' },
-  { num: 15, label: 'Fullback', tipo: 'back' },
+  { num: 1, label: 'Pilar', tipo: 'forward', puesto: 'pilar' },
+  { num: 2, label: 'Hooker', tipo: 'forward', puesto: 'hooker' },
+  { num: 3, label: 'Pilar', tipo: 'forward', puesto: 'pilar' },
+  { num: 4, label: 'Segunda línea', tipo: 'forward', puesto: 'segunda' },
+  { num: 5, label: 'Segunda línea', tipo: 'forward', puesto: 'segunda' },
+  { num: 8, label: 'Octavo', tipo: 'forward', puesto: 'octavo' },
+  { num: 9, label: 'Medio scrum', tipo: 'back', puesto: 'medio_scrum', conductor: true },
+  { num: 10, label: 'Apertura', tipo: 'back', puesto: 'apertura', conductor: true },
+  { num: 11, label: 'Wing izquierdo', tipo: 'back', puesto: 'wing' },
+  { num: 12, label: 'Primer centro', tipo: 'back', puesto: 'centro' },
+  { num: 13, label: 'Segundo centro', tipo: 'back', puesto: 'centro' },
+  { num: 14, label: 'Wing derecho', tipo: 'back', puesto: 'wing' },
+  { num: 15, label: 'Fullback', tipo: 'back', puesto: 'fullback' },
 ]
 
 export function puestoFormacion(num) {
   return FORMACION.find((f) => f.num === num)
 }
 
-// ¿El jugador puede ocupar ese puesto? Los mixtos juegan en cualquier lado.
+// ¿El jugador puede ocupar ese puesto? Con puestos cargados vale la lista
+// específica; sin cargar, la posición genérica (y los mixtos van a cualquier
+// lado). Sin ningún dato, no se marca alerta.
 export function puedeJugarDe(jugador, puestoNum) {
   const p = puestoFormacion(puestoNum)
-  if (!p || !jugador.posicion || jugador.posicion === 'Mixto') return true
+  if (!p) return true
+  if (jugador.puestos?.length) return jugador.puestos.includes(p.puesto)
+  if (!jugador.posicion || jugador.posicion === 'Mixto') return true
   return jugador.posicion.toLowerCase() === p.tipo
 }
 
