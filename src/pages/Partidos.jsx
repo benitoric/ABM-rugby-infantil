@@ -3,7 +3,7 @@ import { api } from '../api.js'
 import {
   abrevAptitudes, abrevPuestos, APTITUDES, DIFICULTADES, etiquetaDificultad, etiquetaMotivo,
   etiquetaPartido, etiquetaPuestos, fechaCorta, FORMACION, nombreCompleto, nombreStaff,
-  puedeJugarDe, tipoJugador,
+  puedeJugarDe, puestoFormacion, tipoJugador,
 } from '../helpers.js'
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 
@@ -1318,7 +1318,10 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
   const [nPrestar, setNPrestar] = useState(0)
   const [sugiriendo, setSugiriendo] = useState(false)
 
-  useEffect(() => setSel(null), [tiempoSel])
+  // Selección inversa: primero el puesto vacante, después el jugador que entra
+  const [puestoSel, setPuestoSel] = useState(null)
+
+  useEffect(() => { setSel(null); setPuestoSel(null) }, [tiempoSel])
 
   const infoBloque = (
     <>
@@ -1405,7 +1408,14 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
   function tocarPuesto(num) {
     const oc = ocupante[num]
     if (!jSel) {
-      if (oc) setSel(oc.id)
+      if (oc) {
+        setSel(oc.id)
+        setPuestoSel(null)
+      } else {
+        // puesto vacante: queda elegido y el banco resalta a los que
+        // pueden ocuparlo
+        setPuestoSel(puestoSel === num ? null : num)
+      }
       return
     }
     if (oc?.id === jSel.id) { setSel(null); return }
@@ -1425,6 +1435,12 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
   }
 
   function tocarJugador(jid) {
+    if (puestoSel) {
+      // con un puesto vacante elegido, el toque manda al jugador ahí directo
+      setPuestoSel(null)
+      onMover(tiempo.id, [{ jugador_id: jid, dentro: true, puesto: puestoSel }])
+      return
+    }
     setSel(sel === jid ? null : jid)
   }
 
@@ -1506,19 +1522,21 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
     avisos.push(`${masPrestado.apellido} ya fue prestado ${prestadosHoy[masPrestado.id]} veces hoy y otros ninguna.`)
   }
 
-  const chipJugador = (j, extra = '') => (
-    <button
-      key={j.id}
-      className={`chip-jugador ${sel === j.id ? 'sel' : ''}`}
-      onClick={() => tocarJugador(j.id)}
-    >
-      <b>{j.apellido}</b>
-      <span className="mini">
-        {abrevPuestos(j) ? `${abrevPuestos(j).length > 10 ? tipoJugador(j)[0] : abrevPuestos(j)}` : '·'} · {jugados[j.id] || 0}t
-        {abrevAptitudes(j) ? ` · ${abrevAptitudes(j)}` : ''}{extra}
-      </span>
-    </button>
-  )
+  const chipJugador = (j, extra = '') => {
+    const clases = ['chip-jugador']
+    if (sel === j.id) clases.push('sel')
+    // con un puesto vacante elegido, se destacan los que pueden ocuparlo
+    if (puestoSel) clases.push(puedeJugarDe(j, puestoSel) ? 'apto' : 'noapto')
+    return (
+      <button key={j.id} className={clases.join(' ')} onClick={() => tocarJugador(j.id)}>
+        <b>{j.apellido}</b>
+        <span className="mini">
+          {abrevPuestos(j) ? `${abrevPuestos(j).length > 10 ? tipoJugador(j)[0] : abrevPuestos(j)}` : '·'} · {jugados[j.id] || 0}t
+          {abrevAptitudes(j) ? ` · ${abrevAptitudes(j)}` : ''}{extra}
+        </span>
+      </button>
+    )
+  }
 
   const celda = (f) => {
     const oc = ocupante[f.num]
@@ -1526,7 +1544,7 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
       (f.conductor && !(oc.aptitudes || []).includes('conduccion')))
     const clases = ['puesto-celda']
     if (!oc) clases.push('vacia')
-    if (sel && oc?.id === sel) clases.push('sel')
+    if ((sel && oc?.id === sel) || puestoSel === f.num) clases.push('sel')
     else if (jSel) clases.push('destino')
     if (alerta) clases.push('alerta')
     return (
@@ -1581,31 +1599,47 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
         <p className="mini" style={{ color: 'var(--ok)' }}>✓ Formación completa, sin observaciones.</p>
       )}
 
-      <div className={`barra-sel ${jSel ? '' : 'oculta'}`}>
-        {jSel && (
-          <>
+      {/* Panel de acciones fijo abajo (con el celular en la mano, al costado
+          de la cancha, el pulgar llega ahí y nunca queda cortado) */}
+      {jSel && (
+        <div className="barra-sel">
+          <div className="fila entre" style={{ width: '100%' }}>
             <div className="crece">
               <b>{nombreCompleto(jSel)}</b>
               <div className="mini">Tocá un puesto para ubicarlo, o…</div>
             </div>
+            <button className="btn sec chico" onClick={() => setSel(null)}>✕</button>
+          </div>
+          <div className="barra-sel-acciones">
             {mapa[jSel.id] && (
-              <button className="btn sec chico" onClick={() => accionSel({ dentro: false })}>Al banco</button>
+              <button className="btn sec" onClick={() => accionSel({ dentro: false })}>Al banco</button>
             )}
             {!mapa[jSel.id]?.prestado && (
-              <button className="btn sec chico" onClick={() => accionSel({ dentro: true, prestado: true })}>
-                Prestar
+              <button className="btn sec" onClick={() => accionSel({ dentro: true, prestado: true })}>
+                🤝 Prestar
               </button>
             )}
-            <button className="btn sec chico" onClick={() => accionCondicion('golpeado')}>
+            <button className="btn sec" onClick={() => accionCondicion('golpeado')}>
               {condicion[jSel.id] === 'golpeado' ? '↩ Vuelve' : '🤕 Golpeado'}
             </button>
-            <button className="btn sec chico" onClick={() => accionCondicion('lesionado')}>
+            <button className="btn sec" onClick={() => accionCondicion('lesionado')}>
               {condicion[jSel.id] === 'lesionado' ? '↩ Vuelve' : '🚑 Lesionado'}
             </button>
-            <button className="btn sec chico" onClick={() => setSel(null)}>✕</button>
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
+      {!jSel && puestoSel && (
+        <div className="barra-sel">
+          <div className="fila entre" style={{ width: '100%' }}>
+            <div className="crece">
+              <b>{puestoSel} · {puestoFormacion(puestoSel)?.label}</b>
+              <div className="mini">Tocá al jugador que entra (resaltados los que juegan ahí).</div>
+            </div>
+            <button className="btn sec chico" onClick={() => setPuestoSel(null)}>✕</button>
+          </div>
+        </div>
+      )}
+      {(jSel || puestoSel) && <div className="barra-sel-espacio" />}
 
       <div className="formacion">
         <div>
