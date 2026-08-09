@@ -971,7 +971,7 @@ function dibujarPlaca({ fecha, secciones }) {
     }
 
     lista(`Jugadores (${s.jugadores.length})`,
-      s.jugadores.map((j) => `${j.apellido.toUpperCase()}, ${j.nombre}`))
+      s.jugadores.map((j, i) => `${i + 1}. ${j.apellido.toUpperCase()}, ${j.nombre}`))
     if (s.staff.length) {
       lista('Staff a cargo', s.staff.map((st) => {
         const ap = (st.apellido || '').toUpperCase()
