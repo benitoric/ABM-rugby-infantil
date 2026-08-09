@@ -868,24 +868,37 @@ function ControlAsistencia({
 // devuelve como PNG. Angosta y a una columna, pensada para leerse en el
 // celular (WhatsApp), con los colores institucionales del club.
 function dibujarPlaca({ fecha, secciones }) {
-  const W = 1100
-  const M = 56
+  // WhatsApp reduce las imágenes a ~1600 px en el lado mayor, así que la
+  // clave para que el texto se lea es que la placa sea BAJA: los bloques van
+  // lado a lado (uno por columna) y el texto ocupa una fracción grande del
+  // alto. Se dibuja al doble de resolución para el zoom.
+  const W = 1080
+  const M = 40
+  const SEP = 28
   const AZUL = '#123a80'
   const AZUL_CLARO = '#1a4a9e'
   const DORADO = '#ffd200'
-  const FILA = 58
-  // Se dibuja al doble de resolución, para que no se pixele al hacer zoom
+  const FILA = 52
   const ESCALA = 2
-  const filasDe = (n) => Math.ceil(n / 2)
 
-  // Altura total: encabezado + cada bloque (banda 74 + datos 116 + título de
-  // lista 90 + filas a dos columnas, ídem staff, + separación 40)
-  let H = 300
-  for (const s of secciones) {
-    H += 74 + 116 + 90 + filasDe(s.jugadores.length) * FILA + 40
-    if (s.staff.length) H += 90 + filasDe(s.staff.length) * FILA
+  const columnas = Math.min(secciones.length, 2)
+  const anchoCol = (W - 2 * M - (columnas - 1) * SEP) / columnas
+
+  // Alto de una sección: banda 70 + datos 104 + título 80 + jugadores +
+  // (título 80 + staff)
+  const altoSeccion = (s) =>
+    70 + 104 + 80 + s.jugadores.length * FILA +
+    (s.staff.length ? 80 + s.staff.length * FILA : 0)
+  // Filas de a 2 columnas
+  const filasSecciones = []
+  for (let i = 0; i < secciones.length; i += columnas) {
+    filasSecciones.push(secciones.slice(i, i + columnas))
   }
-  H += 60
+  let H = 262
+  for (const fila of filasSecciones) {
+    H += Math.max(...fila.map(altoSeccion)) + 36
+  }
+  H += 30
 
   const c = document.createElement('canvas')
   c.width = W * ESCALA
@@ -896,78 +909,68 @@ function dibujarPlaca({ fecha, secciones }) {
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, W, H)
 
+  // texto que se achica solo si no entra en el ancho disponible
+  const texto = (t, x, y, maxAncho, tamanio, negrita = false, color = '#1c2028') => {
+    let tam = tamanio
+    ctx.fillStyle = color
+    do {
+      ctx.font = `${negrita ? 'bold ' : ''}${tam}px system-ui, sans-serif`
+      if (ctx.measureText(t).width <= maxAncho) break
+      tam -= 1
+    } while (tam > 16)
+    ctx.fillText(t, x, y)
+  }
+
   // franja superior azul con el encabezado institucional
-  const franja = ctx.createLinearGradient(0, 0, 0, 250)
+  const franja = ctx.createLinearGradient(0, 0, 0, 224)
   franja.addColorStop(0, AZUL_CLARO)
   franja.addColorStop(1, AZUL)
   ctx.fillStyle = franja
-  ctx.fillRect(0, 0, W, 250)
+  ctx.fillRect(0, 0, W, 224)
   ctx.fillStyle = DORADO
-  ctx.fillRect(0, 250, W, 8)
+  ctx.fillRect(0, 224, W, 8)
 
   ctx.textAlign = 'center'
-  ctx.fillStyle = '#ffffff'
-  ctx.font = 'bold 44px system-ui, sans-serif'
-  ctx.fillText('🏉 Tucumán Lawn Tennis Club', W / 2, 92)
-  ctx.fillStyle = DORADO
-  ctx.font = 'bold 36px system-ui, sans-serif'
-  ctx.fillText('División M12 (clase 2014)', W / 2, 156)
+  texto('🏉 Tucumán Lawn Tennis Club', W / 2, 84, W - 2 * M, 46, true, '#ffffff')
+  texto('División M12 (clase 2014)', W / 2, 144, W - 2 * M, 36, true, DORADO)
   const f = new Date(fecha + 'T00:00:00')
   const dia = f.toLocaleDateString('es-AR', { weekday: 'long' })
-  ctx.fillStyle = '#dbe4ff'
-  ctx.font = '34px system-ui, sans-serif'
-  ctx.fillText(`${dia[0].toUpperCase()}${dia.slice(1)} ${fechaCorta(fecha)}`, W / 2, 214)
+  texto(`${dia[0].toUpperCase()}${dia.slice(1)} ${fechaCorta(fecha)}`, W / 2, 196, W - 2 * M, 32, false, '#dbe4ff')
 
-  let y = 300
-
-  // Lista a dos columnas (baja por la primera y sigue por la segunda)
-  const lista = (titulo, nombres) => {
-    ctx.textAlign = 'left'
+  // una sección (bloque) dibujada dentro de su columna
+  const seccion = (s, x, y) => {
     ctx.fillStyle = AZUL
-    ctx.font = 'bold 34px system-ui, sans-serif'
-    ctx.fillText(titulo, M, y + 40)
-    ctx.fillStyle = DORADO
-    ctx.fillRect(M, y + 56, W - 2 * M, 5)
-    y += 90
-    const porFila = filasDe(nombres.length)
-    const anchoCol = (W - 2 * M) / 2
-    nombres.forEach((nombre, i) => {
-      const col = Math.floor(i / porFila)
-      const fila = i % porFila
-      const yFila = y + fila * FILA
-      if (fila % 2 === 0) {
-        ctx.fillStyle = '#f4f6fa'
-        ctx.fillRect(M + col * anchoCol, yFila - 6, anchoCol - 14, FILA - 6)
-      }
-      ctx.fillStyle = '#1c2028'
-      ctx.font = '30px system-ui, sans-serif'
-      ctx.fillText(nombre, M + 16 + col * anchoCol, yFila + 34)
-    })
-    y += porFila * FILA
-  }
-
-  for (const s of secciones) {
-    // título del bloque sobre banda azul, con sus datos
-    ctx.fillStyle = AZUL
-    ctx.fillRect(0, y, W, 74)
+    ctx.fillRect(x, y, anchoCol, 70)
     ctx.textAlign = 'center'
-    ctx.fillStyle = '#ffffff'
-    ctx.font = 'bold 40px system-ui, sans-serif'
-    ctx.fillText(
+    texto(
       `Bloque ${s.bloque.numero}${s.bloque.rival ? ` vs ${s.bloque.rival}` : ''}`,
-      W / 2, y + 52)
-    y += 74
-    ctx.fillStyle = '#1c2028'
-    ctx.font = '32px system-ui, sans-serif'
-    ctx.fillText(`📍 ${s.bloque.lugar || 'Lugar a confirmar'}`, W / 2, y + 48)
-    ctx.fillText(
+      x + anchoCol / 2, y + 48, anchoCol - 30, 34, true, '#ffffff')
+    y += 70
+    texto(`📍 ${s.bloque.lugar || 'Lugar a confirmar'}`, x + anchoCol / 2, y + 42, anchoCol - 16, 28)
+    texto(
       s.bloque.hora_convocatoria
         ? `⏰ Convocatoria: ${s.bloque.hora_convocatoria.slice(0, 5)} hs`
         : '⏰ Horario a confirmar',
-      W / 2, y + 96)
-    y += 116
+      x + anchoCol / 2, y + 86, anchoCol - 16, 28)
+    y += 104
 
-    lista(`Jugadores convocados (${s.jugadores.length})`,
+    const lista = (titulo, nombres) => {
+      ctx.textAlign = 'left'
+      texto(titulo, x, y + 36, anchoCol, 30, true, AZUL)
+      ctx.fillStyle = DORADO
+      ctx.fillRect(x, y + 50, anchoCol, 5)
+      y += 80
+      nombres.forEach((nombre, i) => {
+        if (i % 2 === 0) {
+          ctx.fillStyle = '#f4f6fa'
+          ctx.fillRect(x, y - 4, anchoCol, FILA - 4)
+        }
+        texto(nombre, x + 12, y + 32, anchoCol - 24, 29)
+        y += FILA
+      })
+    }
+
+    lista(`Jugadores (${s.jugadores.length})`,
       s.jugadores.map((j) => `${j.apellido.toUpperCase()}, ${j.nombre}`))
     if (s.staff.length) {
       lista('Staff a cargo', s.staff.map((st) => {
@@ -975,12 +978,17 @@ function dibujarPlaca({ fecha, secciones }) {
         return ap ? `${ap}, ${st.nombre}` : st.nombre || st.email
       }))
     }
-    y += 40
+  }
+
+  let y = 262
+  for (const fila of filasSecciones) {
+    fila.forEach((s, i) => seccion(s, M + i * (anchoCol + SEP), y))
+    y += Math.max(...fila.map(altoSeccion)) + 36
   }
 
   // pie dorado
   ctx.fillStyle = DORADO
-  ctx.fillRect(0, H - 14, W, 14)
+  ctx.fillRect(0, H - 12, W, 12)
 
   return c.toDataURL('image/png')
 }
