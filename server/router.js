@@ -254,7 +254,9 @@ function sugerirEquipos({ jugadores, tiempos, enCancha, desde, prestamos, asiste
     .filter(([, e]) => e.prestado).map(([jid]) => jid))
   const esConductor = (j) => (j.aptitudes || []).includes('conduccion')
   const resultado = {}
-  for (const t of tiempos.filter((x) => x.numero >= desde)) {
+  // Se sugiere UN tiempo por vez: lo anterior ya está jugado y no se toca,
+  // y lo que venga después se decide en su momento, con la cancha a la vista
+  for (const t of tiempos.filter((x) => x.numero === desde)) {
     // Juegan (en cancha o prestados) los que menos tiempos llevan; a igualdad,
     // los de mejor % de asistencia a entrenamientos
     const puntaje = (j) => jugados[j.id] * 1000 - (asistencia[j.id] || 0)
@@ -1166,6 +1168,17 @@ async function enrutar(metodo, p, b, req, url) {
       await query(
         'update bloque_staff set presente = $1 where staff_email = $2 and bloque_id = any($3)',
         [b.presente ?? null, b.staff_email, bloques.map((x) => x.id)])
+      return { ok: true }
+    }
+    if (metodo === 'POST' && p[1] === 'limpiar-bloques') {
+      // Borra de una vez el armado completo: jugadores de los bloques y de
+      // sus tiempos (el staff asignado no se toca)
+      const bloques = await query('select id from bloques where evento_id = $1', [b.evento_id])
+      const ids = bloques.map((x) => x.id)
+      await query(
+        `delete from tiempo_jugadores
+         where tiempo_id in (select id from tiempos where bloque_id = any($1))`, [ids])
+      await query('delete from bloque_jugadores where bloque_id = any($1)', [ids])
       return { ok: true }
     }
     if (metodo === 'POST' && p[1] === 'sugerir-bloques') {

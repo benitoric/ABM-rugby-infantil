@@ -710,3 +710,16 @@ details.tarjeta summary {
 /* Con un puesto vacante elegido: resaltan los que pueden ocuparlo */
 .chip-jugador.apto { border-color: var(--ok); background: #ecfdf3; box-shadow: 0 0 0 1px var(--ok); }
 .chip-jugador.noapto { opacity: 0.4; }
+
+/* Progresión de tiempos jugados, pintada al pie del renglón del jugador
+   (jugó 1 de 4 tiempos → 25% del ancho) */
+.puesto-celda, .chip-jugador { position: relative; overflow: hidden; }
+.progreso {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 5px;
+  background: var(--dorado);
+  border-radius: 0 3px 3px 0;
+  pointer-events: none;
+}
