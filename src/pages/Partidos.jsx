@@ -320,12 +320,14 @@ function ArmadoPartido({ partido }) {
   }
 
   // Pide al servidor una propuesta de reparto entre bloques. Los bloques se
-  // arman en la semana con los que confirmaron que van (sección Asistencia);
-  // si nadie confirmó todavía, se reparte el plantel completo.
+  // arman en la semana con los que confirmaron que van (sección Asistencia).
   async function sugerirBloques() {
     const confirmados = jugadores.filter((j) => confirmacion[j.id] === 'presente')
-    const base = confirmados.length ? confirmados : jugadores
-    const elegibles = base.filter((j) => j.estado !== 'lesionado')
+    const elegibles = confirmados.filter((j) => j.estado !== 'lesionado')
+    if (elegibles.length < 2) {
+      alert('Todavía no hay jugadores confirmados para repartir. Marcalos en la sección Asistencia.')
+      return
+    }
     const r = await api('partido/sugerir-bloques', {
       method: 'POST',
       body: { evento_id: partido.id, jugador_ids: elegibles.map((j) => j.id) },
@@ -496,7 +498,7 @@ function ArmadoPartido({ partido }) {
         <>
           <div className="fila entre">
             <p className="mini crece" style={{ margin: 0 }}>
-              Asigná cada jugador a un bloque. Primero los que confirmaron que
+              Asigná cada jugador a un bloque. Aparecen los que confirmaron que
               van (sección Asistencia). Tocá de nuevo el mismo botón para
               sacarlo del bloque.
             </p>
@@ -561,7 +563,18 @@ function ArmadoPartido({ partido }) {
             />
           )}
 
-          {ordenados.map((j) => {
+          {!ordenados.some((j) => confirmacion[j.id] === 'presente' || asignacion[j.id]) && (
+            <div className="vacio">
+              Nadie confirmó asistencia todavía. Marcá a los que avisaron que
+              van en la sección Asistencia y volvé para armar los bloques.
+            </div>
+          )}
+
+          {/* Solo los que confirmaron en la sección Asistencia (más los que ya
+              estén asignados a un bloque, para no ocultar un armado hecho) */}
+          {ordenados
+            .filter((j) => confirmacion[j.id] === 'presente' || asignacion[j.id])
+            .map((j) => {
             const confirmado = confirmacion[j.id] === 'presente'
             const asignado = sugerencia
               ? sugerencia.asignacion[j.id] || null
@@ -574,7 +587,7 @@ function ArmadoPartido({ partido }) {
                     {etiquetaPuestos(j) && <span className="mini"> · {etiquetaPuestos(j)}</span>}
                   </div>
                   <div className="mini">
-                    {confirmado ? 'Confirmó que va' : (confirmacion[j.id] === 'ausente' ? 'Avisó que no va' : 'Sin confirmar')}
+                    {confirmado ? 'Confirmó que va' : (confirmacion[j.id] === 'ausente' ? '⚠️ Avisó que no va' : '⚠️ Sin confirmar')}
                     {j.estado === 'lesionado' ? ' · 🤕 lesionado' : ''}
                     {abrevAptitudes(j) ? ` · ${abrevAptitudes(j)}` : ''}
                     {califs?.[j.id] !== undefined && ` · ★${califs[j.id].toFixed(1)}`}
