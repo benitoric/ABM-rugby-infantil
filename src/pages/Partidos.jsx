@@ -109,6 +109,7 @@ function ArmadoPartido({ partido }) {
   const [editandoBloque, setEditandoBloque] = useState(null)
   const [sugerencia, setSugerencia] = useState(null)
   const [califs, setCalifs] = useState(null)
+  const [publicando, setPublicando] = useState(false)
   const [listo, setListo] = useState(false)
   const [sugerencias, recargarSugerencias] = useSugerencias()
 
@@ -463,9 +464,24 @@ function ArmadoPartido({ partido }) {
               sacarlo del bloque.
             </p>
             {!sugerencia && (
-              <button className="btn chico" onClick={sugerirBloques}>✨ Sugerir armado</button>
+              <div className="fila" style={{ gap: 6 }}>
+                <button className="btn chico" onClick={sugerirBloques}>✨ Sugerir armado</button>
+                <button className="btn sec chico" onClick={() => setPublicando(true)}>📣 Publicar</button>
+              </div>
             )}
           </div>
+
+          {publicando && (
+            <Publicacion
+              partido={partido}
+              bloques={bloques}
+              jugadores={jugadores}
+              asignacion={asignacion}
+              staff={staff}
+              asignacionStaff={asignacionStaff}
+              onCerrar={() => setPublicando(false)}
+            />
+          )}
 
           {sugerencia && (
             <div className="tarjeta" style={{ borderLeft: '4px solid var(--primario)' }}>
@@ -838,6 +854,181 @@ function ControlAsistencia({
         })
       })()}
     </>
+  )
+}
+
+// ---------- publicación para el grupo de padres ----------
+// Dibuja la placa de un bloque en un canvas y la devuelve como PNG. Colores
+// institucionales del club (azul y dorado), pensada para WhatsApp.
+function dibujarPlaca({ bloque, fecha, jugadores, staff }) {
+  const W = 1080
+  const M = 70
+  const AZUL = '#123a80'
+  const AZUL_CLARO = '#1a4a9e'
+  const DORADO = '#ffd200'
+  const filas = Math.ceil(jugadores.length / 2)
+  const filasStaff = Math.ceil(staff.length / 2)
+  const altoJugadores = 100 + filas * 56
+  const altoStaff = staff.length ? 100 + filasStaff * 56 : 0
+  const H = 470 + altoJugadores + altoStaff + 100
+  const c = document.createElement('canvas')
+  c.width = W
+  c.height = H
+  const ctx = c.getContext('2d')
+
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, W, H)
+
+  // franja superior azul con el encabezado institucional
+  const franja = ctx.createLinearGradient(0, 0, 0, 230)
+  franja.addColorStop(0, AZUL_CLARO)
+  franja.addColorStop(1, AZUL)
+  ctx.fillStyle = franja
+  ctx.fillRect(0, 0, W, 230)
+  ctx.fillStyle = DORADO
+  ctx.fillRect(0, 230, W, 8)
+
+  ctx.textAlign = 'center'
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 46px system-ui, sans-serif'
+  ctx.fillText('🏉 Tucumán Lawn Tennis Club', W / 2, 95)
+  ctx.fillStyle = DORADO
+  ctx.font = 'bold 36px system-ui, sans-serif'
+  ctx.fillText('División M12 (clase 2014)', W / 2, 155)
+  const f = new Date(fecha + 'T00:00:00')
+  const dia = f.toLocaleDateString('es-AR', { weekday: 'long' })
+  ctx.fillStyle = '#dbe4ff'
+  ctx.font = '32px system-ui, sans-serif'
+  ctx.fillText(`${dia[0].toUpperCase()}${dia.slice(1)} ${fechaCorta(fecha)}`, W / 2, 205)
+
+  // datos del bloque
+  ctx.fillStyle = AZUL
+  ctx.font = 'bold 52px system-ui, sans-serif'
+  ctx.fillText(
+    `Bloque ${bloque.numero}${bloque.rival ? ` vs ${bloque.rival}` : ''}`,
+    W / 2, 320)
+  ctx.fillStyle = '#1c2028'
+  ctx.font = '34px system-ui, sans-serif'
+  ctx.fillText(`📍 ${bloque.lugar || 'Lugar a confirmar'}`, W / 2, 380)
+  ctx.fillText(
+    bloque.hora_convocatoria
+      ? `⏰ Convocatoria: ${bloque.hora_convocatoria.slice(0, 5)} hs`
+      : '⏰ Horario a confirmar',
+    W / 2, 430)
+
+  // lista en dos columnas: APELLIDO, Nombre
+  const seccion = (titulo, lista, desdeY) => {
+    ctx.fillStyle = AZUL
+    ctx.font = 'bold 36px system-ui, sans-serif'
+    ctx.textAlign = 'left'
+    ctx.fillText(titulo, M, desdeY + 46)
+    ctx.fillStyle = DORADO
+    ctx.fillRect(M, desdeY + 62, W - 2 * M, 5)
+    const porFila = Math.ceil(lista.length / 2)
+    lista.forEach((nombre, i) => {
+      const col = Math.floor(i / porFila)
+      const fila = i % porFila
+      const y = desdeY + 100 + fila * 56
+      if (fila % 2 === 0) {
+        ctx.fillStyle = '#f4f6fa'
+        ctx.fillRect(M + col * ((W - 2 * M) / 2), y - 36, (W - 2 * M) / 2 - 14, 48)
+      }
+      ctx.fillStyle = '#1c2028'
+      ctx.font = '30px system-ui, sans-serif'
+      ctx.fillText(nombre, M + 16 + col * ((W - 2 * M) / 2), y)
+    })
+    return desdeY + 100 + porFila * 56
+  }
+
+  let y = seccion(
+    `Jugadores convocados (${jugadores.length})`,
+    jugadores.map((j) => `${j.apellido.toUpperCase()}, ${j.nombre}`),
+    470)
+  if (staff.length) {
+    seccion('Staff a cargo', staff.map((s) => {
+      const ap = (s.apellido || '').toUpperCase()
+      return ap ? `${ap}, ${s.nombre}` : s.nombre || s.email
+    }), y + 20)
+  }
+
+  // pie dorado
+  ctx.fillStyle = DORADO
+  ctx.fillRect(0, H - 14, W, 14)
+
+  return c.toDataURL('image/png')
+}
+
+function Publicacion({ partido, bloques, jugadores, asignacion, staff, asignacionStaff, onCerrar }) {
+  const placas = useMemo(() => bloques
+    .filter((b) => !b.suspendido)
+    .map((b) => {
+      const delBloque = jugadores
+        .filter((j) => asignacion[j.id] === b.id)
+        .sort((x, y) => nombreCompleto(x).localeCompare(nombreCompleto(y), 'es'))
+      const staffBloque = staff
+        .filter((s) => asignacionStaff[s.email] === b.id)
+        .sort((x, y) => nombreStaff(x).localeCompare(nombreStaff(y), 'es'))
+      if (!delBloque.length) return null
+      return {
+        bloque: b,
+        url: dibujarPlaca({ bloque: b, fecha: partido.fecha, jugadores: delBloque, staff: staffBloque }),
+        nombre: `bloque-${b.numero}-${partido.fecha}.png`,
+        sinStaff: !staffBloque.length,
+      }
+    })
+    .filter(Boolean), [bloques, jugadores, asignacion, staff, asignacionStaff, partido.fecha])
+
+  async function compartir(placa) {
+    const blob = await (await fetch(placa.url)).blob()
+    const archivo = new File([blob], placa.nombre, { type: 'image/png' })
+    if (navigator.canShare?.({ files: [archivo] })) {
+      try {
+        await navigator.share({ files: [archivo] })
+        return
+      } catch { /* cancelado por el usuario o sin permiso: cae a descarga */ }
+    }
+    const a = document.createElement('a')
+    a.href = placa.url
+    a.download = placa.nombre
+    a.click()
+  }
+
+  return (
+    <div className="modal-fondo" onClick={onCerrar}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="fila entre" style={{ marginBottom: 10 }}>
+          <h3>📣 Publicar para el grupo de padres</h3>
+          <button className="btn sec chico" onClick={onCerrar}>Cerrar</button>
+        </div>
+        {!placas.length && (
+          <div className="vacio">
+            Ningún bloque tiene jugadores asignados todavía. Armá los bloques y
+            volvé a publicar.
+          </div>
+        )}
+        {placas.map((p) => (
+          <div key={p.bloque.id} style={{ marginBottom: 16 }}>
+            <img
+              src={p.url}
+              alt={`Placa del bloque ${p.bloque.numero}`}
+              style={{ width: '100%', borderRadius: 10, border: '1px solid var(--borde)' }}
+            />
+            {p.sinStaff && (
+              <p className="mini" style={{ color: 'var(--warn)', margin: '4px 0 0' }}>
+                ⚠️ Este bloque no tiene staff asignado: la placa sale sin esa sección.
+              </p>
+            )}
+            <button className="btn" style={{ width: '100%', marginTop: 6 }} onClick={() => compartir(p)}>
+              📤 Compartir Bloque {p.bloque.numero}
+            </button>
+          </div>
+        ))}
+        <p className="mini">
+          En el celular, "Compartir" abre directo WhatsApp; en la computadora
+          descarga la imagen para mandarla a mano.
+        </p>
+      </div>
+    </div>
   )
 }
 
