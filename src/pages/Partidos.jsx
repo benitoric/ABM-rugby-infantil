@@ -1730,6 +1730,21 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
               {condicion[jSel.id] === 'lesionado' ? '↩ Vuelve' : '🚑 Lesionado'}
             </button>
           </div>
+          {FORMACION.some((f) => !ocupante[f.num]) && (
+            <div className="barra-sel-puestos">
+              <span className="mini">Puesto libre:</span>
+              {FORMACION.filter((f) => !ocupante[f.num]).map((f) => (
+                <button
+                  key={f.num}
+                  className={`puesto-btn ${puedeJugarDe(jSel, f.num) ? 'apto' : ''}`}
+                  title={f.label}
+                  onClick={() => accionSel({ dentro: true, puesto: f.num })}
+                >
+                  {f.num}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {!jSel && puestoSel && (

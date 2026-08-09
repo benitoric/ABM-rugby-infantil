@@ -657,15 +657,20 @@ details.tarjeta summary {
 }
 .puesto-celda.vacia .puesto-num { background: #d5d9e2; }
 
-.banco-lista { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Lista a lo ancho: todas las barras de progresión miden lo mismo y el
+   tiempo jugado se compara de un vistazo */
+.banco-lista { display: flex; flex-direction: column; gap: 6px; }
 .chip-jugador {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
   background: #fff;
   border: 1px solid var(--borde);
   border-radius: 10px;
-  padding: 5px 9px;
+  padding: 8px 12px 10px;
   cursor: pointer;
 }
 .chip-jugador b { font-size: 0.85rem; }
@@ -702,7 +707,7 @@ details.tarjeta summary {
 }
 .barra-sel-acciones .btn { width: 100%; padding: 10px 6px; }
 /* deja lugar para que el panel no tape el final del contenido */
-.barra-sel-espacio { height: 170px; }
+.barra-sel-espacio { height: 240px; }
 .bloque-btn.prop { border-style: dashed; }
 .bloque-btn.sel.ok { background: var(--ok); border-color: var(--ok); }
 .bloque-btn.sel.no { background: var(--bad); border-color: var(--bad); }
@@ -723,3 +728,17 @@ details.tarjeta summary {
   border-radius: 0 3px 3px 0;
   pointer-events: none;
 }
+
+/* Números de los puestos vacantes en el panel de acciones */
+.barra-sel-puestos { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.puesto-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: transparent;
+  color: #fff;
+  font-weight: 800;
+  font-size: 1rem;
+}
+.puesto-btn.apto { background: var(--dorado); border-color: var(--dorado); color: var(--primario-oscuro); }
