@@ -258,8 +258,9 @@ function sugerirEquipos({ jugadores, tiempos, enCancha, desde, prestamos, asiste
   // y lo que venga después se decide en su momento, con la cancha a la vista
   for (const t of tiempos.filter((x) => x.numero === desde)) {
     // Juegan (en cancha o prestados) los que menos tiempos llevan; a igualdad,
-    // los de mejor % de asistencia a entrenamientos
-    const puntaje = (j) => jugados[j.id] * 1000 - (asistencia[j.id] || 0)
+    // los de mejor % de asistencia a entrenamientos. Llegar tarde al partido
+    // quita prioridad (pesa más que la asistencia, menos que un tiempo).
+    const puntaje = (j) => jugados[j.id] * 1000 + (j.tarde ? 500 : 0) - (asistencia[j.id] || 0)
     const orden = [...jugadores].sort((a, b) => puntaje(a) - puntaje(b))
     const corte = Math.min(13 + prestamos, jugadores.length)
     let juegan = orden.slice(0, corte)
@@ -1035,7 +1036,7 @@ async function enrutar(metodo, p, b, req, url) {
     if (p[2] === 'asistencias-partido' && p[1]) {
       if (metodo === 'GET') {
         return query(
-          'select jugador_id, estado, condicion from asistencias_partido where evento_id = $1', [p[1]])
+          'select jugador_id, estado, tarde, condicion from asistencias_partido where evento_id = $1', [p[1]])
       }
       if (metodo === 'PUT') {
         // b.marcas: [{jugador_id, estado|null, condicion?}] — estado null borra
@@ -1049,11 +1050,15 @@ async function enrutar(metodo, p, b, req, url) {
           if (!['presente', 'ausente'].includes(m.estado)) {
             throw { codigo: 400, error: 'estado_invalido' }
           }
+          // llegó tarde: solo tiene sentido junto con presente
+          const tarde = m.estado === 'presente' && !!m.tarde
           if (!('condicion' in m)) {
             await query(
-              `insert into asistencias_partido (evento_id, jugador_id, estado) values ($1,$2,$3)
-               on conflict (evento_id, jugador_id) do update set estado = excluded.estado`,
-              [p[1], m.jugador_id, m.estado])
+              `insert into asistencias_partido (evento_id, jugador_id, estado, tarde)
+               values ($1,$2,$3,$4)
+               on conflict (evento_id, jugador_id)
+               do update set estado = excluded.estado, tarde = excluded.tarde`,
+              [p[1], m.jugador_id, m.estado, tarde])
             continue
           }
           const cond = m.condicion || null
@@ -1269,23 +1274,19 @@ async function enrutar(metodo, p, b, req, url) {
       // toca). No persiste: el cliente aplica con partido/tiempo-equipo.
       const desde = Number(b.desde_numero) || 1
       const prestamos = Math.max(0, Math.min(6, Number(b.prestamos_por_tiempo) || 0))
-      // Los equipos se arman con los que efectivamente llegaron ese día
-      // (asistencias_partido, tomada en la cancha por el staff del bloque).
-      // Si todavía no se tomó, se usa el plantel del bloque, que ya viene de
-      // los que confirmaron en la semana.
+      // Los equipos se arman SOLO con los marcados "vino" ese día
+      // (asistencias_partido, tomada en la cancha por el staff del bloque;
+      // sin marca cuenta como faltó). Los golpeados y lesionados quedan
+      // afuera hasta que se los desmarque.
       const delBloque = await query(
-        `select j.id, j.posicion, j.puestos, j.aptitudes, ap.estado, ap.condicion
+        `select j.id, j.posicion, j.puestos, j.aptitudes, ap.estado, ap.tarde, ap.condicion
          from bloque_jugadores bj
          join jugadores j on j.id = bj.jugador_id
          join bloques bl on bl.id = bj.bloque_id
          left join asistencias_partido ap
            on ap.evento_id = bl.evento_id and ap.jugador_id = j.id
          where bj.bloque_id = $1`, [b.bloque_id])
-      const presentes = delBloque.filter((j) => j.estado === 'presente')
-      const sinTomar = delBloque.every((j) => !j.estado)
-      // Los golpeados y lesionados durante el partido no se consideran para
-      // los equipos hasta que se los desmarque
-      const jugadores = (sinTomar ? delBloque : presentes).filter((j) => !j.condicion)
+      const jugadores = delBloque.filter((j) => j.estado === 'presente' && !j.condicion)
       if (!jugadores.length) throw { codigo: 400, error: 'faltan_jugadores' }
       const tiempos = await query(
         'select id, numero from tiempos where bloque_id = $1 order by numero', [b.bloque_id])

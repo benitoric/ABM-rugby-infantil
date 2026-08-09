@@ -32,9 +32,9 @@ async function inicializar() {
   // fallar igual en Postgres por la carrera en el catálogo.
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
-    `select exists (select 1 from pg_constraint
-       where conrelid = to_regclass('public.bloques')
-         and conname = 'bloques_numero_valido') as aplicadas`)
+    `select exists (select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'asistencias_partido'
+         and column_name = 'tarde') as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -162,6 +162,9 @@ export async function migrar(pool) {
   )`)
   // Puestos específicos del jugador (la posición genérica pasa a derivarse)
   await pool.query(`alter table jugadores add column if not exists puestos jsonb not null default '[]'`)
+  // Llegadas tarde al partido (presente sin prioridad en los equipos)
+  await pool.query(`alter table asistencias_partido
+    add column if not exists tarde boolean not null default false`)
   // Golpeados y lesionados durante el partido
   await pool.query('alter table asistencias_partido add column if not exists condicion text')
   await pool.query('alter table asistencias_partido drop constraint if exists asistencias_partido_condicion_check')

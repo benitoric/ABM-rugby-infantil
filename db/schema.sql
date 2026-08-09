@@ -178,6 +178,10 @@ create table if not exists asistencias_partido (
   evento_id uuid not null references eventos(id) on delete cascade,
   jugador_id uuid not null references jugadores(id) on delete cascade,
   estado text not null check (estado in ('presente','ausente')),
+  -- Marcado presente después de la hora de convocatoria + 15 minutos.
+  -- Cuenta como presente a todos los efectos, pero pierde prioridad al
+  -- armar los equipos de cada tiempo.
+  tarde boolean not null default false,
   -- Se golpeó durante el partido y no sigue jugando. 'golpeado' es
   -- transitorio (se desmarca y vuelve); 'lesionado' además queda pendiente de
   -- seguimiento en la sección Jugadores. Null = en condiciones de jugar.
