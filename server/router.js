@@ -2,13 +2,28 @@ import { query } from './db.js'
 import { autenticar, crearToken, hashClave, compararClave } from './auth.js'
 
 const COLS_JUGADOR = `id, nombre, apellido, fecha_nacimiento::text as fecha_nacimiento,
-  dni, posicion, aptitudes, estado, tutor_nombre, tutor_telefono, ficha_medica_vigente,
+  dni, posicion, puestos, aptitudes, estado, tutor_nombre, tutor_telefono, ficha_medica_vigente,
   ficha_medica_vence::text as ficha_medica_vence, observaciones`
 
 const APTITUDES = ['conduccion', 'penetracion', 'definicion']
 
 // Números de camiseta válidos en la formación de 13 (sin 6 ni 7)
 const PUESTOS_VALIDOS = [1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15]
+
+// Puestos específicos que puede tener un jugador, y su tipo
+const TIPO_PUESTO = {
+  pilar: 'forward', hooker: 'forward', segunda: 'forward', octavo: 'forward',
+  medio_scrum: 'back', apertura: 'back', centro: 'back', wing: 'back', fullback: 'back',
+}
+
+// La posición genérica se deriva de los puestos cargados
+function posicionDePuestos(puestos) {
+  const tipos = new Set(puestos.map((k) => TIPO_PUESTO[k]))
+  if (tipos.size === 2) return 'Mixto'
+  if (tipos.has('forward')) return 'Forward'
+  if (tipos.has('back')) return 'Back'
+  return null
+}
 
 // Normaliza la posición sin importar cómo venga escrita (forward, BACK, mixto…)
 function normalizarPosicion(p) {
@@ -125,9 +140,17 @@ const SESGO_POR_ESCALON = 0.3
 const ESCALA_DIFICULTAD = { malo: 0, regular: 1, bueno: 2 }
 
 function tipoJugador(j) {
+  const tipos = new Set((j.puestos || []).map((k) => TIPO_PUESTO[k]).filter(Boolean))
+  if (tipos.size === 1) return tipos.has('forward') ? 'fw' : 'back'
+  if (tipos.size === 2) return 'mx'
   if (j.posicion === 'Forward') return 'fw'
   if (j.posicion === 'Back') return 'back'
   return 'mx'
+}
+
+// ¿Tiene cargado ese puesto específico? (sin puestos cargados no opina)
+function esEspecialista(j, clave) {
+  return (j.puestos || []).includes(clave)
 }
 
 // Penalidad de un reparto: cuanto más baja, mejor. sesgo = cuánto más fuerte
@@ -151,6 +174,12 @@ function penalidadReparto(jugadores, calif, A, B, sesgo) {
   for (const apt of APTITUDES) {
     const con = (l) => l.filter((j) => (j.aptitudes || []).includes(apt)).length
     p += Math.abs(con(a) - con(b))
+  }
+  // Cobertura pareja de cada puesto específico (que un bloque no se quede
+  // sin nadie que juegue de pilar, de medio scrum, etc.)
+  for (const clave of Object.keys(TIPO_PUESTO)) {
+    const cubren = (l) => l.filter((j) => esEspecialista(j, clave)).length
+    p += 0.5 * Math.abs(cubren(a) - cubren(b))
   }
   return p
 }
@@ -268,17 +297,20 @@ function sugerirEquipos({ jugadores, tiempos, enCancha, desde, prestamos, asiste
     const poner = (num, j) => { porPuesto[num] = j.id; usados.add(j.id) }
     // 1) la pareja de medios primero, para que la estabilidad de los demás
     // puestos no se lleve a los conductores: mantiene al que ya venía de 9
-    // o 10 y completa con conductores libres (idealmente backs o mixtos)
+    // o 10 y completa priorizando al especialista del puesto con conducción
     for (const num of [9, 10]) {
       const previo = enJuego.find((j) => ultimoPuesto[j.id] === num)
       if (previo && !usados.has(previo.id)) poner(num, previo)
     }
     for (const num of [9, 10]) {
       if (porPuesto[num]) continue
+      const clave = PUESTOS_FORMACION.find((x) => x.num === num).clave
       const libres = enJuego.filter((j) => !usados.has(j.id))
       const cand =
-        libres.find((j) => esConductor(j) && j.posicion !== 'Forward') ||
-        libres.find(esConductor)
+        libres.find((j) => esEspecialista(j, clave) && esConductor(j)) ||
+        libres.find((j) => esConductor(j) && tipoJugador(j) !== 'fw') ||
+        libres.find(esConductor) ||
+        libres.find((j) => esEspecialista(j, clave))
       if (cand) poner(num, cand)
     }
     // 2) los demás mantienen el puesto que ya venían jugando
@@ -286,18 +318,26 @@ function sugerirEquipos({ jugadores, tiempos, enCancha, desde, prestamos, asiste
       const p = ultimoPuesto[j.id]
       if (p && p !== 9 && p !== 10 && !porPuesto[p] && !usados.has(j.id)) poner(p, j)
     }
-    // 3) forwards a los puestos de forwards, backs a los de backs; los mixtos
-    // tapan lo que falte y al final entra cualquiera antes que dejar huecos
-    for (const tipo of ['forward', 'back']) {
-      for (const f of PUESTOS_FORMACION.filter((x) => x.tipo === tipo)) {
-        if (porPuesto[f.num]) continue
+    // 3) cada puesto para su especialista; si no hay, alguien del mismo tipo
+    // (forward/back), después los mixtos o sin datos, y al final entra
+    // cualquiera antes que dejar huecos. Los puestos con menos especialistas
+    // libres se resuelven primero, para que no se los "roben".
+    const pendientes = PUESTOS_FORMACION
+      .filter((f) => !porPuesto[f.num])
+      .sort((x, y) => {
         const libres = enJuego.filter((j) => !usados.has(j.id))
-        const cand =
-          libres.find((j) => j.posicion === (tipo === 'forward' ? 'Forward' : 'Back')) ||
-          libres.find((j) => j.posicion === 'Mixto' || !j.posicion) ||
-          libres[0]
-        if (cand) poner(f.num, cand)
-      }
+        const esp = (f) => libres.filter((j) => esEspecialista(j, f.clave)).length
+        return esp(x) - esp(y)
+      })
+    for (const f of pendientes) {
+      if (porPuesto[f.num]) continue
+      const libres = enJuego.filter((j) => !usados.has(j.id))
+      const cand =
+        libres.find((j) => esEspecialista(j, f.clave)) ||
+        libres.find((j) => tipoJugador(j) === (f.tipo === 'forward' ? 'fw' : 'back')) ||
+        libres.find((j) => tipoJugador(j) === 'mx') ||
+        libres[0]
+      if (cand) poner(f.num, cand)
     }
     resultado[t.id] = {
       equipo: [
@@ -318,11 +358,13 @@ function sugerirEquipos({ jugadores, tiempos, enCancha, desde, prestamos, asiste
 
 // La formación de 13: 6 forwards y 7 backs (los números 6 y 7 no existen)
 const PUESTOS_FORMACION = [
-  { num: 1, tipo: 'forward' }, { num: 2, tipo: 'forward' }, { num: 3, tipo: 'forward' },
-  { num: 4, tipo: 'forward' }, { num: 5, tipo: 'forward' }, { num: 8, tipo: 'forward' },
-  { num: 9, tipo: 'back' }, { num: 10, tipo: 'back' }, { num: 11, tipo: 'back' },
-  { num: 12, tipo: 'back' }, { num: 13, tipo: 'back' }, { num: 14, tipo: 'back' },
-  { num: 15, tipo: 'back' },
+  { num: 1, tipo: 'forward', clave: 'pilar' }, { num: 2, tipo: 'forward', clave: 'hooker' },
+  { num: 3, tipo: 'forward', clave: 'pilar' }, { num: 4, tipo: 'forward', clave: 'segunda' },
+  { num: 5, tipo: 'forward', clave: 'segunda' }, { num: 8, tipo: 'forward', clave: 'octavo' },
+  { num: 9, tipo: 'back', clave: 'medio_scrum' }, { num: 10, tipo: 'back', clave: 'apertura' },
+  { num: 11, tipo: 'back', clave: 'wing' }, { num: 12, tipo: 'back', clave: 'centro' },
+  { num: 13, tipo: 'back', clave: 'centro' }, { num: 14, tipo: 'back', clave: 'wing' },
+  { num: 15, tipo: 'back', clave: 'fullback' },
 ]
 
 // Promedio simple de un jsonb {variable: 1..5}
@@ -453,18 +495,18 @@ async function enrutar(metodo, p, b, req, url) {
     if (metodo === 'POST' && !p[1]) {
       const d = datosJugador(b)
       const filas = await query(
-        `insert into jugadores (nombre, apellido, fecha_nacimiento, dni, posicion, aptitudes,
+        `insert into jugadores (nombre, apellido, fecha_nacimiento, dni, posicion, puestos, aptitudes,
            estado, tutor_nombre, tutor_telefono, ficha_medica_vigente, ficha_medica_vence, observaciones)
-         values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12) returning ${COLS_JUGADOR}`, d)
+         values ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11,$12,$13) returning ${COLS_JUGADOR}`, d)
       return filas[0]
     }
     if (metodo === 'PUT' && p[1]) {
       const d = datosJugador(b)
       const filas = await query(
         `update jugadores set nombre=$1, apellido=$2, fecha_nacimiento=$3, dni=$4,
-           posicion=$5, aptitudes=$6::jsonb, estado=$7, tutor_nombre=$8, tutor_telefono=$9,
-           ficha_medica_vigente=$10, ficha_medica_vence=$11, observaciones=$12, updated_at=now()
-         where id=$13 returning ${COLS_JUGADOR}`, [...d, p[1]])
+           posicion=$5, puestos=$6::jsonb, aptitudes=$7::jsonb, estado=$8, tutor_nombre=$9, tutor_telefono=$10,
+           ficha_medica_vigente=$11, ficha_medica_vence=$12, observaciones=$13, updated_at=now()
+         where id=$14 returning ${COLS_JUGADOR}`, [...d, p[1]])
       return filas[0]
     }
     if (metodo === 'DELETE' && p[1]) {
@@ -1121,7 +1163,7 @@ async function enrutar(metodo, p, b, req, url) {
       const ids = Array.isArray(b.jugador_ids) ? b.jugador_ids : []
       if (ids.length < 2) throw { codigo: 400, error: 'faltan_jugadores' }
       const jugadores = await query(
-        'select id, posicion, aptitudes from jugadores where id = any($1)', [ids])
+        'select id, posicion, puestos, aptitudes from jugadores where id = any($1)', [ids])
       // Última evaluación de cada uno; si hay revisión, promedia las dos miradas
       const evs = await query(
         `select distinct on (jugador_id) jugador_id, valores, valores_revisor
@@ -1203,7 +1245,7 @@ async function enrutar(metodo, p, b, req, url) {
       // Si todavía no se tomó, se usa el plantel del bloque, que ya viene de
       // los que confirmaron en la semana.
       const delBloque = await query(
-        `select j.id, j.posicion, j.aptitudes, ap.estado, ap.condicion
+        `select j.id, j.posicion, j.puestos, j.aptitudes, ap.estado, ap.condicion
          from bloque_jugadores bj
          join jugadores j on j.id = bj.jugador_id
          join bloques bl on bl.id = bj.bloque_id
@@ -1389,9 +1431,15 @@ function datosJugador(b) {
   const aptitudes = Array.isArray(b.aptitudes)
     ? [...new Set(b.aptitudes.filter((a) => APTITUDES.includes(a)))]
     : []
+  const puestos = Array.isArray(b.puestos)
+    ? [...new Set(b.puestos.filter((k) => TIPO_PUESTO[k]))]
+    : []
+  // Con puestos cargados, la posición genérica se deriva; sin puestos vale
+  // la que venga escrita (jugadores viejos e importación por lista)
+  const posicion = puestos.length ? posicionDePuestos(puestos) : normalizarPosicion(b.posicion)
   return [
     b.nombre.trim(), b.apellido.trim(), b.fecha_nacimiento || null, b.dni || null,
-    normalizarPosicion(b.posicion), JSON.stringify(aptitudes), b.estado || 'activo', b.tutor_nombre || null,
+    posicion, JSON.stringify(puestos), JSON.stringify(aptitudes), b.estado || 'activo', b.tutor_nombre || null,
     b.tutor_telefono || null, !!b.ficha_medica_vigente, b.ficha_medica_vence || null,
     b.observaciones || null,
   ]

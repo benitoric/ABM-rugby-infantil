@@ -33,8 +33,8 @@ async function inicializar() {
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
     `select exists (select 1 from information_schema.columns
-       where table_schema = 'public' and table_name = 'asistencias_partido'
-         and column_name = 'condicion') as aplicadas`)
+       where table_schema = 'public' and table_name = 'jugadores'
+         and column_name = 'puestos') as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -154,6 +154,8 @@ export async function migrar(pool) {
     estado text not null check (estado in ('presente','ausente')),
     primary key (evento_id, jugador_id)
   )`)
+  // Puestos específicos del jugador (la posición genérica pasa a derivarse)
+  await pool.query(`alter table jugadores add column if not exists puestos jsonb not null default '[]'`)
   // Golpeados y lesionados durante el partido
   await pool.query('alter table asistencias_partido add column if not exists condicion text')
   await pool.query('alter table asistencias_partido drop constraint if exists asistencias_partido_condicion_check')

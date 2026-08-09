@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { edad, estadoJugador, fechaCorta, fichaMedica, nombreCompleto, APTITUDES, AREAS, ESTADOS } from '../helpers.js'
+import {
+  edad, estadoJugador, etiquetaPuestos, fechaCorta, fichaMedica, nombreCompleto,
+  tipoJugador, APTITUDES, AREAS, ESTADOS,
+} from '../helpers.js'
 import { FormJugador } from './Jugadores.jsx'
 import { FormEvaluacion, TarjetaEvaluacion } from './Evaluacion.jsx'
 import Documentos from './Documentos.jsx'
@@ -100,7 +103,11 @@ export default function Ficha({ jugadorId, evaluarAlAbrir = false, revisar = nul
             <div className="fila" style={{ marginTop: 6 }}>
               <span className={`badge ${estadoJugador(j)}`}>{ESTADOS[estadoJugador(j)]}</span>
               <span className={`badge ${fichaMedica(j).clase}`}>{fichaMedica(j).texto}</span>
-              {j.posicion && <span className={`badge puesto-${j.posicion.toLowerCase()}`}>{j.posicion}</span>}
+              {tipoJugador(j) && (
+                <span className={`badge puesto-${tipoJugador(j).toLowerCase()}`}>
+                  {etiquetaPuestos(j) || tipoJugador(j)}
+                </span>
+              )}
               {lesiones.some((l) => !l.recuperado) && <span className="badge lesionado">🤕 lesión activa</span>}
             </div>
             {(j.aptitudes || []).length > 0 && (

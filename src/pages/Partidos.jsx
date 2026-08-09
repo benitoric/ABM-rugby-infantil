@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
 import {
-  abrevAptitudes, APTITUDES, DIFICULTADES, etiquetaDificultad, etiquetaMotivo, etiquetaPartido,
-  fechaCorta, FORMACION, nombreCompleto, nombreStaff, puedeJugarDe,
+  abrevAptitudes, abrevPuestos, APTITUDES, DIFICULTADES, etiquetaDificultad, etiquetaMotivo,
+  etiquetaPartido, etiquetaPuestos, fechaCorta, FORMACION, nombreCompleto, nombreStaff,
+  puedeJugarDe, tipoJugador,
 } from '../helpers.js'
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 
@@ -510,7 +511,7 @@ function ArmadoPartido({ partido }) {
                 <div className="crece">
                   <div style={{ fontWeight: 600 }}>
                     {nombreCompleto(j)}
-                    {j.posicion && <span className="mini"> · {j.posicion}</span>}
+                    {etiquetaPuestos(j) && <span className="mini"> · {etiquetaPuestos(j)}</span>}
                   </div>
                   <div className="mini">
                     {confirmado ? 'Confirmó que va' : (confirmacion[j.id] === 'ausente' ? 'Avisó que no va' : 'Sin confirmar')}
@@ -762,7 +763,7 @@ function ControlAsistencia({
         j.id,
         nombreCompleto(j),
         [
-          j.posicion,
+          etiquetaPuestos(j) || null,
           condicion[j.id] === 'golpeado' ? '🤕 golpeado en el partido' : null,
           condicion[j.id] === 'lesionado' ? '🚑 lesionado en el partido' : null,
           etiquetaConfirmacion(j.id),
@@ -849,7 +850,7 @@ function BalanceBloques({ bloques, jugadores, asignacion, califs }) {
     const fuerza = conNota.length
       ? conNota.reduce((s, j) => s + califs[j.id], 0) / conNota.length
       : null
-    const c = (t) => del.filter((j) => j.posicion === t).length
+    const c = (t) => del.filter((j) => tipoJugador(j) === t).length
     return {
       bl,
       n: del.length,
@@ -1245,7 +1246,7 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
       const oc = ocupante[f.num]
       if (!oc) continue
       if (!puedeJugarDe(oc, f.num)) {
-        avisos.push(`${oc.apellido} es ${oc.posicion} y está de ${f.num} (${f.label}).`)
+        avisos.push(`${oc.apellido} (${etiquetaPuestos(oc) || tipoJugador(oc)}) está de ${f.num} (${f.label}).`)
       }
       if (f.conductor && !(oc.aptitudes || []).includes('conduccion')) {
         avisos.push(`El ${f.num} (${oc.apellido}) no tiene aptitud de conducción.`)
@@ -1284,7 +1285,7 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
     >
       <b>{j.apellido}</b>
       <span className="mini">
-        {j.posicion ? `${j.posicion[0]}` : '·'} · {jugados[j.id] || 0}t
+        {abrevPuestos(j) ? `${abrevPuestos(j).length > 10 ? tipoJugador(j)[0] : abrevPuestos(j)}` : '·'} · {jugados[j.id] || 0}t
         {abrevAptitudes(j) ? ` · ${abrevAptitudes(j)}` : ''}{extra}
       </span>
     </button>
