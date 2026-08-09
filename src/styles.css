@@ -297,6 +297,14 @@ h3 { font-size: 1rem; }
   .eval-fecha-movil { display: none; }
 }
 .fila-jugador .badge { font-size: 0.62rem; padding: 2px 4px; white-space: nowrap; }
+/* Puestos específicos, debajo de la etiqueta forward/back/mixto */
+.celda-puesto { line-height: 1.15; }
+.puestos-detalle {
+  font-size: 0.56rem;
+  color: var(--texto-suave);
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
 .celda-nombre { gap: 6px; flex-wrap: nowrap; min-width: 0; }
 @media (max-width: 519px) {
   .celda-nombre .avatar { display: none; }
