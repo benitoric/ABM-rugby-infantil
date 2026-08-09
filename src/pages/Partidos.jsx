@@ -868,26 +868,30 @@ function ControlAsistencia({
 // devuelve como PNG. Angosta y a una columna, pensada para leerse en el
 // celular (WhatsApp), con los colores institucionales del club.
 function dibujarPlaca({ fecha, secciones }) {
-  const W = 750
-  const M = 46
+  const W = 1100
+  const M = 56
   const AZUL = '#123a80'
   const AZUL_CLARO = '#1a4a9e'
   const DORADO = '#ffd200'
-  const FILA = 62
+  const FILA = 58
+  // Se dibuja al doble de resolución, para que no se pixele al hacer zoom
+  const ESCALA = 2
+  const filasDe = (n) => Math.ceil(n / 2)
 
   // Altura total: encabezado + cada bloque (banda 74 + datos 116 + título de
-  // lista 90 + filas, ídem staff, + separación 40)
+  // lista 90 + filas a dos columnas, ídem staff, + separación 40)
   let H = 300
   for (const s of secciones) {
-    H += 74 + 116 + 90 + s.jugadores.length * FILA + 40
-    if (s.staff.length) H += 90 + s.staff.length * FILA
+    H += 74 + 116 + 90 + filasDe(s.jugadores.length) * FILA + 40
+    if (s.staff.length) H += 90 + filasDe(s.staff.length) * FILA
   }
   H += 60
 
   const c = document.createElement('canvas')
-  c.width = W
-  c.height = H
+  c.width = W * ESCALA
+  c.height = H * ESCALA
   const ctx = c.getContext('2d')
+  ctx.scale(ESCALA, ESCALA)
 
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, W, H)
@@ -916,6 +920,7 @@ function dibujarPlaca({ fecha, secciones }) {
 
   let y = 300
 
+  // Lista a dos columnas (baja por la primera y sigue por la segunda)
   const lista = (titulo, nombres) => {
     ctx.textAlign = 'left'
     ctx.fillStyle = AZUL
@@ -924,16 +929,21 @@ function dibujarPlaca({ fecha, secciones }) {
     ctx.fillStyle = DORADO
     ctx.fillRect(M, y + 56, W - 2 * M, 5)
     y += 90
+    const porFila = filasDe(nombres.length)
+    const anchoCol = (W - 2 * M) / 2
     nombres.forEach((nombre, i) => {
-      if (i % 2 === 0) {
+      const col = Math.floor(i / porFila)
+      const fila = i % porFila
+      const yFila = y + fila * FILA
+      if (fila % 2 === 0) {
         ctx.fillStyle = '#f4f6fa'
-        ctx.fillRect(M, y - 6, W - 2 * M, FILA - 6)
+        ctx.fillRect(M + col * anchoCol, yFila - 6, anchoCol - 14, FILA - 6)
       }
       ctx.fillStyle = '#1c2028'
-      ctx.font = '33px system-ui, sans-serif'
-      ctx.fillText(nombre, M + 16, y + 36)
-      y += FILA
+      ctx.font = '30px system-ui, sans-serif'
+      ctx.fillText(nombre, M + 16 + col * anchoCol, yFila + 34)
     })
+    y += porFila * FILA
   }
 
   for (const s of secciones) {
