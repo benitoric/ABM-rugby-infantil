@@ -465,7 +465,13 @@ function ArmadoPartido({ partido }) {
             </p>
             {!sugerencia && (
               <div className="fila" style={{ gap: 6 }}>
-                <button className="btn chico" onClick={sugerirBloques}>✨ Sugerir armado</button>
+                {/* El reparto automático equilibra dos bloques; con más, el
+                    armado se hace a mano */}
+                {bloques.length === 2 ? (
+                  <button className="btn chico" onClick={sugerirBloques}>✨ Sugerir armado</button>
+                ) : (
+                  <span className="mini">Armado automático: solo con 2 bloques.</span>
+                )}
                 <button className="btn sec chico" onClick={() => setPublicando(true)}>📣 Publicar</button>
               </div>
             )}
@@ -495,7 +501,7 @@ function ArmadoPartido({ partido }) {
               <p className="mini" style={{ margin: '6px 0 0' }}>
                 Balancea fuerza (última evaluación), forwards/backs y aptitudes.
                 {sugerencia.sesgo !== 0 && ` Por la dificultad de los rivales, el Bloque ${sugerencia.sesgo > 0 ? bloques[1].numero : bloques[0].numero} queda ~${Math.abs(sugerencia.sesgo).toFixed(1)} pts más fuerte.`}
-                {' '}Podés retocarla con los botones B1/B2 antes de aplicar.
+                {' '}Podés retocarla con los botones de cada bloque antes de aplicar.
               </p>
               {sugerencia.sin_evaluacion.length > 0 && (
                 <p className="mini" style={{ margin: '6px 0 0', color: 'var(--warn)' }}>

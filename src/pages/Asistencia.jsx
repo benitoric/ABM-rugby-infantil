@@ -8,6 +8,10 @@ import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 
 const BLOQUE_VACIO = { rival: '', dificultad: '', lugar: '', hora_convocatoria: '' }
 
+// Cantidad de bloques de un partido: lo normal son 2, pero puede haber más
+// (el tope lo comparte el check de la tabla bloques y la API)
+const CANTIDADES_BLOQUE = [1, 2, 3, 4, 5, 6]
+
 export default function Asistencia() {
   const [eventos, setEventos] = useState([])
   const [eventoSel, setEventoSel] = useState(null)
@@ -50,7 +54,7 @@ export default function Asistencia() {
             className="btn"
             onClick={() => setCreando({
               tipo: 'entrenamiento', modalidad: 'rutina', fecha: hoy, hora: '', hora_fin: '',
-              lugar: '', notas: '', b1: { ...BLOQUE_VACIO }, b2: { ...BLOQUE_VACIO },
+              lugar: '', notas: '', bloques: [{ ...BLOQUE_VACIO }, { ...BLOQUE_VACIO }],
             })}
           >
             + Nuevo evento
@@ -103,8 +107,8 @@ export default function Asistencia() {
             onSubmit={async (e) => {
               e.preventDefault()
               const esPartido = creando.tipo === 'partido'
-              const bloque = (n, d) => ({
-                numero: n,
+              const bloque = (d, i) => ({
+                numero: i + 1,
                 rival: d.rival?.trim() || null,
                 dificultad: d.dificultad || null,
                 lugar: d.lugar?.trim() || null,
@@ -121,7 +125,7 @@ export default function Asistencia() {
                   hora_fin: esPartido ? null : (esRutina ? RUTINA.hora_fin : creando.hora_fin || null),
                   lugar: esPartido ? null : creando.lugar?.trim() || null,
                   notas: creando.notas?.trim() || null,
-                  bloques: esPartido ? [bloque(1, creando.b1), bloque(2, creando.b2)] : undefined,
+                  bloques: esPartido ? creando.bloques.map(bloque) : undefined,
                 },
               })
               setCreando(null)
@@ -206,58 +210,82 @@ export default function Asistencia() {
                   <input type="date" required value={creando.fecha}
                     onChange={(e) => setCreando({ ...creando, fecha: e.target.value })} />
                 </div>
-                {[['b1', 'Bloque 1'], ['b2', 'Bloque 2']].map(([clave, titulo]) => (
-                  <div key={clave} className="tarjeta" style={{ marginBottom: 10 }}>
-                    <h3 style={{ marginBottom: 8 }}>{titulo}</h3>
-                    <div className="campo">
-                      <label>Rival</label>
-                      <CampoSugerido
-                        placeholder="Ej.: Tucumán Rugby"
-                        value={creando[clave].rival}
-                        opciones={sugerencias.rivales}
-                        onChange={(v) => setCreando({ ...creando, [clave]: { ...creando[clave], rival: v } })}
-                      />
-                    </div>
-                    <div className="campo">
-                      <label>Grado de dificultad</label>
-                      <div className="seg">
-                        {DIFICULTADES.map((d) => (
-                          <button
-                            key={d.value}
-                            type="button"
-                            className={creando[clave].dificultad === d.value ? 'activo' : ''}
-                            // tocar la opción elegida la saca (queda sin indicar)
-                            onClick={() => setCreando({
-                              ...creando,
-                              [clave]: {
-                                ...creando[clave],
-                                dificultad: creando[clave].dificultad === d.value ? '' : d.value,
-                              },
-                            })}
-                          >
-                            {d.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="grid2">
+                <div className="campo">
+                  <label>Cantidad de bloques</label>
+                  <div className="seg">
+                    {CANTIDADES_BLOQUE.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        className={creando.bloques.length === n ? 'activo' : ''}
+                        // Al cambiar la cantidad se conserva lo ya escrito en
+                        // los bloques que quedan.
+                        onClick={() => setCreando({
+                          ...creando,
+                          bloques: Array.from({ length: n }, (_, i) =>
+                            creando.bloques[i] || { ...BLOQUE_VACIO }),
+                        })}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mini">Lo habitual son 2, pero el partido puede tener más.</p>
+                </div>
+
+                {creando.bloques.map((bl, i) => {
+                  // Cambia un campo del bloque i, dejando los demás como están
+                  const editar = (cambios) => setCreando({
+                    ...creando,
+                    bloques: creando.bloques.map((x, j) => (j === i ? { ...x, ...cambios } : x)),
+                  })
+                  return (
+                    <div key={i} className="tarjeta" style={{ marginBottom: 10 }}>
+                      <h3 style={{ marginBottom: 8 }}>Bloque {i + 1}</h3>
                       <div className="campo">
-                        <label>Hora de convocatoria</label>
-                        <input type="time" value={creando[clave].hora_convocatoria}
-                          onChange={(e) => setCreando({ ...creando, [clave]: { ...creando[clave], hora_convocatoria: e.target.value } })} />
-                      </div>
-                      <div className="campo">
-                        <label>Lugar de juego</label>
+                        <label>Rival</label>
                         <CampoSugerido
-                          placeholder="Ej.: sede Marcos Paz"
-                          value={creando[clave].lugar}
-                          opciones={sugerencias.lugares}
-                          onChange={(v) => setCreando({ ...creando, [clave]: { ...creando[clave], lugar: v } })}
+                          placeholder="Ej.: Tucumán Rugby"
+                          value={bl.rival}
+                          opciones={sugerencias.rivales}
+                          onChange={(v) => editar({ rival: v })}
                         />
                       </div>
+                      <div className="campo">
+                        <label>Grado de dificultad</label>
+                        <div className="seg">
+                          {DIFICULTADES.map((d) => (
+                            <button
+                              key={d.value}
+                              type="button"
+                              className={bl.dificultad === d.value ? 'activo' : ''}
+                              // tocar la opción elegida la saca (queda sin indicar)
+                              onClick={() => editar({ dificultad: bl.dificultad === d.value ? '' : d.value })}
+                            >
+                              {d.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="grid2">
+                        <div className="campo">
+                          <label>Hora de convocatoria</label>
+                          <input type="time" value={bl.hora_convocatoria}
+                            onChange={(e) => editar({ hora_convocatoria: e.target.value })} />
+                        </div>
+                        <div className="campo">
+                          <label>Lugar de juego</label>
+                          <CampoSugerido
+                            placeholder="Ej.: sede Marcos Paz"
+                            value={bl.lugar}
+                            opciones={sugerencias.lugares}
+                            onChange={(v) => editar({ lugar: v })}
+                          />
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </>
             )}
             <div className="campo">

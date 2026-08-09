@@ -60,6 +60,10 @@ const MOTIVOS_SUSPENSION = ['clima', 'feriado', 'otro']
 // Qué tan difícil se espera que sea el rival del bloque
 const DIFICULTADES = ['bueno', 'regular', 'malo']
 
+// Bloques por partido: lo normal son 2, pero puede haber más (tope del check
+// de la tabla bloques)
+const MAX_BLOQUES = 6
+
 // Quiénes evalúan: entrenadores. Quedan afuera managers y preparadores
 // físicos que no entrenan (los roles salen de ROLES_STAFF en src/helpers.js).
 const ROLES_EVALUADORES = ['Cabeza de división', 'Entrenador', 'PF/entrenador']
@@ -931,12 +935,17 @@ async function enrutar(metodo, p, b, req, url) {
         [b.tipo, b.fecha, hora, horaFin, modalidad, b.rival || null, b.lugar || null,
          b.notas || null])
       const evento = filas[0]
-      // Un partido nace con sus 2 bloques, cada uno con rival/lugar/convocatoria
+      // Un partido nace con sus bloques (lo habitual son 2, pueden ser más),
+      // cada uno con su rival, lugar y hora de convocatoria. Se numeran en el
+      // orden en que vienen.
       if (b.tipo === 'partido') {
-        const datos = Array.isArray(b.bloques) ? b.bloques : []
+        const datos = Array.isArray(b.bloques) && b.bloques.length
+          ? b.bloques
+          : [{}, {}]
+        if (datos.length > MAX_BLOQUES) throw { codigo: 400, error: 'demasiados_bloques' }
         evento.bloques = []
-        for (const numero of [1, 2]) {
-          const d = datos.find((x) => Number(x?.numero) === numero) || {}
+        for (let numero = 1; numero <= datos.length; numero++) {
+          const d = datos[numero - 1] || {}
           const [bl] = await query(
             `insert into bloques (evento_id, numero, nombre, rival, dificultad, lugar, hora_convocatoria)
              values ($1, $2, $3, $4, $5, $6, $7)
@@ -1088,10 +1097,16 @@ async function enrutar(metodo, p, b, req, url) {
   if (p[0] === 'partido') {
     if (metodo === 'GET' && p[1]) {
       const eventoId = p[1]
-      await query(
-        `insert into bloques (evento_id, numero, nombre)
-         values ($1, 1, 'Bloque 1'), ($1, 2, 'Bloque 2')
-         on conflict (evento_id, numero) do nothing`, [eventoId])
+      // Partidos viejos, creados antes de que existieran los bloques: se les
+      // arman los 2 de siempre. A los que ya tienen no se les toca la cantidad.
+      const [{ n }] = await query(
+        'select count(*)::int as n from bloques where evento_id = $1', [eventoId])
+      if (!n) {
+        await query(
+          `insert into bloques (evento_id, numero, nombre)
+           values ($1, 1, 'Bloque 1'), ($1, 2, 'Bloque 2')
+           on conflict (evento_id, numero) do nothing`, [eventoId])
+      }
       // Partidos viejos: si el rival estaba cargado a nivel evento, pasa al bloque
       await query(
         `update bloques set rival = e.rival, lugar = coalesce(bloques.lugar, e.lugar)
@@ -1159,7 +1174,8 @@ async function enrutar(metodo, p, b, req, url) {
       const bloques = await query(
         'select id, numero, dificultad from bloques where evento_id = $1 order by numero',
         [b.evento_id])
-      if (bloques.length < 2) throw { codigo: 400, error: 'faltan_bloques' }
+      // El reparto equilibra dos bloques; con más, el armado se hace a mano
+      if (bloques.length !== 2) throw { codigo: 400, error: 'solo_dos_bloques' }
       const ids = Array.isArray(b.jugador_ids) ? b.jugador_ids : []
       if (ids.length < 2) throw { codigo: 400, error: 'faltan_jugadores' }
       const jugadores = await query(
