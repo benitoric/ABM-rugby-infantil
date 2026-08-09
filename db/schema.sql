@@ -146,7 +146,9 @@ create table if not exists asistencias_staff (
 create table if not exists bloques (
   id uuid primary key default gen_random_uuid(),
   evento_id uuid not null references eventos(id) on delete cascade,
-  numero int not null check (numero in (1,2)),
+  -- Normalmente son 2 bloques, pero un partido puede tener más. La
+  -- restricción va nombrada porque es el testigo de la migración (server/db.js).
+  numero int not null constraint bloques_numero_valido check (numero between 1 and 6),
   nombre text,
   rival text,
   -- Grado de dificultad del rival, para equilibrar los bloques

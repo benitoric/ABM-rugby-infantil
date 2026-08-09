@@ -32,9 +32,9 @@ async function inicializar() {
   // fallar igual en Postgres por la carrera en el catálogo.
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
-    `select exists (select 1 from information_schema.columns
-       where table_schema = 'public' and table_name = 'jugadores'
-         and column_name = 'puestos') as aplicadas`)
+    `select exists (select 1 from pg_constraint
+       where conrelid = to_regclass('public.bloques')
+         and conname = 'bloques_numero_valido') as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -137,6 +137,12 @@ export async function migrar(pool) {
   await pool.query('alter table bloques drop constraint if exists bloques_dificultad_check')
   await pool.query(`alter table bloques add constraint bloques_dificultad_check
     check (dificultad in ('bueno','regular','malo'))`)
+  // Un partido puede tener más de 2 bloques. La restricción nueva lleva otro
+  // nombre para que sirva de testigo de que la migración ya corrió.
+  await pool.query('alter table bloques drop constraint if exists bloques_numero_check')
+  await pool.query('alter table bloques drop constraint if exists bloques_numero_valido')
+  await pool.query(`alter table bloques add constraint bloques_numero_valido
+    check (numero between 1 and 6)`)
   // Puesto (número de camiseta) y préstamo al rival en cada tiempo
   await pool.query('alter table tiempo_jugadores add column if not exists puesto smallint')
   await pool.query('alter table tiempo_jugadores drop constraint if exists tiempo_jugadores_puesto_check')

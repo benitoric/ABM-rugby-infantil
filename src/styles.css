@@ -358,7 +358,8 @@ h3 { font-size: 1rem; }
 }
 .seg button.activo { background: #fff; color: var(--primario); box-shadow: var(--sombra); }
 
-.bloque-botones { display: flex; gap: 6px; }
+/* con más de 2 bloques los botones se acomodan en varias filas */
+.bloque-botones { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .bloque-btn {
   min-width: 42px;
   height: 34px;

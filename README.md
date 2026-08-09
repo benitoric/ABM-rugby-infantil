@@ -17,8 +17,9 @@ pantalla de inicio" del teléfono y queda como una app más).
    motivo (clima, feriado u otro) y una nota libre. En los partidos la
    suspensión es por bloque: puede caerse uno y jugarse el otro. Lo suspendido
    no cuenta para los porcentajes de asistencia.
-4. **Bloques del día de partido**: asignación de los presentes a los 2 bloques
-   que presenta el club. Los campos de rival y lugar de juego autocompletan con
+4. **Bloques del día de partido**: asignación de los presentes a los bloques
+   que presenta el club (normalmente 2, pero al crear el partido se puede
+   elegir de 1 a 6). Los campos de rival y lugar de juego autocompletan con
    lo ya cargado: se escriben unas letras y aparecen las coincidencias. Cada
    bloque guarda además el grado de dificultad del rival (bueno / regular /
    malo).
