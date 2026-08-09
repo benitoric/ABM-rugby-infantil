@@ -377,6 +377,17 @@ function ArmadoPartido({ partido }) {
     await api('partido/tiempo-equipo', { method: 'POST', body: { tiempo_id: tiempoId, equipo } })
   }
 
+  // Borra de una vez el armado completo de los bloques (y sus tiempos)
+  async function limpiarBloques() {
+    const asignados = Object.values(asignacion).filter(Boolean).length
+    if (!asignados) return
+    if (!confirm(`¿Sacar a los ${asignados} jugadores de los bloques? También se vacían los tiempos cargados.`)) return
+    setAsignacion({})
+    setEnCancha({})
+    setSugerencia(null)
+    await api('partido/limpiar-bloques', { method: 'POST', body: { evento_id: partido.id } })
+  }
+
   async function agregarTiempo(bloqueId) {
     const delBloque = tiempos.filter((t) => t.bloque_id === bloqueId)
     if (delBloque.length >= MAX_TIEMPOS) return
@@ -472,6 +483,7 @@ function ArmadoPartido({ partido }) {
                 ) : (
                   <span className="mini">Armado automático: solo con 2 bloques.</span>
                 )}
+                <button className="btn sec chico" onClick={limpiarBloques}>🧹 Limpiar</button>
                 <button className="btn sec chico" onClick={() => setPublicando(true)}>📣 Publicar</button>
               </div>
             )}
@@ -1384,9 +1396,16 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
 
   // cuántos tiempos jugó cada jugador en este bloque (prestado también cuenta)
   const jugados = {}
+  // y cuántos ANTES del tiempo a la vista: alimenta la barrita de progresión
+  // pintada en cada jugador (jugó 1 de 4 tiempos → 25% pintado)
+  const jugadosPrevios = {}
   for (const t of tiempos) {
-    for (const jid of Object.keys(enCancha[t.id] || {})) jugados[jid] = (jugados[jid] || 0) + 1
+    for (const jid of Object.keys(enCancha[t.id] || {})) {
+      jugados[jid] = (jugados[jid] || 0) + 1
+      if (t.numero < tiempo?.numero) jugadosPrevios[jid] = (jugadosPrevios[jid] || 0) + 1
+    }
   }
+  const progreso = (jid) => (jugadosPrevios[jid] || 0) / (tiempos.length || 1)
   // Los que están fuera de juego no cuentan para los avisos de equidad: ya no
   // pueden sumar tiempos hasta que vuelvan
   const disponibles = jugadores.filter((j) => !condicion[j.id])
@@ -1464,7 +1483,8 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
     }
   }
 
-  // Pide y aplica la sugerencia de equipos desde el tiempo a la vista
+  // Pide y aplica la sugerencia SOLO para el tiempo a la vista: lo anterior
+  // no se toca y lo siguiente se decide cuando llegue
   async function sugerirEquipos() {
     if (!tiempo || sugiriendo) return
     setSugiriendo(true)
@@ -1473,12 +1493,19 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
         method: 'POST',
         body: { bloque_id: bloque.id, desde_numero: tiempo.numero, prestamos_por_tiempo: nPrestar },
       })
-      for (const t of tiempos.filter((x) => x.numero >= tiempo.numero)) {
-        if (r.tiempos[t.id]) await onReemplazar(t.id, r.tiempos[t.id].equipo)
-      }
+      if (r.tiempos[tiempo.id]) await onReemplazar(tiempo.id, r.tiempos[tiempo.id].equipo)
     } finally {
       setSugiriendo(false)
     }
+  }
+
+  // Vacía el equipo del tiempo a la vista
+  async function limpiarTiempo() {
+    if (!tiempo) return
+    if (!confirm(`¿Vaciar el equipo del tiempo T${tiempo.numero}?`)) return
+    setSel(null)
+    setPuestoSel(null)
+    await onReemplazar(tiempo.id, [])
   }
 
   // Premisas que no se están cumpliendo en el tiempo a la vista
@@ -1534,6 +1561,7 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
           {abrevPuestos(j) ? `${abrevPuestos(j).length > 10 ? tipoJugador(j)[0] : abrevPuestos(j)}` : '·'} · {jugados[j.id] || 0}t
           {abrevAptitudes(j) ? ` · ${abrevAptitudes(j)}` : ''}{extra}
         </span>
+        <span className="progreso" style={{ width: `${progreso(j.id) * 100}%` }} />
       </button>
     )
   }
@@ -1555,6 +1583,7 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
           <b>{oc ? nombreCompleto(oc) : '—'}</b>
         </span>
         {alerta && <span>⚠️</span>}
+        {oc && <span className="progreso" style={{ width: `${progreso(oc.id) * 100}%` }} />}
       </button>
     )
   }
@@ -1576,18 +1605,18 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
       </div>
 
       <div className="tarjeta fila entre">
-        <div className="crece">
-          <div className="mini">Sugerir equipos desde T{tiempo?.numero} hasta el final</div>
-          <label className="mini fila" style={{ gap: 6, alignItems: 'center', marginTop: 4 }}>
-            Prestar al rival por tiempo:
-            <select value={nPrestar} onChange={(e) => setNPrestar(Number(e.target.value))} style={{ width: 'auto' }}>
-              {[0, 1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </label>
+        <label className="mini fila crece" style={{ gap: 6, alignItems: 'center' }}>
+          Prestar al rival:
+          <select value={nPrestar} onChange={(e) => setNPrestar(Number(e.target.value))} style={{ width: 'auto' }}>
+            {[0, 1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+        <div className="fila" style={{ gap: 6 }}>
+          <button className="btn chico" disabled={sugiriendo} onClick={sugerirEquipos}>
+            {sugiriendo ? 'Armando…' : `✨ Sugerir T${tiempo?.numero}`}
+          </button>
+          <button className="btn sec chico" onClick={limpiarTiempo}>🧹 Limpiar</button>
         </div>
-        <button className="btn chico" disabled={sugiriendo} onClick={sugerirEquipos}>
-          {sugiriendo ? 'Armando…' : '✨ Sugerir equipos'}
-        </button>
       </div>
 
       {avisos.length > 0 && (
