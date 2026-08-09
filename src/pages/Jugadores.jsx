@@ -356,14 +356,17 @@ export default function Jugadores() {
               </div>
             </div>
           </div>
-          <div>
+          <div className="celda-puesto">
             {tipoJugador(j) && (
-              <span
-                className={`badge puesto-${tipoJugador(j).toLowerCase()}`}
-                title={etiquetaPuestos(j)}
-              >
-                {etiquetaPuestos(j).length > 14 ? tipoJugador(j) : (etiquetaPuestos(j) || tipoJugador(j))}
+              <span className={`badge puesto-${tipoJugador(j).toLowerCase()}`}>
+                {tipoJugador(j)}
               </span>
+            )}
+            {(j.puestos || []).length > 0 && (
+              <div className="puestos-detalle" title={etiquetaPuestos(j)}>
+                {PUESTOS.filter((pu) => j.puestos.includes(pu.value))
+                  .map((pu) => pu.abrev).join(' · ')}
+              </div>
             )}
           </div>
           <div className="etiquetas">
