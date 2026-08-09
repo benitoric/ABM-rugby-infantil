@@ -377,6 +377,31 @@ function ArmadoPartido({ partido }) {
     await api('partido/tiempo-equipo', { method: 'POST', body: { tiempo_id: tiempoId, equipo } })
   }
 
+  // Borra de una vez todas las marcas del control del día (jugadores y
+  // staff), incluidas las condiciones de golpeado/lesionado. Los equipos
+  // cargados en los tiempos no se tocan.
+  async function limpiarAsistencia() {
+    const marcados = Object.keys(asistencia).filter((jid) => asistencia[jid])
+    const staffMarcado = Object.keys(presenciaStaff)
+    if (!marcados.length && !staffMarcado.length) return
+    if (!confirm('¿Borrar todas las marcas de asistencia del día (jugadores y staff)?')) return
+    setAsistencia({})
+    setCondicion({})
+    setPresenciaStaff({})
+    if (marcados.length) {
+      await api(`eventos/${partido.id}/asistencias-partido`, {
+        method: 'PUT',
+        body: { marcas: marcados.map((jid) => ({ jugador_id: jid, estado: null })) },
+      })
+    }
+    for (const email of staffMarcado) {
+      await api('partido/staff-presente', {
+        method: 'POST',
+        body: { evento_id: partido.id, staff_email: email, presente: null },
+      })
+    }
+  }
+
   // Borra de una vez el armado completo de los bloques (y sus tiempos)
   async function limpiarBloques() {
     const asignados = Object.values(asignacion).filter(Boolean).length
@@ -448,6 +473,7 @@ function ArmadoPartido({ partido }) {
           confirmacionStaff={confirmacionStaff}
           presenciaStaff={presenciaStaff}
           onMarcarStaff={marcarPresenciaStaff}
+          onLimpiar={limpiarAsistencia}
         />
       )}
 
@@ -740,7 +766,7 @@ function ArmadoPartido({ partido }) {
 // toma en la sección Asistencia durante la semana; acá solo se compara.
 function ControlAsistencia({
   bloques, jugadores, asignacion, asistencia, confirmacion, condicion = {}, onMarcar,
-  staff, asignacionStaff, confirmacionStaff, presenciaStaff, onMarcarStaff,
+  staff, asignacionStaff, confirmacionStaff, presenciaStaff, onMarcarStaff, onLimpiar,
 }) {
   // Los convocados: asignados a un bloque, más los confirmados sin bloque
   const convocados = jugadores.filter((j) =>
@@ -817,10 +843,15 @@ function ControlAsistencia({
           <div className="mini">Presentes en la cancha</div>
           <div className="contador">{presentes.length} de {convocados.length}</div>
         </div>
-        <div className="mini" style={{ textAlign: 'right', color: marcados < convocados.length ? 'var(--warn)' : 'var(--ok)' }}>
-          {marcados < convocados.length
-            ? `Faltan marcar ${convocados.length - marcados}`
-            : '✓ Todos marcados'}
+        <div style={{ textAlign: 'right' }}>
+          <div className="mini" style={{ color: marcados < convocados.length ? 'var(--warn)' : 'var(--ok)' }}>
+            {marcados < convocados.length
+              ? `Faltan marcar ${convocados.length - marcados}`
+              : '✓ Todos marcados'}
+          </div>
+          <button className="btn sec chico" style={{ marginTop: 6 }} onClick={onLimpiar}>
+            🧹 Limpiar
+          </button>
         </div>
       </div>
 
