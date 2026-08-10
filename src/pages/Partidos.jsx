@@ -1987,7 +1987,8 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
       {cerrandoTiempo && (
         <CerrarTiempo
           tiempo={cerrandoTiempo}
-          enCancha={Object.values(enCancha[cerrandoTiempo.id] || {}).filter((e) => !e.prestado).length}
+          vacantes={FORMACION.filter((f) => !Object.values(enCancha[cerrandoTiempo.id] || {})
+            .some((e) => !e.prestado && e.puesto === f.num))}
           onCerrar={async (valoracion) => {
             setCerrandoTiempo(null)
             setSel(null)
@@ -2019,8 +2020,10 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
   )
 }
 
-// Diálogo de cierre de un tiempo: valoración rápida opcional y confirmación
-function CerrarTiempo({ tiempo, enCancha, onCerrar, onCancelar }) {
+// Diálogo de cierre de un tiempo: valoración rápida opcional y confirmación.
+// Con puestos vacantes no se puede cerrar: la formación tiene que estar
+// completa (el servidor también lo exige).
+function CerrarTiempo({ tiempo, vacantes, onCerrar, onCancelar }) {
   const [valoracion, setValoracion] = useState(tiempo.valoracion || null)
   return (
     <div className="modal-fondo" onClick={onCancelar}>
@@ -2031,16 +2034,26 @@ function CerrarTiempo({ tiempo, enCancha, onCerrar, onCancelar }) {
           condición para armar el tiempo siguiente. Se puede reabrir mientras
           el bloque siga abierto.
         </p>
-        {enCancha !== 13 && (
-          <p className="aviso">⚠️ Este tiempo tiene {enCancha} jugadores en cancha (deberían ser 13).</p>
+        {vacantes.length > 0 && (
+          <p className="aviso">
+            ⛔ No se puede cerrar con puestos vacantes:{' '}
+            {vacantes.map((f) => `${f.num} (${f.label})`).join(', ')}. Completá
+            la formación y volvé a intentar.
+          </p>
         )}
-        <div className="fila entre" style={{ marginTop: 8 }}>
-          <span className="mini">¿Cómo se jugó? (opcional)</span>
-          <Estrellas valor={valoracion} onCambiar={setValoracion} />
-        </div>
+        {vacantes.length === 0 && (
+          <div className="fila entre" style={{ marginTop: 8 }}>
+            <span className="mini">¿Cómo se jugó? (opcional)</span>
+            <Estrellas valor={valoracion} onCambiar={setValoracion} />
+          </div>
+        )}
         <div className="fila" style={{ gap: 8, marginTop: 12 }}>
-          <button className="btn crece" onClick={() => onCerrar(valoracion)}>Cerrar T{tiempo.numero}</button>
-          <button className="btn sec" onClick={onCancelar}>Cancelar</button>
+          {vacantes.length === 0 && (
+            <button className="btn crece" onClick={() => onCerrar(valoracion)}>Cerrar T{tiempo.numero}</button>
+          )}
+          <button className={`btn sec ${vacantes.length ? 'crece' : ''}`} onClick={onCancelar}>
+            {vacantes.length ? 'Volver a la formación' : 'Cancelar'}
+          </button>
         </div>
       </div>
     </div>
