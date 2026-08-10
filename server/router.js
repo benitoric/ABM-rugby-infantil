@@ -346,6 +346,65 @@ function sugerirEquipos({ jugadores, tiempos, enCancha, desde, prestamos, asiste
         libres[0]
       if (cand) poner(f.num, cand)
     }
+    // 4) depuración: nada forzado si hay cómo evitarlo. Un puesto está
+    // "forzado" cuando su ocupante no lo tiene entre sus puestos (los
+    // jugadores sin puestos cargados solo cuentan como forzados si ni el
+    // tipo coincide). Se intenta arreglar cada uno, primero permutando
+    // puestos entre los que ya están en cancha, y si no, trayendo del banco
+    // a un especialista igual de merecedor (mismos tiempos jugados y sin
+    // peor marca de tardanza) a cambio del forzado.
+    const aptoEn = (j, f) => {
+      if (esEspecialista(j, f.clave)) return true
+      if (!(j.puestos || []).length) {
+        const tj = tipoJugador(j)
+        return tj === 'mx' || tj === (f.tipo === 'forward' ? 'fw' : 'back')
+      }
+      return false
+    }
+    const nivel = (j) => jugados[j.id] * 2 + (j.tarde ? 1 : 0)
+    // el cambio en la pareja de medios nunca puede dejar el puesto sin conductor
+    const okMedios = (f, sale, entra) =>
+      !f.conductor || esConductor(entra) || !esConductor(sale)
+    // banco ya existe (los que quedaron fuera de la selección de este tiempo)
+    const jugadorEn = (num) => enJuego.find((j) => j.id === porPuesto[num])
+    for (let vuelta = 0; vuelta < 20; vuelta++) {
+      let cambio = false
+      for (const f of PUESTOS_FORMACION) {
+        const oc = jugadorEn(f.num)
+        if (!oc || aptoEn(oc, f)) continue
+        // a) permutar con otro puesto en cancha si baja lo forzado
+        let resuelto = false
+        for (const f2 of PUESTOS_FORMACION) {
+          if (f2.num === f.num) continue
+          const oc2 = jugadorEn(f2.num)
+          if (!oc2 || !aptoEn(oc2, f)) continue
+          if (!okMedios(f, oc, oc2) || !okMedios(f2, oc2, oc)) continue
+          const antes = 1 + (aptoEn(oc2, f2) ? 0 : 1)
+          const despues = (aptoEn(oc, f2) ? 0 : 1)
+          if (despues < antes) {
+            porPuesto[f.num] = oc2.id
+            porPuesto[f2.num] = oc.id
+            cambio = resuelto = true
+            break
+          }
+        }
+        if (resuelto) continue
+        // b) entra un especialista del banco por el forzado
+        const idx = banco.findIndex((b) =>
+          esEspecialista(b, f.clave) && nivel(b) <= nivel(oc) && okMedios(f, oc, b))
+        if (idx >= 0) {
+          const entra = banco[idx]
+          banco[idx] = oc
+          porPuesto[f.num] = entra.id
+          for (const lista of [juegan, enJuego]) {
+            const i = lista.indexOf(oc)
+            if (i >= 0) lista[i] = entra
+          }
+          cambio = true
+        }
+      }
+      if (!cambio) break
+    }
     resultado[t.id] = {
       equipo: [
         ...enJuego.map((j) => {
