@@ -37,7 +37,7 @@ export async function autenticar(req) {
     throw { codigo: 401, error: 'token_invalido' }
   }
   const filas = await query(
-    'select email, nombre, activo from staff where email = $1', [email])
+    'select email, nombre, rol, activo from staff where email = $1', [email])
   if (!filas.length || !filas[0].activo) throw { codigo: 401, error: 'no_autorizado' }
   return filas[0]
 }

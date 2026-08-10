@@ -53,6 +53,7 @@ const MIMES_DOC = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 const MAX_DOC_BYTES = 3 * 1024 * 1024
 const COLS_BLOQUE = `id, evento_id, numero, nombre, rival, dificultad, lugar,
   hora_convocatoria::text as hora_convocatoria, valoracion, cronica,
+  cerrado_en::text as cerrado_en, cerrado_por,
   suspendido, motivo_suspension, nota_suspension`
 
 const MOTIVOS_SUSPENSION = ['clima', 'feriado', 'otro']
@@ -437,6 +438,25 @@ const PUESTOS_FORMACION = [
 function promedioValores(valores) {
   const vs = Object.values(valores || {}).map(Number).filter((n) => n > 0)
   return vs.length ? vs.reduce((s, n) => s + n, 0) / vs.length : null
+}
+
+// ---------- cierre de tiempos y bloques ----------
+// Un bloque cerrado queda congelado: el servidor rechaza cualquier cambio
+// sobre su asistencia, sus equipos y sus datos hasta que se lo reabra.
+
+async function exigirBloqueAbierto(bloqueId) {
+  const [bl] = await query('select cerrado_en from bloques where id = $1', [bloqueId])
+  if (!bl) throw { codigo: 404, error: 'no_existe' }
+  if (bl.cerrado_en) throw { codigo: 409, error: 'bloque_cerrado' }
+}
+
+async function exigirTiempoAbierto(tiempoId) {
+  const [t] = await query(
+    `select t.cerrado_en as tc, bl.cerrado_en as bc
+     from tiempos t join bloques bl on bl.id = t.bloque_id where t.id = $1`, [tiempoId])
+  if (!t) throw { codigo: 404, error: 'no_existe' }
+  if (t.bc) throw { codigo: 409, error: 'bloque_cerrado' }
+  if (t.tc) throw { codigo: 409, error: 'tiempo_cerrado' }
 }
 
 // Un evento cuenta para las estadísticas si no está suspendido del todo: los
@@ -1099,8 +1119,14 @@ async function enrutar(metodo, p, b, req, url) {
       }
       if (metodo === 'PUT') {
         // b.marcas: [{jugador_id, estado|null, condicion?}] — estado null borra
-        // la marca; condicion solo se toca si viene en el objeto
+        // la marca; condicion solo se toca si viene en el objeto. Las marcas
+        // de jugadores cuyo bloque ya se cerró se rechazan.
         for (const m of b.marcas || []) {
+          const [cerrado] = await query(
+            `select 1 from bloques bl join bloque_jugadores bj on bj.bloque_id = bl.id
+             where bl.evento_id = $1 and bj.jugador_id = $2 and bl.cerrado_en is not null
+             limit 1`, [p[1], m.jugador_id])
+          if (cerrado) throw { codigo: 409, error: 'bloque_cerrado' }
           if (m.estado === null) {
             await query('delete from asistencias_partido where evento_id = $1 and jugador_id = $2',
               [p[1], m.jugador_id])
@@ -1188,7 +1214,8 @@ async function enrutar(metodo, p, b, req, url) {
       }
       const ids = bloques.map((x) => x.id)
       const tiempos = await query(
-        'select id, bloque_id, numero from tiempos where bloque_id = any($1) order by numero', [ids])
+        `select id, bloque_id, numero, cerrado_en::text as cerrado_en, valoracion
+         from tiempos where bloque_id = any($1) order by numero`, [ids])
       const asignaciones = await query(
         'select bloque_id, jugador_id from bloque_jugadores where bloque_id = any($1)', [ids])
       const staff = await query(
@@ -1201,6 +1228,13 @@ async function enrutar(metodo, p, b, req, url) {
     if (metodo === 'POST' && p[1] === 'asignar') {
       // saca al jugador de ambos bloques del evento (y de sus tiempos) y lo pone en el nuevo
       const bloques = await query('select id from bloques where evento_id = $1', [b.evento_id])
+      const [cerrado] = await query(
+        `select 1 from bloques bl
+         where bl.evento_id = $1 and bl.cerrado_en is not null
+           and (bl.id = $2 or exists (select 1 from bloque_jugadores bj
+                where bj.bloque_id = bl.id and bj.jugador_id = $3))
+         limit 1`, [b.evento_id, b.bloque_id || null, b.jugador_id])
+      if (cerrado) throw { codigo: 409, error: 'bloque_cerrado' }
       const ids = bloques.map((x) => x.id)
       await query('delete from bloque_jugadores where jugador_id = $1 and bloque_id = any($2)',
         [b.jugador_id, ids])
@@ -1216,6 +1250,13 @@ async function enrutar(metodo, p, b, req, url) {
     }
     if (metodo === 'POST' && p[1] === 'asignar-staff') {
       const bloques = await query('select id from bloques where evento_id = $1', [b.evento_id])
+      const [cerrado] = await query(
+        `select 1 from bloques bl
+         where bl.evento_id = $1 and bl.cerrado_en is not null
+           and (bl.id = $2 or exists (select 1 from bloque_staff bs
+                where bs.bloque_id = bl.id and bs.staff_email = $3))
+         limit 1`, [b.evento_id, b.bloque_id || null, b.staff_email])
+      if (cerrado) throw { codigo: 409, error: 'bloque_cerrado' }
       const ids = bloques.map((x) => x.id)
       await query('delete from bloque_staff where staff_email = $1 and bloque_id = any($2)',
         [b.staff_email, ids])
@@ -1229,12 +1270,21 @@ async function enrutar(metodo, p, b, req, url) {
       // Presencia efectiva del staff el día del partido, sobre su bloque
       // asignado (null vuelve a "sin marcar")
       const bloques = await query('select id from bloques where evento_id = $1', [b.evento_id])
+      const [cerrado] = await query(
+        `select 1 from bloques bl join bloque_staff bs on bs.bloque_id = bl.id
+         where bl.evento_id = $1 and bs.staff_email = $2 and bl.cerrado_en is not null
+         limit 1`, [b.evento_id, b.staff_email])
+      if (cerrado) throw { codigo: 409, error: 'bloque_cerrado' }
       await query(
         'update bloque_staff set presente = $1 where staff_email = $2 and bloque_id = any($3)',
         [b.presente ?? null, b.staff_email, bloques.map((x) => x.id)])
       return { ok: true }
     }
     if (metodo === 'POST' && p[1] === 'limpiar-bloques') {
+      const [cerrado] = await query(
+        'select 1 from bloques where evento_id = $1 and cerrado_en is not null limit 1',
+        [b.evento_id])
+      if (cerrado) throw { codigo: 409, error: 'bloque_cerrado' }
       // Borra de una vez el armado completo: jugadores de los bloques y de
       // sus tiempos (el staff asignado no se toca)
       const bloques = await query('select id from bloques where evento_id = $1', [b.evento_id])
@@ -1286,6 +1336,7 @@ async function enrutar(metodo, p, b, req, url) {
     }
     if (metodo === 'PUT' && p[1] === 'bloque' && p[2]) {
       // Actualización parcial: solo cambian los campos presentes en el cuerpo
+      await exigirBloqueAbierto(p[2])
       const sets = []
       const vals = []
       for (const campo of ['rival', 'lugar', 'hora_convocatoria', 'cronica']) {
@@ -1329,9 +1380,17 @@ async function enrutar(metodo, p, b, req, url) {
       return filas[0]
     }
     if (metodo === 'POST' && p[1] === 'sugerir-tiempos') {
-      // Propone los equipos desde un tiempo en adelante (lo anterior no se
-      // toca). No persiste: el cliente aplica con partido/tiempo-equipo.
+      // Propone el equipo de un tiempo. No persiste: el cliente aplica con
+      // partido/tiempo-equipo. Condición: el tiempo anterior tiene que estar
+      // cerrado (valorado y confirmado), así lo cargado es un dato firme.
       const desde = Number(b.desde_numero) || 1
+      await exigirBloqueAbierto(b.bloque_id)
+      const [estadoTiempos] = await query(
+        `select max(cerrado_en) filter (where numero = $2) as destino,
+                count(*) filter (where numero = $2 - 1 and cerrado_en is null)::int as anterior_abierto
+         from tiempos where bloque_id = $1`, [b.bloque_id, desde])
+      if (estadoTiempos?.destino) throw { codigo: 409, error: 'tiempo_cerrado' }
+      if (estadoTiempos?.anterior_abierto > 0) throw { codigo: 409, error: 'tiempo_anterior_abierto' }
       const prestamos = Math.max(0, Math.min(6, Number(b.prestamos_por_tiempo) || 0))
       // Los equipos se arman SOLO con los marcados "vino" ese día
       // (asistencias_partido, tomada en la cancha por el staff del bloque;
@@ -1395,6 +1454,7 @@ async function enrutar(metodo, p, b, req, url) {
     }
     if (metodo === 'POST' && p[1] === 'tiempo-equipo') {
       // Reemplaza de una vez el equipo completo de un tiempo
+      await exigirTiempoAbierto(b.tiempo_id)
       const equipo = Array.isArray(b.equipo) ? b.equipo : []
       for (const e of equipo) {
         if (e.puesto != null && !PUESTOS_VALIDOS.includes(Number(e.puesto))) {
@@ -1410,7 +1470,48 @@ async function enrutar(metodo, p, b, req, url) {
       }
       return { ok: true }
     }
+    if (metodo === 'POST' && p[1] === 'tiempo-cerrar') {
+      // Cierra (o reabre) un tiempo, con valoración rápida opcional. La
+      // reapertura de un tiempo es libre mientras el bloque siga abierto.
+      const [t] = await query(
+        `select t.id, bl.cerrado_en as bc from tiempos t
+         join bloques bl on bl.id = t.bloque_id where t.id = $1`, [b.tiempo_id])
+      if (!t) throw { codigo: 404, error: 'no_existe' }
+      if (t.bc) throw { codigo: 409, error: 'bloque_cerrado' }
+      const v = b.valoracion == null ? null : Number(b.valoracion)
+      if (v !== null && !(v >= 1 && v <= 5)) throw { codigo: 400, error: 'valoracion_invalida' }
+      if (b.cerrado) {
+        await query(
+          `update tiempos set cerrado_en = now(), valoracion = coalesce($2, valoracion)
+           where id = $1`, [b.tiempo_id, v])
+      } else {
+        await query('update tiempos set cerrado_en = null where id = $1', [b.tiempo_id])
+      }
+      const filas = await query(
+        `select id, bloque_id, numero, cerrado_en::text as cerrado_en, valoracion
+         from tiempos where id = $1`, [b.tiempo_id])
+      return filas[0]
+    }
+    if (metodo === 'POST' && p[1] === 'bloque-cerrar') {
+      // Cierra el bloque (cualquiera del staff) o lo reabre (solo la cabeza
+      // de división), dejando rastro de quién y cuándo.
+      if (b.cerrado) {
+        await query(
+          `update bloques set cerrado_en = now(), cerrado_por = $2
+           where id = $1 and cerrado_en is null`, [b.bloque_id, yo.email])
+      } else {
+        if (yo.rol !== 'Cabeza de división') throw { codigo: 403, error: 'solo_cabeza' }
+        await query(
+          'update bloques set cerrado_en = null, cerrado_por = null where id = $1',
+          [b.bloque_id])
+      }
+      const filas = await query(
+        `select ${COLS_BLOQUE} from bloques where id = $1`, [b.bloque_id])
+      if (!filas.length) throw { codigo: 404, error: 'no_existe' }
+      return filas[0]
+    }
     if (metodo === 'POST' && p[1] === 'tiempo') {
+      await exigirBloqueAbierto(b.bloque_id)
       const filas = await query(
         `insert into tiempos (bloque_id, numero)
          select $1, coalesce(max(numero), 0) + 1 from tiempos where bloque_id = $1
@@ -1418,6 +1519,7 @@ async function enrutar(metodo, p, b, req, url) {
       return filas[0]
     }
     if (metodo === 'POST' && p[1] === 'cancha') {
+      await exigirTiempoAbierto(b.tiempo_id)
       if (b.dentro) {
         const puesto = b.puesto == null ? null : Number(b.puesto)
         if (puesto !== null && !PUESTOS_VALIDOS.includes(puesto)) {

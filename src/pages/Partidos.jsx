@@ -41,8 +41,31 @@ export default function Partidos() {
 
   const partido = partidos.find((p) => p.id === partidoId)
 
+  // Partidos ya jugados con bloques todavía abiertos: recordatorio de cierre
+  const hoy = new Date().toISOString().slice(0, 10)
+  const abiertos = partidos.filter((p) =>
+    p.fecha < hoy && !p.suspendido &&
+    (p.bloques || []).some((bl) => !bl.suspendido && !bl.cerrado_en))
+
   return (
     <div className="contenido">
+      {abiertos.length > 0 && (
+        <div className="tarjeta aviso-lesion no-imprimir">
+          <h3>🔓 {abiertos.length === 1 ? 'Hay un partido sin cerrar' : `Hay ${abiertos.length} partidos sin cerrar`}</h3>
+          <p className="mini" style={{ margin: '4px 0 8px' }}>
+            Cerrá los bloques para congelar la asistencia y los equipos.
+          </p>
+          {abiertos.map((p) => (
+            <button key={p.id} className="asignado-item" onClick={() => setPartidoId(p.id)}>
+              <span className="crece">{fechaCorta(p.fecha)} · {etiquetaPartido(p)}</span>
+              <span className="mini">
+                {(p.bloques || []).filter((bl) => !bl.suspendido && !bl.cerrado_en).map((bl) => `B${bl.numero}`).join(' y ')} →
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="campo no-imprimir">
         <label>Partido</label>
         <select value={partidoId} onChange={(e) => setPartidoId(e.target.value)}>
@@ -442,6 +465,31 @@ function ArmadoPartido({ partido }) {
     await api('partido/limpiar-bloques', { method: 'POST', body: { evento_id: partido.id } })
   }
 
+  // Cierre del tiempo (con valoración rápida opcional) y del bloque. El
+  // servidor congela todo lo cerrado; reabrir un bloque es solo de la
+  // cabeza de división.
+  async function cerrarTiempo(tiempoId, cerrado, valoracion) {
+    const t = await api('partido/tiempo-cerrar', {
+      method: 'POST',
+      body: { tiempo_id: tiempoId, cerrado, valoracion: valoracion ?? null },
+    })
+    setTiempos((ts) => ts.map((x) => (x.id === t.id ? t : x)))
+  }
+
+  async function cerrarBloque(bloqueId, cerrado) {
+    try {
+      const bl = await api('partido/bloque-cerrar', {
+        method: 'POST',
+        body: { bloque_id: bloqueId, cerrado },
+      })
+      setBloques((bs) => bs.map((x) => (x.id === bl.id ? bl : x)))
+    } catch (e) {
+      alert(e?.error === 'solo_cabeza'
+        ? 'Solo la cabeza de división puede reabrir un bloque cerrado.'
+        : 'No se pudo cambiar el estado del bloque. Probá de nuevo.')
+    }
+  }
+
   async function agregarTiempo(bloqueId) {
     const delBloque = tiempos.filter((t) => t.bloque_id === bloqueId)
     if (delBloque.length >= MAX_TIEMPOS) return
@@ -496,6 +544,7 @@ function ArmadoPartido({ partido }) {
           asistencia={asistencia}
           confirmacion={confirmacion}
           condicion={condicion}
+          bloquesCerrados={new Set(bloques.filter((x) => x.cerrado_en).map((x) => x.id))}
           onMarcar={marcarAsistencia}
           staff={staff}
           asignacionStaff={asignacionStaff}
@@ -791,6 +840,8 @@ function ArmadoPartido({ partido }) {
           onMover={moverEnCancha}
           onReemplazar={reemplazarTiempo}
           onAgregarTiempo={() => agregarTiempo(b.id)}
+          onCerrarTiempo={cerrarTiempo}
+          onCerrarBloque={cerrarBloque}
         />
         )
       })}
@@ -805,7 +856,8 @@ function ArmadoPartido({ partido }) {
 // quién de los convocados se presentó a jugar. La confirmación anticipada se
 // toma en la sección Asistencia durante la semana; acá solo se compara.
 function ControlAsistencia({
-  bloques, jugadores, asignacion, asistencia, confirmacion, tarde = {}, condicion = {}, onMarcar,
+  bloques, jugadores, asignacion, asistencia, confirmacion, tarde = {}, condicion = {},
+  bloquesCerrados = new Set(), onMarcar,
   staff, asignacionStaff, confirmacionStaff, presenciaStaff, onMarcarStaff, onLimpiar,
 }) {
   // Los convocados: asignados a un bloque, más los confirmados sin bloque
@@ -817,7 +869,7 @@ function ControlAsistencia({
   const faltaronTrasConfirmar = convocados.filter((j) =>
     confirmacion[j.id] === 'presente' && asistencia[j.id] === 'ausente')
 
-  const fila = (clave, nombre, detalle, estado, marcar, alerta) => (
+  const fila = (clave, nombre, detalle, estado, marcar, alerta, cerrado) => (
     <div
       key={clave}
       className="jugador-item"
@@ -829,11 +881,12 @@ function ControlAsistencia({
     >
       <div className="crece">
         <div style={{ fontWeight: 600 }}>{alerta ? '⚠️ ' : ''}{nombre}</div>
-        <div className="mini">{detalle}</div>
+        <div className="mini">{cerrado ? `🔒 bloque cerrado · ${detalle}` : detalle}</div>
       </div>
       <div className="bloque-botones">
         <button
           className={`bloque-btn ${estado === 'presente' ? 'sel ok' : ''}`}
+          disabled={cerrado}
           onClick={() => marcar('presente')}
         >
           Vino
@@ -841,6 +894,7 @@ function ControlAsistencia({
         {/* Faltó es el valor por defecto: sin marca se muestra igual */}
         <button
           className={`bloque-btn ${estado !== 'presente' ? 'sel no' : ''}`}
+          disabled={cerrado}
           onClick={() => marcar('ausente')}
         >
           Faltó
@@ -874,6 +928,7 @@ function ControlAsistencia({
         asistencia[j.id],
         (estado) => onMarcar(j.id, estado),
         confirmacion[j.id] === 'presente' && asistencia[j.id] === 'ausente',
+        bloquesCerrados.has(asignacion[j.id]),
       ))}
     </div>
   )
@@ -942,6 +997,7 @@ function ControlAsistencia({
             estado,
             (e) => onMarcarStaff(s.email, e === 'presente'),
             confirmacionStaff[s.email] === 'presente' && presenciaStaff[s.email] === false,
+            bloquesCerrados.has(asignacionStaff[s.email]),
           )
         })
       })()}
@@ -1399,10 +1455,14 @@ function BalancePartido({ bloque, onActualizado }) {
   )
 }
 
-function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = [], confirmacion = {}, tarde = {}, condicion = {}, onCondicion, asistenciaSinTomar, staff = [], onIrAPresentes, tiempos, tiempoSel, onSelTiempo, enCancha, onMover, onReemplazar, onAgregarTiempo }) {
+function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = [], confirmacion = {}, tarde = {}, condicion = {}, onCondicion, asistenciaSinTomar, staff = [], onIrAPresentes, tiempos, tiempoSel, onSelTiempo, enCancha, onMover, onReemplazar, onAgregarTiempo, onCerrarTiempo, onCerrarBloque }) {
   const [sel, setSel] = useState(null)
   const [nPrestar, setNPrestar] = useState(0)
   const [sugiriendo, setSugiriendo] = useState(false)
+  // diálogos de cierre: del tiempo (con estrellas) y del bloque (checklist)
+  const [cerrandoTiempo, setCerrandoTiempo] = useState(null)
+  const [cerrandoBloque, setCerrandoBloque] = useState(false)
+  const bloqueCerrado = !!bloque.cerrado_en
 
   // Selección inversa: primero el puesto vacante, después el jugador que entra
   const [puestoSel, setPuestoSel] = useState(null)
@@ -1427,7 +1487,7 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
             <div className="mini">🧑‍🏫 {staff.map(nombreStaff).join(' · ')}</div>
           )}
         </div>
-        <button className="btn sec chico" onClick={onEditar}>Editar datos</button>
+        {!bloqueCerrado && <button className="btn sec chico" onClick={onEditar}>Editar datos</button>}
       </div>
       {asistenciaSinTomar && (
         <p className="aviso">
@@ -1466,6 +1526,9 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
   }
 
   const tiempo = tiempos.find((t) => t.id === tiempoSel) || tiempos[0]
+  const tiempoCerrado = !!tiempo?.cerrado_en
+  const anterior = tiempo && tiempos.find((t) => t.numero === tiempo.numero - 1)
+  const soloLectura = bloqueCerrado || tiempoCerrado
   const mapa = (tiempo && enCancha[tiempo.id]) || {}
 
   // cuántos tiempos jugó cada jugador en este bloque (prestado también cuenta)
@@ -1499,6 +1562,7 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
   const enJuego = jugadores.filter((j) => mapa[j.id] && !mapa[j.id].prestado)
 
   function tocarPuesto(num) {
+    if (soloLectura) return
     const oc = ocupante[num]
     if (!jSel) {
       if (oc) {
@@ -1528,6 +1592,7 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
   }
 
   function tocarJugador(jid) {
+    if (soloLectura) return
     if (puestoSel) {
       // con un puesto vacante elegido, el toque manda al jugador ahí directo
       setPuestoSel(null)
@@ -1692,33 +1757,71 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
   return (
     <>
       {infoBloque}
+      {bloqueCerrado && (
+        <p className="aviso" style={{ background: '#e0e7ff', color: '#3730a3' }}>
+          🔒 Bloque cerrado el {bloque.cerrado_en.slice(0, 16).replace('T', ' ')} hs
+          {bloque.cerrado_por ? ` por ${bloque.cerrado_por}` : ''}. Nada puede editarse.{' '}
+          <button className="btn sec chico" onClick={() => onCerrarBloque(bloque.id, false)}>
+            🔓 Reabrir
+          </button>
+        </p>
+      )}
+
       <div className="fila entre">
         <div className="seg crece">
           {tiempos.map((t) => (
             <button key={t.id} className={tiempo?.id === t.id ? 'activo' : ''} onClick={() => onSelTiempo(t.id)}>
-              T{t.numero}
+              T{t.numero}{t.cerrado_en ? ' ✓' : ''}
             </button>
           ))}
         </div>
-        {tiempos.length < MAX_TIEMPOS && (
+        {!bloqueCerrado && tiempos.length < MAX_TIEMPOS && (
           <button className="btn sec chico" onClick={onAgregarTiempo}>+ Tiempo</button>
         )}
       </div>
 
-      <div className="tarjeta fila entre">
-        <label className="mini fila crece" style={{ gap: 6, alignItems: 'center' }}>
-          Prestar al rival:
-          <select value={nPrestar} onChange={(e) => setNPrestar(Number(e.target.value))} style={{ width: 'auto' }}>
-            {[0, 1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </label>
-        <div className="fila" style={{ gap: 6 }}>
-          <button className="btn chico" disabled={sugiriendo} onClick={sugerirEquipos}>
-            {sugiriendo ? 'Armando…' : `✨ Sugerir T${tiempo?.numero}`}
+      {tiempoCerrado && !bloqueCerrado && (
+        <p className="aviso" style={{ background: '#e0e7ff', color: '#3730a3' }}>
+          ✔ Tiempo T{tiempo.numero} cerrado
+          {tiempo.valoracion ? ` · ${'★'.repeat(tiempo.valoracion)}` : ''}. Ya no se edita.{' '}
+          <button className="btn sec chico" onClick={() => onCerrarTiempo(tiempo.id, false)}>
+            Reabrir
           </button>
-          <button className="btn sec chico" onClick={limpiarTiempo}>🧹 Limpiar</button>
+        </p>
+      )}
+
+      {!soloLectura && (
+        <div className="tarjeta fila entre">
+          <label className="mini fila crece" style={{ gap: 6, alignItems: 'center' }}>
+            Prestar al rival:
+            <select value={nPrestar} onChange={(e) => setNPrestar(Number(e.target.value))} style={{ width: 'auto' }}>
+              {[0, 1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+          <div className="fila" style={{ gap: 6 }}>
+            {anterior && !anterior.cerrado_en ? (
+              <button
+                className="btn chico"
+                style={{ opacity: 0.55 }}
+                onClick={() => {
+                  alert(`Para armar el T${tiempo.numero} primero valorá y cerrá el T${anterior.numero}: así lo jugado queda confirmado.`)
+                  onSelTiempo(anterior.id)
+                }}
+              >
+                ✨ Sugerir T{tiempo?.numero}
+              </button>
+            ) : (
+              <button className="btn chico" disabled={sugiriendo} onClick={sugerirEquipos}>
+                {sugiriendo ? 'Armando…' : `✨ Sugerir T${tiempo?.numero}`}
+              </button>
+            )}
+            <button className="btn sec chico" onClick={limpiarTiempo}>🧹 Limpiar</button>
+            <button className="btn sec chico" onClick={() => setCerrandoTiempo(tiempo)}>
+              ✔ Cerrar T{tiempo?.numero}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {avisos.length > 0 && (
         <div className="aviso">
@@ -1857,7 +1960,135 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
         Si el destino está ocupado, intercambian; desde el banco, el que estaba sale.
       </p>
 
-      <BalancePartido bloque={bloque} onActualizado={onActualizado} />
+      {!bloqueCerrado && <BalancePartido bloque={bloque} onActualizado={onActualizado} />}
+      {bloqueCerrado && (
+        <div className="tarjeta">
+          <h3>Balance del partido 🔒</h3>
+          <p className="mini">
+            {bloque.valoracion ? `${'★'.repeat(bloque.valoracion)}${'☆'.repeat(5 - bloque.valoracion)}` : 'Sin valoración'}
+          </p>
+          {bloque.cronica && <p style={{ marginTop: 6 }}>{bloque.cronica}</p>}
+        </div>
+      )}
+
+      {!bloqueCerrado && (
+        <div className="tarjeta fila entre">
+          <div className="crece">
+            <b>Cierre del bloque</b>
+            <div className="mini">
+              Congela asistencia, equipos y datos. Reabrir queda solo en manos
+              de la cabeza de división.
+            </div>
+          </div>
+          <button className="btn" onClick={() => setCerrandoBloque(true)}>🔒 Cerrar bloque</button>
+        </div>
+      )}
+
+      {cerrandoTiempo && (
+        <CerrarTiempo
+          tiempo={cerrandoTiempo}
+          enCancha={Object.values(enCancha[cerrandoTiempo.id] || {}).filter((e) => !e.prestado).length}
+          onCerrar={async (valoracion) => {
+            setCerrandoTiempo(null)
+            setSel(null)
+            setPuestoSel(null)
+            await onCerrarTiempo(cerrandoTiempo.id, true, valoracion)
+          }}
+          onCancelar={() => setCerrandoTiempo(null)}
+        />
+      )}
+
+      {cerrandoBloque && (
+        <CerrarBloque
+          bloque={bloque}
+          tiempos={tiempos}
+          enCancha={enCancha}
+          jugadores={jugadores}
+          condicion={condicion}
+          asistenciaSinTomar={asistenciaSinTomar}
+          onCerrar={async () => {
+            setCerrandoBloque(false)
+            setSel(null)
+            setPuestoSel(null)
+            await onCerrarBloque(bloque.id, true)
+          }}
+          onCancelar={() => setCerrandoBloque(false)}
+        />
+      )}
     </>
+  )
+}
+
+// Diálogo de cierre de un tiempo: valoración rápida opcional y confirmación
+function CerrarTiempo({ tiempo, enCancha, onCerrar, onCancelar }) {
+  const [valoracion, setValoracion] = useState(tiempo.valoracion || null)
+  return (
+    <div className="modal-fondo" onClick={onCancelar}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>✔ Cerrar el tiempo T{tiempo.numero}</h3>
+        <p className="mini" style={{ margin: '6px 0' }}>
+          Confirma que el T{tiempo.numero} se jugó tal como está cargado. Es la
+          condición para armar el tiempo siguiente. Se puede reabrir mientras
+          el bloque siga abierto.
+        </p>
+        {enCancha !== 13 && (
+          <p className="aviso">⚠️ Este tiempo tiene {enCancha} jugadores en cancha (deberían ser 13).</p>
+        )}
+        <div className="fila entre" style={{ marginTop: 8 }}>
+          <span className="mini">¿Cómo se jugó? (opcional)</span>
+          <Estrellas valor={valoracion} onCambiar={setValoracion} />
+        </div>
+        <div className="fila" style={{ gap: 8, marginTop: 12 }}>
+          <button className="btn crece" onClick={() => onCerrar(valoracion)}>Cerrar T{tiempo.numero}</button>
+          <button className="btn sec" onClick={onCancelar}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Diálogo de cierre del bloque, con la checklist de lo que quedó pendiente.
+// Avisa pero no bloquea: a veces el caos de la jornada manda.
+function CerrarBloque({ bloque, tiempos, enCancha, jugadores, condicion, asistenciaSinTomar, onCerrar, onCancelar }) {
+  const pendientes = []
+  if (asistenciaSinTomar) pendientes.push('La asistencia del día no está tomada.')
+  const sinCerrar = tiempos.filter((t) => !t.cerrado_en)
+  if (sinCerrar.length) {
+    pendientes.push(`Tiempos sin cerrar: ${sinCerrar.map((t) => `T${t.numero}`).join(', ')}.`)
+  }
+  const vacios = tiempos.filter((t) => !Object.keys(enCancha[t.id] || {}).length)
+  if (vacios.length && vacios.length < tiempos.length) {
+    pendientes.push(`Tiempos sin equipo cargado: ${vacios.map((t) => `T${t.numero}`).join(', ')}.`)
+  }
+  if (!bloque.valoracion) pendientes.push('Falta la valoración del bloque (estrellas).')
+  if (!bloque.cronica) pendientes.push('Falta la crónica del partido.')
+  const tocados = jugadores.filter((j) => condicion[j.id])
+  if (tocados.length) {
+    pendientes.push(`Golpeados/lesionados marcados: ${tocados.map((j) => j.apellido).join(', ')}.`)
+  }
+  return (
+    <div className="modal-fondo" onClick={onCancelar}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>🔒 Cerrar {bloque.nombre || `Bloque ${bloque.numero}`}</h3>
+        <p className="mini" style={{ margin: '6px 0' }}>
+          Congela la asistencia del día, los equipos de todos los tiempos y los
+          datos del bloque. Después solo la cabeza de división puede reabrirlo.
+        </p>
+        {pendientes.length > 0 && (
+          <div className="aviso" style={{ marginTop: 6 }}>
+            {pendientes.map((t, i) => <div key={i}>⚠️ {t}</div>)}
+          </div>
+        )}
+        {pendientes.length === 0 && (
+          <p className="mini" style={{ color: 'var(--ok)' }}>✓ Todo en orden para cerrar.</p>
+        )}
+        <div className="fila" style={{ gap: 8, marginTop: 12 }}>
+          <button className="btn crece" onClick={onCerrar}>
+            {pendientes.length ? 'Cerrar igual' : 'Cerrar bloque'}
+          </button>
+          <button className="btn sec" onClick={onCancelar}>Cancelar</button>
+        </div>
+      </div>
+    </div>
   )
 }
