@@ -1588,11 +1588,37 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
     if (enJuego.length !== 13) {
       avisos.push(`Hay ${enJuego.length} jugadores en cancha: deberían ser 13.`)
     }
+    // ¿Por qué el puesto quedó forzado? Se explica dónde está cada
+    // especialista del puesto, para que la decisión se entienda de un vistazo
+    const justificacion = (f, oc) => {
+      const especialistas = jugadores.filter((j) =>
+        j.id !== oc.id && (j.puestos || []).includes(f.puesto))
+      const faltaron = ausentes.filter((j) => (j.puestos || []).includes(f.puesto))
+      if (!especialistas.length && !faltaron.length) {
+        return 'nadie más del bloque juega ahí'
+      }
+      if (!especialistas.length) {
+        return `${faltaron.map((j) => j.apellido).join(' y ')} ${faltaron.length === 1 ? 'juega ahí pero faltó' : 'juegan ahí pero faltaron'} hoy`
+      }
+      const motivo = (e) => {
+        if (condicion[e.id] === 'lesionado') return `${e.apellido} está lesionado`
+        if (condicion[e.id] === 'golpeado') return `${e.apellido} está golpeado`
+        if (mapa[e.id]?.prestado) return `${e.apellido} está prestado al rival`
+        if (mapa[e.id]?.puesto) return `${e.apellido} está de ${mapa[e.id].puesto}`
+        if (mapa[e.id]) return `${e.apellido} está en cancha sin puesto`
+        if ((jugadosPrevios[e.id] || 0) > (jugadosPrevios[oc.id] || 0)) {
+          return `${e.apellido} descansa (ya jugó ${jugadosPrevios[e.id]} ${jugadosPrevios[e.id] === 1 ? 'tiempo' : 'tiempos'})`
+        }
+        if (tarde[e.id] && !tarde[oc.id]) return `${e.apellido} llegó tarde`
+        return `${e.apellido} está en el banco (lo podés cambiar)`
+      }
+      return especialistas.map(motivo).join('; ')
+    }
     for (const f of FORMACION) {
       const oc = ocupante[f.num]
       if (!oc) continue
       if (!puedeJugarDe(oc, f.num)) {
-        avisos.push(`${oc.apellido} (${etiquetaPuestos(oc) || tipoJugador(oc)}) está de ${f.num} (${f.label}).`)
+        avisos.push(`${oc.apellido} (${etiquetaPuestos(oc) || tipoJugador(oc)}) está de ${f.num} (${f.label}) — ${justificacion(f, oc)}.`)
       }
       if (f.conductor && !(oc.aptitudes || []).includes('conduccion')) {
         avisos.push(`El ${f.num} (${oc.apellido}) no tiene aptitud de conducción.`)
