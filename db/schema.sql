@@ -157,6 +157,10 @@ create table if not exists bloques (
   hora_convocatoria time,
   valoracion int check (valoracion between 1 and 5),
   cronica text,
+  -- Cierre del bloque: congela asistencia, equipos y datos. Reabrir queda
+  -- limitado a la cabeza de división y deja rastro de quién y cuándo.
+  cerrado_en timestamptz,
+  cerrado_por text,
   -- Un bloque se puede suspender solo (el otro puede jugarse igual)
   suspendido boolean not null default false,
   motivo_suspension text check (motivo_suspension in ('clima','feriado','otro')),
@@ -203,6 +207,11 @@ create table if not exists tiempos (
   id uuid primary key default gen_random_uuid(),
   bloque_id uuid not null references bloques(id) on delete cascade,
   numero int not null check (numero between 1 and 6),
+  -- Cierre del tiempo: confirma que se jugó tal como está cargado. Es
+  -- condición para sugerir el equipo del tiempo siguiente.
+  cerrado_en timestamptz,
+  -- Valoración rápida opcional de ese tiempo (la principal es la del bloque)
+  valoracion int check (valoracion between 1 and 5),
   unique (bloque_id, numero)
 );
 
