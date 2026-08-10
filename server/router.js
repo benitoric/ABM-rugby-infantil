@@ -1481,6 +1481,14 @@ async function enrutar(metodo, p, b, req, url) {
       const v = b.valoracion == null ? null : Number(b.valoracion)
       if (v !== null && !(v >= 1 && v <= 5)) throw { codigo: 400, error: 'valoracion_invalida' }
       if (b.cerrado) {
+        // No se cierra un tiempo con puestos vacantes: la formación de 13
+        // tiene que estar completa
+        const [{ cubiertos }] = await query(
+          `select count(distinct puesto)::int as cubiertos from tiempo_jugadores
+           where tiempo_id = $1 and not prestado and puesto is not null`, [b.tiempo_id])
+        if (cubiertos < PUESTOS_VALIDOS.length) {
+          throw { codigo: 409, error: 'puestos_vacantes' }
+        }
         await query(
           `update tiempos set cerrado_en = now(), valoracion = coalesce($2, valoracion)
            where id = $1`, [b.tiempo_id, v])
