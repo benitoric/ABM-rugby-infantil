@@ -57,7 +57,7 @@ export default function App() {
         ))}
       </nav>
 
-      {tab === 'jugadores' && <Jugadores />}
+      {tab === 'jugadores' && <Jugadores yo={staff} />}
       {tab === 'asistencia' && <Asistencia />}
       {tab === 'partidos' && <Partidos />}
       {tab === 'staff' && <Staff yo={staff} />}

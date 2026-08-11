@@ -8,7 +8,7 @@ import { FormJugador } from './Jugadores.jsx'
 import { FormEvaluacion, TarjetaEvaluacion } from './Evaluacion.jsx'
 import Documentos from './Documentos.jsx'
 
-export default function Ficha({ jugadorId, evaluarAlAbrir = false, revisar = null, onVolver }) {
+export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar = null, onVolver }) {
   const [j, setJ] = useState(null)
   const [seguimientos, setSeguimientos] = useState([])
   const [evaluaciones, setEvaluaciones] = useState([])
@@ -170,10 +170,20 @@ export default function Ficha({ jugadorId, evaluarAlAbrir = false, revisar = nul
           key={ev.id}
           ev={ev}
           anterior={evaluaciones[i + 1]}
+          puedeBorrar={!!yo?.admin}
           onBorrar={async (id) => {
-            if (!confirm('¿Borrar esta evaluación completa?')) return
-            await api(`evaluaciones/${id}`, { method: 'DELETE' })
-            cargar()
+            if (!confirm(
+              '¿Borrar esta evaluación completa?\n\nSe pierden las dos miradas y ' +
+              'el comentario. No se puede deshacer.'
+            )) return
+            try {
+              await api(`evaluaciones/${id}`, { method: 'DELETE' })
+              cargar()
+            } catch (e) {
+              alert(e?.error === 'solo_cabeza'
+                ? 'Solo la cabeza de división puede borrar evaluaciones.'
+                : 'No se pudo borrar la evaluación.')
+            }
           }}
         />
       ))}

@@ -69,6 +69,14 @@ const MAX_BLOQUES = 6
 // físicos que no entrenan (los roles salen de ROLES_STAFF en src/helpers.js).
 const ROLES_EVALUADORES = ['Cabeza de división', 'Entrenador', 'PF/entrenador']
 
+// Acciones reservadas: borrar evaluaciones. Las puede hacer la cabeza de
+// división y el dueño del repositorio (el email sembrado en db/schema.sql),
+// que conserva el permiso aunque cambie de rol o no tenga ninguno.
+const EMAIL_DUENIO = 'benitoric@gmail.com'
+function puedeAdministrar(yo) {
+  return yo.email === EMAIL_DUENIO || yo.rol === 'Cabeza de división'
+}
+
 // Jugadores que necesitan evaluación: sin evaluar o con la última de hace más
 // de 30 días, sin contar a los dados de baja ni a los ya repartidos.
 const DIAS_EVALUACION = 30
@@ -551,7 +559,9 @@ async function enrutar(metodo, p, b, req, url) {
   // ---------- todo lo demás requiere staff activo ----------
   const yo = await autenticar(req)
 
-  if (p[0] === 'me') return { email: yo.email, nombre: yo.nombre }
+  if (p[0] === 'me') {
+    return { email: yo.email, nombre: yo.nombre, rol: yo.rol, admin: puedeAdministrar(yo) }
+  }
 
   // ---------- jugadores ----------
   if (p[0] === 'jugadores') {
@@ -744,6 +754,7 @@ async function enrutar(metodo, p, b, req, url) {
       return filas[0]
     }
     if (metodo === 'DELETE' && p[1]) {
+      if (!puedeAdministrar(yo)) throw { codigo: 403, error: 'solo_cabeza' }
       await query('delete from evaluaciones where id = $1', [p[1]])
       return { ok: true }
     }
