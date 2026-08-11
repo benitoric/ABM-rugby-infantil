@@ -211,7 +211,7 @@ export function Comparacion({ ev, jugador }) {
   )
 }
 
-export function TarjetaEvaluacion({ ev, anterior, onBorrar }) {
+export function TarjetaEvaluacion({ ev, anterior, puedeBorrar = false, onBorrar }) {
   const consolidados = valoresConsolidados(ev)
   const proms = promediosPorArea(consolidados)
   const general = promedioGeneral(consolidados)
@@ -276,13 +276,15 @@ export function TarjetaEvaluacion({ ev, anterior, onBorrar }) {
               ))
           )}
         </div>
-        <button
-          className="btn peligro chico"
-          style={{ marginTop: 8 }}
-          onClick={(e) => { e.preventDefault(); onBorrar(ev.id) }}
-        >
-          Borrar evaluación
-        </button>
+        {puedeBorrar && (
+          <button
+            className="btn peligro chico"
+            style={{ marginTop: 8 }}
+            onClick={(e) => { e.preventDefault(); onBorrar(ev.id) }}
+          >
+            Borrar evaluación
+          </button>
+        )}
       </details>
     </div>
   )

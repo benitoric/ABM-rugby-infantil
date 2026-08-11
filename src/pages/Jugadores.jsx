@@ -14,7 +14,7 @@ const VACIO = {
   ficha_medica_vigente: false, ficha_medica_vence: '', observaciones: '',
 }
 
-export default function Jugadores() {
+export default function Jugadores({ yo }) {
   const [jugadores, setJugadores] = useState([])
   const [filtro, setFiltro] = useState('activo')
   const [busqueda, setBusqueda] = useState('')
@@ -146,6 +146,7 @@ export default function Jugadores() {
     return (
       <Ficha
         jugadorId={fichaDe}
+        yo={yo}
         evaluarAlAbrir={autoEvaluar}
         revisar={revisar}
         onVolver={() => { setFichaDe(null); setAutoEvaluar(false); setRevisar(null); cargar() }}
