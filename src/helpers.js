@@ -96,6 +96,44 @@ export function abrevPuestos(j) {
   return propios.length ? propios.map((p) => p.abrev).join('·') : (j.posicion || '')
 }
 
+// Reparto de un grupo de jugadores por línea (forwards/backs) y, dentro de
+// cada una, por el puesto principal de cada uno. Los que juegan en varios
+// puestos sin haber elegido el principal caen en "sinPuesto" de su línea, y
+// los que no tienen ningún dato de puesto (o son mixtos sin principal) en
+// "sinDefinir", así la suma siempre cierra con el total.
+export function resumenPorPuesto(jugadores) {
+  const lineas = [
+    { clave: 'forward', label: 'Forwards' },
+    { clave: 'back', label: 'Backs' },
+  ].map((l) => ({
+    ...l,
+    total: 0,
+    sinPuesto: [],
+    puestos: PUESTOS.filter((p) => p.tipo === l.clave).map((p) => ({ ...p, jugadores: [] })),
+  }))
+  const sinDefinir = []
+
+  for (const j of jugadores) {
+    const principal = puestoPrincipal(j)
+    const linea = lineas.find((l) => l.clave === TIPO_PUESTO[principal])
+    if (linea) {
+      linea.puestos.find((p) => p.value === principal).jugadores.push(j)
+      linea.total++
+      continue
+    }
+    // Sin puesto principal definido todavía: al menos se ubica la línea si
+    // todos sus puestos son de la misma (o si tiene la posición vieja)
+    const porTipo = lineas.find((l) => l.clave === (tipoJugador(j) || '').toLowerCase())
+    if (porTipo) {
+      porTipo.sinPuesto.push(j)
+      porTipo.total++
+    } else {
+      sinDefinir.push(j)
+    }
+  }
+  return { lineas, sinDefinir, total: jugadores.length }
+}
+
 // Formación de 13 del rugby infantil: 6 forwards y 7 backs. El 9 y el 10
 // (pareja de medios) además deberían tener la aptitud de conducción.
 export const FORMACION = [

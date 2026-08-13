@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import {
   descargarCSV, DIFICULTADES, esDiaDeRutina, etiquetaPartido, fechaCorta, horarioEvento, lineaBloque,
-  MODALIDADES, MOTIVOS_SUSPENSION, nombreCompleto, nombreStaff, RUTINA, suspensionEvento,
+  MODALIDADES, MOTIVOS_SUSPENSION, nombreCompleto, nombreStaff, resumenPorPuesto, RUTINA,
+  suspensionEvento,
 } from '../helpers.js'
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 
@@ -302,6 +303,56 @@ export default function Asistencia() {
   )
 }
 
+// Reporte en vivo de los presentes: cuántos forwards y cuántos backs hay, y
+// dentro de cada línea cuántos de cada puesto principal. Se actualiza con
+// cada marca, para ver mientras se toma asistencia con qué se cuenta hoy.
+function ReportePuestos({ jugadores, marcas }) {
+  const presentes = jugadores.filter((j) => marcas[j.id] === 'presente')
+  const { lineas, sinDefinir, total } = resumenPorPuesto(presentes)
+  const nombres = (lista) => lista.map(nombreCompleto).join('\n')
+
+  return (
+    <div className="tarjeta reporte-puestos">
+      <div className="fila entre">
+        <h3>Presentes por puesto</h3>
+        <span className="mini">{total} de {jugadores.length}</span>
+      </div>
+      <div className="grid2">
+        {lineas.map((l) => (
+          <div key={l.clave}>
+            <div className={`reporte-linea ${l.clave}`}>
+              <span>{l.label}</span>
+              <b>{l.total}</b>
+            </div>
+            {l.puestos.map((p) => (
+              <div
+                key={p.value}
+                className={`reporte-fila${p.jugadores.length ? '' : ' cero'}`}
+                title={nombres(p.jugadores)}
+              >
+                <span>{p.label}</span>
+                <b>{p.jugadores.length}</b>
+              </div>
+            ))}
+            {l.sinPuesto.length > 0 && (
+              <div className="reporte-fila" title={nombres(l.sinPuesto)}>
+                <span>Sin puesto principal</span>
+                <b>{l.sinPuesto.length}</b>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {sinDefinir.length > 0 && (
+        <p className="mini" style={{ marginTop: 6 }} title={nombres(sinDefinir)}>
+          {sinDefinir.length} sin puesto cargado (no suman a ninguna línea):{' '}
+          {sinDefinir.map((j) => j.apellido).join(', ')}
+        </p>
+      )}
+    </div>
+  )
+}
+
 function TomarAsistencia({ evento: eventoInicial, onVolver }) {
   const [evento, setEvento] = useState(eventoInicial)
   const [jugadores, setJugadores] = useState([])
@@ -460,6 +511,10 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
           <button className="btn sec" onClick={marcarTodosPresentes}>
             Marcar presentes a todos
           </button>
+
+          {!cargando && !errorCarga && jugadores.length > 0 && (
+            <ReportePuestos jugadores={jugadores} marcas={marcas} />
+          )}
 
           {cargando && <div className="vacio">Cargando…</div>}
           {errorCarga && (
