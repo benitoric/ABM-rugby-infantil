@@ -245,6 +245,32 @@ h3 { font-size: 1rem; }
   .modal { border-radius: 16px; }
 }
 
+/* ---------- reporte de presentes por puesto ---------- */
+.reporte-puestos h3 { font-size: 0.95rem; }
+.reporte-puestos .grid2 { margin-top: 8px; gap: 0 14px; }
+.reporte-linea {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 3px 6px;
+  border-radius: 6px;
+  margin-bottom: 2px;
+}
+.reporte-linea.forward { background: var(--celeste); color: var(--primario); }
+.reporte-linea.back { background: #dcfce7; color: #15803d; }
+.reporte-linea b { font-size: 0.95rem; }
+.reporte-fila {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 0.78rem;
+  padding: 1px 6px;
+}
+.reporte-fila.cero { color: var(--texto-suave); opacity: 0.7; }
+
 /* ---------- listas de jugadores ---------- */
 .jugador-item {
   display: flex;
