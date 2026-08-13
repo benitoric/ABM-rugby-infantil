@@ -7,6 +7,7 @@ import {
 import { FormJugador } from './Jugadores.jsx'
 import { FormEvaluacion, TarjetaEvaluacion } from './Evaluacion.jsx'
 import Documentos from './Documentos.jsx'
+import GraficoEvolucion from './GraficoEvolucion.jsx'
 
 export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar = null, onVolver }) {
   const [j, setJ] = useState(null)
@@ -169,6 +170,8 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
           (inicio, mitad y cierre de temporada).
         </div>
       )}
+
+      <GraficoEvolucion evaluaciones={evaluaciones} />
 
       {evaluaciones.map((ev, i) => (
         <TarjetaEvaluacion
