@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import {
   edad, estadoJugador, etiquetaPuestos, fechaCorta, fichaMedica, nombreCompleto,
-  tipoJugador, APTITUDES, AREAS, ESTADOS,
+  puestoPrincipal, tipoJugador, APTITUDES, AREAS, ESTADOS, PUESTOS,
 } from '../helpers.js'
 import { FormJugador } from './Jugadores.jsx'
 import { FormEvaluacion, TarjetaEvaluacion } from './Evaluacion.jsx'
@@ -104,7 +104,12 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
               <span className={`badge ${estadoJugador(j)}`}>{ESTADOS[estadoJugador(j)]}</span>
               <span className={`badge ${fichaMedica(j).clase}`}>{fichaMedica(j).texto}</span>
               {tipoJugador(j) && (
-                <span className={`badge puesto-${tipoJugador(j).toLowerCase()}`}>
+                <span
+                  className={`badge puesto-${tipoJugador(j).toLowerCase()}`}
+                  title={puestoPrincipal(j)
+                    ? `Puesto principal: ${PUESTOS.find((pu) => pu.value === puestoPrincipal(j))?.label}`
+                    : undefined}
+                >
                   {etiquetaPuestos(j) || tipoJugador(j)}
                 </span>
               )}

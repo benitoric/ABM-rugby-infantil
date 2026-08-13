@@ -23,6 +23,9 @@ create table if not exists jugadores (
   -- Puestos específicos en los que puede jugar (uno o más):
   -- pilar/hooker/segunda/octavo/medio_scrum/apertura/centro/wing/fullback
   puestos jsonb not null default '[]',
+  -- Cuál de esos puestos es el suyo de verdad. Con un solo puesto cargado se
+  -- deriva de ahí, así que solo hace falta elegirlo cuando juega en varios.
+  puesto_principal text,
   aptitudes jsonb not null default '[]',
   estado text not null default 'activo' check (estado in ('activo','inactivo','lesionado')),
   tutor_nombre text,

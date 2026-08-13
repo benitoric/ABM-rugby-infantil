@@ -68,14 +68,31 @@ export function tipoJugador(j) {
   return j.posicion || null
 }
 
+// El puesto donde de verdad juega. Con uno solo cargado es ese; con varios,
+// el que se haya marcado (puede no haberse elegido todavía).
+export function puestoPrincipal(j) {
+  const propios = j.puestos || []
+  if (propios.length === 1) return propios[0]
+  return propios.includes(j.puesto_principal) ? j.puesto_principal : null
+}
+
+// Los puestos del jugador, con el principal siempre primero
+export function puestosOrdenados(j) {
+  const propios = PUESTOS.filter((p) => (j.puestos || []).includes(p.value))
+  const principal = puestoPrincipal(j)
+  if (!principal) return propios
+  return [...propios].sort((a, b) =>
+    (b.value === principal) - (a.value === principal))
+}
+
 // "Pilar/Hooker" para listados; abreviado "Pil·Hoo" para renglones chicos
 export function etiquetaPuestos(j) {
-  const propios = PUESTOS.filter((p) => (j.puestos || []).includes(p.value))
+  const propios = puestosOrdenados(j)
   return propios.length ? propios.map((p) => p.label).join('/') : (j.posicion || '')
 }
 
 export function abrevPuestos(j) {
-  const propios = PUESTOS.filter((p) => (j.puestos || []).includes(p.value))
+  const propios = puestosOrdenados(j)
   return propios.length ? propios.map((p) => p.abrev).join('·') : (j.posicion || '')
 }
 

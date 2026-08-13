@@ -2,7 +2,7 @@ import { query } from './db.js'
 import { autenticar, crearToken, hashClave, compararClave } from './auth.js'
 
 const COLS_JUGADOR = `id, nombre, apellido, fecha_nacimiento::text as fecha_nacimiento,
-  dni, posicion, puestos, aptitudes, estado, tutor_nombre, tutor_telefono, ficha_medica_vigente,
+  dni, posicion, puestos, puesto_principal, aptitudes, estado, tutor_nombre, tutor_telefono, ficha_medica_vigente,
   ficha_medica_vence::text as ficha_medica_vence, observaciones`
 
 const APTITUDES = ['conduccion', 'penetracion', 'definicion']
@@ -591,18 +591,20 @@ async function enrutar(metodo, p, b, req, url) {
     if (metodo === 'POST' && !p[1]) {
       const d = datosJugador(b)
       const filas = await query(
-        `insert into jugadores (nombre, apellido, fecha_nacimiento, dni, posicion, puestos, aptitudes,
-           estado, tutor_nombre, tutor_telefono, ficha_medica_vigente, ficha_medica_vence, observaciones)
-         values ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11,$12,$13) returning ${COLS_JUGADOR}`, d)
+        `insert into jugadores (nombre, apellido, fecha_nacimiento, dni, posicion, puestos,
+           puesto_principal, aptitudes, estado, tutor_nombre, tutor_telefono,
+           ficha_medica_vigente, ficha_medica_vence, observaciones)
+         values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,$9,$10,$11,$12,$13,$14) returning ${COLS_JUGADOR}`, d)
       return filas[0]
     }
     if (metodo === 'PUT' && p[1]) {
       const d = datosJugador(b)
       const filas = await query(
         `update jugadores set nombre=$1, apellido=$2, fecha_nacimiento=$3, dni=$4,
-           posicion=$5, puestos=$6::jsonb, aptitudes=$7::jsonb, estado=$8, tutor_nombre=$9, tutor_telefono=$10,
-           ficha_medica_vigente=$11, ficha_medica_vence=$12, observaciones=$13, updated_at=now()
-         where id=$14 returning ${COLS_JUGADOR}`, [...d, p[1]])
+           posicion=$5, puestos=$6::jsonb, puesto_principal=$7, aptitudes=$8::jsonb,
+           estado=$9, tutor_nombre=$10, tutor_telefono=$11,
+           ficha_medica_vigente=$12, ficha_medica_vence=$13, observaciones=$14, updated_at=now()
+         where id=$15 returning ${COLS_JUGADOR}`, [...d, p[1]])
       return filas[0]
     }
     if (metodo === 'DELETE' && p[1]) {
@@ -1647,9 +1649,13 @@ function datosJugador(b) {
   // Con puestos cargados, la posición genérica se deriva; sin puestos vale
   // la que venga escrita (jugadores viejos e importación por lista)
   const posicion = puestos.length ? posicionDePuestos(puestos) : normalizarPosicion(b.posicion)
+  // El principal tiene que ser uno de los puestos cargados. Con uno solo se
+  // deriva de ahí: no hace falta elegirlo.
+  const principal = puestos.length === 1 ? puestos[0]
+    : (puestos.includes(b.puesto_principal) ? b.puesto_principal : null)
   return [
     b.nombre.trim(), b.apellido.trim(), b.fecha_nacimiento || null, b.dni || null,
-    posicion, JSON.stringify(puestos), JSON.stringify(aptitudes), b.estado || 'activo', b.tutor_nombre || null,
+    posicion, JSON.stringify(puestos), principal, JSON.stringify(aptitudes), b.estado || 'activo', b.tutor_nombre || null,
     b.tutor_telefono || null, !!b.ficha_medica_vigente, b.ficha_medica_vence || null,
     b.observaciones || null,
   ]

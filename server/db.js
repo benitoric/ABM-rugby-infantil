@@ -33,8 +33,8 @@ async function inicializar() {
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
     `select exists (select 1 from information_schema.columns
-       where table_schema = 'public' and table_name = 'bloques'
-         and column_name = 'cerrado_en') as aplicadas`)
+       where table_schema = 'public' and table_name = 'jugadores'
+         and column_name = 'puesto_principal') as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -162,6 +162,7 @@ export async function migrar(pool) {
   )`)
   // Puestos específicos del jugador (la posición genérica pasa a derivarse)
   await pool.query(`alter table jugadores add column if not exists puestos jsonb not null default '[]'`)
+  await pool.query('alter table jugadores add column if not exists puesto_principal text')
   // Cierre de tiempos y bloques (congela el partido; reapertura auditada)
   await pool.query('alter table tiempos add column if not exists cerrado_en timestamptz')
   await pool.query('alter table tiempos add column if not exists valoracion int check (valoracion between 1 and 5)')
