@@ -299,6 +299,7 @@ h3 { font-size: 1rem; }
 .fila-jugador .badge { font-size: 0.62rem; padding: 2px 4px; white-space: nowrap; }
 /* Puestos específicos, debajo de la etiqueta forward/back/mixto */
 .celda-puesto { line-height: 1.15; }
+.puesto-principal { color: var(--texto); }
 .puestos-detalle {
   font-size: 0.56rem;
   color: var(--texto-suave);

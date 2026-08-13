@@ -2,14 +2,15 @@ import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import {
   estadoJugador, etiquetaPuestos, fechaCompacta, fechaCorta, nombreCompleto,
-  tipoJugador, APTITUDES, ESTADOS, PUESTOS,
+  puestoPrincipal, puestosOrdenados, tipoJugador, APTITUDES, ESTADOS, PUESTOS,
 } from '../helpers.js'
 import { promedioGeneral, valoresConsolidados } from '../evaluacion.js'
 import { base64ABlob } from '../archivos.js'
 import Ficha from './Ficha.jsx'
 
 const VACIO = {
-  nombre: '', apellido: '', fecha_nacimiento: '', dni: '', posicion: '', puestos: [],
+  nombre: '', apellido: '', fecha_nacimiento: '', dni: '', posicion: '',
+  puestos: [], puesto_principal: '',
   aptitudes: [], estado: 'activo', tutor_nombre: '', tutor_telefono: '',
   ficha_medica_vigente: false, ficha_medica_vence: '', observaciones: '',
 }
@@ -365,8 +366,14 @@ export default function Jugadores({ yo }) {
             )}
             {(j.puestos || []).length > 0 && (
               <div className="puestos-detalle" title={etiquetaPuestos(j)}>
-                {PUESTOS.filter((pu) => j.puestos.includes(pu.value))
-                  .map((pu) => pu.abrev).join(' · ')}
+                {puestosOrdenados(j).map((pu, i) => (
+                  <span key={pu.value}>
+                    {i > 0 && ' · '}
+                    {pu.value === puestoPrincipal(j)
+                      ? <b className="puesto-principal">{pu.abrev}</b>
+                      : pu.abrev}
+                  </span>
+                ))}
               </div>
             )}
           </div>
@@ -623,11 +630,16 @@ export function FormJugador({ inicial, onCerrar, onGuardado }) {
                       checked={(f.puestos || []).includes(pu.value)}
                       onChange={(e) => {
                         const actuales = f.puestos || []
+                        const puestos = e.target.checked
+                          ? [...actuales, pu.value]
+                          : actuales.filter((x) => x !== pu.value)
                         setF({
                           ...f,
-                          puestos: e.target.checked
-                            ? [...actuales, pu.value]
-                            : actuales.filter((x) => x !== pu.value),
+                          puestos,
+                          // Con un solo puesto ese es el principal; al
+                          // destildar el principal, se vuelve a elegir.
+                          puesto_principal: puestos.length === 1 ? puestos[0]
+                            : (puestos.includes(f.puesto_principal) ? f.puesto_principal : ''),
                         })
                       }}
                     />
@@ -641,7 +653,27 @@ export function FormJugador({ inicial, onCerrar, onGuardado }) {
                 Sin puestos cargados vale la posición genérica anterior: {f.posicion}.
               </p>
             )}
+            {(f.puestos || []).length === 1 && (
+              <p className="mini" style={{ margin: '6px 0 0' }}>
+                Su puesto principal es {PUESTOS.find((pu) => pu.value === f.puestos[0])?.label}.
+              </p>
+            )}
           </div>
+
+          {(f.puestos || []).length > 1 && (
+            <div className="campo" style={{ gridColumn: '1 / -1' }}>
+              <label>Puesto principal</label>
+              <select {...campo('puesto_principal')}>
+                <option value="">Sin definir</option>
+                {PUESTOS.filter((pu) => f.puestos.includes(pu.value)).map((pu) => (
+                  <option key={pu.value} value={pu.value}>{pu.label}</option>
+                ))}
+              </select>
+              <p className="mini" style={{ margin: '4px 0 0' }}>
+                Dónde juega habitualmente. Los demás quedan como puestos alternativos.
+              </p>
+            </div>
+          )}
           <div className="campo" style={{ gridColumn: '1 / -1' }}>
             <label>Aptitudes (marcá todas las que correspondan)</label>
             <div className="fila" style={{ gap: '4px 14px' }}>
