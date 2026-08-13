@@ -1,5 +1,8 @@
 import { query } from './db.js'
 import { autenticar, crearToken, hashClave, compararClave } from './auth.js'
+// El catálogo de la evaluación es compartido con el frontend: así el promedio
+// de juego se calcula igual en los dos lados (src/evaluacion.js no toca el DOM)
+import { promedioDeAreas, GRUPOS } from '../src/evaluacion.js'
 
 const COLS_JUGADOR = `id, nombre, apellido, fecha_nacimiento::text as fecha_nacimiento,
   dni, posicion, puestos, puesto_principal, aptitudes, estado, tutor_nombre, tutor_telefono, ficha_medica_vigente,
@@ -471,10 +474,12 @@ const PUESTOS_FORMACION = [
   { num: 15, tipo: 'back', clave: 'fullback' },
 ]
 
-// Promedio simple de un jsonb {variable: 1..5}
-function promedioValores(valores) {
-  const vs = Object.values(valores || {}).map(Number).filter((n) => n > 0)
-  return vs.length ? vs.reduce((s, n) => s + n, 0) / vs.length : null
+// Promedio de juego de un jsonb {variable: 1..5}: solo las variables de las
+// áreas deportivas (técnica, táctica, física y actitudinal). Es el que manda
+// para armar bloques parejos; el comportamiento no entra en la balanza.
+const AREAS_JUEGO = GRUPOS.find((g) => g.value === 'juego').areas
+function promedioJuego(valores) {
+  return promedioDeAreas(valores, AREAS_JUEGO)
 }
 
 // ---------- cierre de tiempos y bloques ----------
@@ -1357,7 +1362,7 @@ async function enrutar(metodo, p, b, req, url) {
          order by jugador_id, fecha desc, created_at desc`, [ids])
       const calif = {}
       for (const ev of evs) {
-        const notas = [promedioValores(ev.valores), promedioValores(ev.valores_revisor)]
+        const notas = [promedioJuego(ev.valores), promedioJuego(ev.valores_revisor)]
           .filter((n) => n !== null)
         if (notas.length) calif[ev.jugador_id] = notas.reduce((s, n) => s + n, 0) / notas.length
       }
