@@ -616,7 +616,8 @@ function ArmadoPartido({ partido }) {
                 </div>
               </div>
               <p className="mini" style={{ margin: '6px 0 0' }}>
-                Balancea fuerza (última evaluación), forwards/backs y aptitudes.
+                Balancea el promedio de juego (última evaluación), la cantidad
+                de jugadores por puesto y las aptitudes.
                 {sugerencia.sesgo !== 0 && ` Por la dificultad de los rivales, el Bloque ${sugerencia.sesgo > 0 ? bloques[1].numero : bloques[0].numero} queda ~${Math.abs(sugerencia.sesgo).toFixed(1)} pts más fuerte.`}
                 {' '}Podés retocarla con los botones de cada bloque antes de aplicar.
               </p>
@@ -667,7 +668,7 @@ function ArmadoPartido({ partido }) {
                     {confirmado ? 'Confirmó que va' : (confirmacion[j.id] === 'ausente' ? '⚠️ Avisó que no va' : '⚠️ Sin confirmar')}
                     {j.estado === 'lesionado' ? ' · 🤕 lesionado' : ''}
                     {abrevAptitudes(j) ? ` · ${abrevAptitudes(j)}` : ''}
-                    {califs?.[j.id] !== undefined && ` · ★${califs[j.id].toFixed(1)}`}
+                    {califs?.[j.id] !== undefined && ` · juego ★${califs[j.id].toFixed(1)}`}
                   </div>
                 </div>
                 <div className="bloque-botones">
@@ -1267,7 +1268,7 @@ function BalanceBloques({ bloques, jugadores, asignacion, califs }) {
         </thead>
         <tbody>
           {fila('Jugadores', (s) => <b>{s.n}</b>)}
-          {fila('Fuerza media', (s) => (s.fuerza === null ? '—' : <b>★{s.fuerza.toFixed(1)}</b>))}
+          {fila('Promedio de juego', (s) => (s.fuerza === null ? '—' : <b>★{s.fuerza.toFixed(1)}</b>))}
           {fila('Cond / Pen / Def', (s) => s.apts.join(' / '))}
           <tr>
             <td className="mini" colSpan={stats.length + 1} style={{ paddingTop: 8 }}>
