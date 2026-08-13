@@ -595,6 +595,40 @@ h3 { font-size: 1rem; }
 }
 img.doc-vista { height: auto; }
 
+/* ---------- gráfico de evolución ---------- */
+.grafico-caja { position: relative; max-width: 520px; }
+.grafico { width: 100%; height: auto; display: block; touch-action: pan-y; }
+.grafico-grilla { stroke: var(--borde); stroke-width: 1; }
+.grafico-guia { stroke: var(--texto-suave); stroke-width: 1; stroke-dasharray: 3 3; }
+.grafico-eje { font-size: 9px; fill: var(--texto-suave); }
+.grafico-valor { font-size: 10px; font-weight: 700; fill: var(--texto-suave); }
+.grafico-punto {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.grafico-tooltip {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  background: var(--texto);
+  color: #fff;
+  border-radius: 8px;
+  padding: 6px 9px;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--sombra);
+}
+.grafico-tooltip .grafico-punto { width: 7px; height: 7px; margin-right: 4px; }
+.grafico-tabla { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 0.78rem; }
+.grafico-tabla th, .grafico-tabla td { border-bottom: 1px solid var(--borde); padding: 4px 6px; text-align: right; }
+.grafico-tabla th:first-child, .grafico-tabla td:first-child { text-align: left; }
+.grafico-tabla th { color: var(--texto-suave); font-size: 0.7rem; }
+
 /* ---------- evaluación periódica ---------- */
 .eval-area-titulo {
   display: flex;
