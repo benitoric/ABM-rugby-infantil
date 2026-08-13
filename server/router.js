@@ -161,6 +161,14 @@ function tipoJugador(j) {
   return 'mx'
 }
 
+// El puesto donde de verdad juega: con uno solo cargado es ese; con varios,
+// el marcado como principal (null si todavía no se eligió).
+function principalDe(j) {
+  const propios = j.puestos || []
+  if (propios.length === 1) return propios[0]
+  return propios.includes(j.puesto_principal) ? j.puesto_principal : null
+}
+
 // ¿Tiene cargado ese puesto específico? (sin puestos cargados no opina)
 function esEspecialista(j, clave) {
   return (j.puestos || []).includes(clave)
@@ -172,27 +180,20 @@ function penalidadReparto(jugadores, calif, A, B, sesgo) {
   const a = jugadores.filter((j) => A.has(j.id))
   const b = jugadores.filter((j) => B.has(j.id))
   const media = (l) => (l.length ? l.reduce((acc, j) => acc + calif[j.id], 0) / l.length : 0)
-  const cuenta = (l, t) => l.filter((j) => tipoJugador(j) === t).length
-  // Distancia entre los rangos posibles de cada lado (los mixtos estiran el rango)
-  const brecha = (min1, max1, min2, max2) => Math.max(min1 - max2, min2 - max1, 0)
-  const mxA = cuenta(a, 'mx')
-  const mxB = cuenta(b, 'mx')
   let p = 3 * Math.abs(a.length - b.length)
-  for (const t of ['fw', 'back']) {
-    const cA = cuenta(a, t)
-    const cB = cuenta(b, t)
-    p += 2 * brecha(cA, cA + mxA, cB, cB + mxB)
+  // Misma cantidad de jugadores de cada puesto en los dos bloques, contando a
+  // cada uno por su puesto principal (con el que de verdad juega). Los que no
+  // tienen puestos cargados se agrupan por su posición genérica vieja.
+  const grupo = (j) => principalDe(j) || `generico:${tipoJugador(j)}`
+  const claves = new Set([...a, ...b].map(grupo))
+  for (const clave of claves) {
+    const cuantos = (l) => l.filter((j) => grupo(j) === clave).length
+    p += 2 * Math.abs(cuantos(a) - cuantos(b))
   }
   p += 4 * Math.abs((media(b) - media(a)) - sesgo)
   for (const apt of APTITUDES) {
     const con = (l) => l.filter((j) => (j.aptitudes || []).includes(apt)).length
     p += Math.abs(con(a) - con(b))
-  }
-  // Cobertura pareja de cada puesto específico (que un bloque no se quede
-  // sin nadie que juegue de pilar, de medio scrum, etc.)
-  for (const clave of Object.keys(TIPO_PUESTO)) {
-    const cubren = (l) => l.filter((j) => esEspecialista(j, clave)).length
-    p += 0.5 * Math.abs(cubren(a) - cubren(b))
   }
   return p
 }
@@ -200,10 +201,12 @@ function penalidadReparto(jugadores, calif, A, B, sesgo) {
 function sugerirReparto(jugadores, calif, sesgo) {
   const A = new Set()
   const B = new Set()
-  // Reparto inicial en serpentina (A B B A…) por tipo, de mejor a peor
-  for (const t of ['fw', 'back', 'mx']) {
+  // Reparto inicial en serpentina (A B B A…) dentro de cada puesto principal,
+  // de mejor a peor: cada puesto arranca ya repartido en partes iguales
+  const grupo = (j) => principalDe(j) || `generico:${tipoJugador(j)}`
+  for (const clave of new Set(jugadores.map(grupo))) {
     jugadores
-      .filter((j) => tipoJugador(j) === t)
+      .filter((j) => grupo(j) === clave)
       .sort((x, y) => calif[y.id] - calif[x.id])
       .forEach((j, i) => (i % 4 === 1 || i % 4 === 2 ? B : A).add(j.id))
   }
@@ -1319,7 +1322,8 @@ async function enrutar(metodo, p, b, req, url) {
       const ids = Array.isArray(b.jugador_ids) ? b.jugador_ids : []
       if (ids.length < 2) throw { codigo: 400, error: 'faltan_jugadores' }
       const jugadores = await query(
-        'select id, posicion, puestos, aptitudes from jugadores where id = any($1)', [ids])
+        `select id, posicion, puestos, puesto_principal, aptitudes
+         from jugadores where id = any($1)`, [ids])
       // Última evaluación de cada uno; si hay revisión, promedia las dos miradas
       const evs = await query(
         `select distinct on (jugador_id) jugador_id, valores, valores_revisor

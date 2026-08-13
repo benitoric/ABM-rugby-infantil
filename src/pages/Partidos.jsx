@@ -3,7 +3,7 @@ import { api } from '../api.js'
 import {
   abrevAptitudes, abrevPuestos, APTITUDES, DIFICULTADES, etiquetaDificultad, etiquetaMotivo,
   etiquetaPartido, etiquetaPuestos, fechaCorta, FORMACION, nombreCompleto, nombreStaff,
-  puedeJugarDe, puestoFormacion, tipoJugador,
+  puedeJugarDe, puestoFormacion, puestoPrincipal, tipoJugador, PUESTOS,
 } from '../helpers.js'
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 
@@ -1221,17 +1221,23 @@ function BalanceBloques({ bloques, jugadores, asignacion, califs }) {
     const fuerza = conNota.length
       ? conNota.reduce((s, j) => s + califs[j.id], 0) / conNota.length
       : null
-    const c = (t) => del.filter((j) => tipoJugador(j) === t).length
+    // Cada jugador cuenta por su puesto principal (el que de verdad juega)
+    const porPuesto = {}
+    for (const j of del) {
+      const clave = puestoPrincipal(j) || 'sin'
+      porPuesto[clave] = (porPuesto[clave] || 0) + 1
+    }
     return {
       bl,
       n: del.length,
       fuerza,
-      fw: c('Forward'),
-      back: c('Back'),
-      mx: c('Mixto'),
+      porPuesto,
       apts: APTITUDES.map((a) => del.filter((j) => (j.aptitudes || []).includes(a.value)).length),
     }
   })
+  // Puestos presentes en cualquiera de los bloques, en el orden del catálogo
+  const puestosEnJuego = PUESTOS.filter((pu) => stats.some((s) => s.porPuesto[pu.value]))
+  const haySinPrincipal = stats.some((s) => s.porPuesto.sin)
   const fila = (nombre, valor) => (
     <tr>
       <td className="mini">{nombre}</td>
@@ -1255,8 +1261,37 @@ function BalanceBloques({ bloques, jugadores, asignacion, califs }) {
         <tbody>
           {fila('Jugadores', (s) => <b>{s.n}</b>)}
           {fila('Fuerza media', (s) => (s.fuerza === null ? '—' : <b>★{s.fuerza.toFixed(1)}</b>))}
-          {fila('Forwards / Backs', (s) => `${s.fw} / ${s.back}${s.mx ? ` +${s.mx} mixto${s.mx > 1 ? 's' : ''}` : ''}`)}
           {fila('Cond / Pen / Def', (s) => s.apts.join(' / '))}
+          <tr>
+            <td className="mini" colSpan={stats.length + 1} style={{ paddingTop: 8 }}>
+              <b>Por puesto principal</b>
+            </td>
+          </tr>
+          {puestosEnJuego.map((pu) => (
+            <tr key={pu.value}>
+              <td className="mini">{pu.label}</td>
+              {stats.map((s) => {
+                const otros = stats.filter((x) => x !== s).map((x) => x.porPuesto[pu.value] || 0)
+                const desparejo = otros.some((n) => n !== (s.porPuesto[pu.value] || 0))
+                return (
+                  <td
+                    key={s.bl.id}
+                    style={{ textAlign: 'center', color: desparejo ? 'var(--warn)' : undefined }}
+                  >
+                    {s.porPuesto[pu.value] || 0}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+          {haySinPrincipal && (
+            <tr>
+              <td className="mini" style={{ color: 'var(--texto-suave)' }}>Sin puesto principal</td>
+              {stats.map((s) => (
+                <td key={s.bl.id} style={{ textAlign: 'center' }}>{s.porPuesto.sin || 0}</td>
+              ))}
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
