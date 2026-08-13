@@ -184,11 +184,37 @@ function penalidadReparto(jugadores, calif, A, B, sesgo) {
   // Misma cantidad de jugadores de cada puesto en los dos bloques, contando a
   // cada uno por su puesto principal (con el que de verdad juega). Los que no
   // tienen puestos cargados se agrupan por su posición genérica vieja.
+  // Si un puesto queda desparejo, el bloque en falta lo compensa con quien lo
+  // tenga como puesto secundario: cada jugador tapa un solo hueco y la
+  // compensación cuesta menos que el desbalance, pero no es gratis (un
+  // especialista genuino siempre es preferible).
   const grupo = (j) => principalDe(j) || `generico:${tipoJugador(j)}`
-  const claves = new Set([...a, ...b].map(grupo))
-  for (const clave of claves) {
-    const cuantos = (l) => l.filter((j) => grupo(j) === clave).length
-    p += 2 * Math.abs(cuantos(a) - cuantos(b))
+  const claves = [...new Set([...a, ...b].map(grupo))]
+  const cuantos = (l, clave) => l.filter((j) => grupo(j) === clave).length
+  // Suplentes disponibles: tienen el puesto cargado pero no como principal
+  const suplentes = (l, clave) =>
+    l.filter((j) => grupo(j) !== clave && (j.puestos || []).includes(clave))
+  const usados = new Set()
+  // Se resuelven primero los puestos con menos suplentes a mano, para que los
+  // comodines no se gasten en huecos que otros podían tapar
+  const orden = claves
+    .map((clave) => ({
+      clave,
+      hueco: Math.abs(cuantos(a, clave) - cuantos(b, clave)),
+      libres: suplentes(a, clave).length + suplentes(b, clave).length,
+    }))
+    .sort((x, y) => x.libres - y.libres)
+  for (const { clave, hueco } of orden) {
+    if (!hueco) continue
+    const enFalta = cuantos(a, clave) < cuantos(b, clave) ? a : b
+    let compensa = 0
+    for (const j of suplentes(enFalta, clave)) {
+      if (compensa >= hueco) break
+      if (usados.has(j.id)) continue
+      usados.add(j.id)
+      compensa++
+    }
+    p += 2 * (hueco - compensa) + 0.5 * compensa
   }
   p += 4 * Math.abs((media(b) - media(a)) - sesgo)
   for (const apt of APTITUDES) {

@@ -1221,22 +1221,29 @@ function BalanceBloques({ bloques, jugadores, asignacion, califs }) {
     const fuerza = conNota.length
       ? conNota.reduce((s, j) => s + califs[j.id], 0) / conNota.length
       : null
-    // Cada jugador cuenta por su puesto principal (el que de verdad juega)
+    // Cada jugador cuenta por su puesto principal (el que de verdad juega);
+    // aparte, los que lo tienen como secundario y pueden compensar un hueco
     const porPuesto = {}
+    const secundarios = {}
     for (const j of del) {
       const clave = puestoPrincipal(j) || 'sin'
       porPuesto[clave] = (porPuesto[clave] || 0) + 1
+      for (const otro of j.puestos || []) {
+        if (otro !== clave) secundarios[otro] = (secundarios[otro] || 0) + 1
+      }
     }
     return {
       bl,
       n: del.length,
       fuerza,
       porPuesto,
+      secundarios,
       apts: APTITUDES.map((a) => del.filter((j) => (j.aptitudes || []).includes(a.value)).length),
     }
   })
   // Puestos presentes en cualquiera de los bloques, en el orden del catálogo
-  const puestosEnJuego = PUESTOS.filter((pu) => stats.some((s) => s.porPuesto[pu.value]))
+  const puestosEnJuego = PUESTOS.filter((pu) =>
+    stats.some((s) => s.porPuesto[pu.value] || s.secundarios[pu.value]))
   const haySinPrincipal = stats.some((s) => s.porPuesto.sin)
   const fila = (nombre, valor) => (
     <tr>
@@ -1267,23 +1274,37 @@ function BalanceBloques({ bloques, jugadores, asignacion, califs }) {
               <b>Por puesto principal</b>
             </td>
           </tr>
-          {puestosEnJuego.map((pu) => (
-            <tr key={pu.value}>
-              <td className="mini">{pu.label}</td>
-              {stats.map((s) => {
-                const otros = stats.filter((x) => x !== s).map((x) => x.porPuesto[pu.value] || 0)
-                const desparejo = otros.some((n) => n !== (s.porPuesto[pu.value] || 0))
-                return (
-                  <td
-                    key={s.bl.id}
-                    style={{ textAlign: 'center', color: desparejo ? 'var(--warn)' : undefined }}
-                  >
-                    {s.porPuesto[pu.value] || 0}
-                  </td>
-                )
-              })}
-            </tr>
-          ))}
+          {puestosEnJuego.map((pu) => {
+            // El máximo de principales marca el nivel a igualar; el que está
+            // por debajo se considera cubierto si tiene suplentes de sobra
+            const maximo = Math.max(...stats.map((s) => s.porPuesto[pu.value] || 0))
+            return (
+              <tr key={pu.value}>
+                <td className="mini">{pu.label}</td>
+                {stats.map((s) => {
+                  const propios = s.porPuesto[pu.value] || 0
+                  const sec = s.secundarios[pu.value] || 0
+                  const falta = maximo - propios
+                  const cubierto = falta > 0 && sec >= falta
+                  return (
+                    <td
+                      key={s.bl.id}
+                      style={{
+                        textAlign: 'center',
+                        color: falta > 0 && !cubierto ? 'var(--warn)' : undefined,
+                      }}
+                      title={sec ? `${sec} con este puesto como secundario` : undefined}
+                    >
+                      {propios}
+                      {sec > 0 && (
+                        <span className="mini" style={{ color: 'var(--texto-suave)' }}> +{sec}</span>
+                      )}
+                    </td>
+                  )
+                })}
+              </tr>
+            )
+          })}
           {haySinPrincipal && (
             <tr>
               <td className="mini" style={{ color: 'var(--texto-suave)' }}>Sin puesto principal</td>
@@ -1292,6 +1313,12 @@ function BalanceBloques({ bloques, jugadores, asignacion, califs }) {
               ))}
             </tr>
           )}
+          <tr>
+            <td className="mini" colSpan={stats.length + 1} style={{ color: 'var(--texto-suave)' }}>
+              El +n son los que tienen ese puesto como secundario y pueden
+              compensar el hueco.
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
