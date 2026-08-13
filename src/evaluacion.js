@@ -288,6 +288,30 @@ export function promedioGeneral(valores) {
   return Math.round((notas.reduce((x, y) => x + y, 0) / notas.length) * 10) / 10
 }
 
+// Los tres promedios que resumen una evaluación: el general, lo deportivo
+// ("juego") y lo social ("comportamiento").
+export const GRUPOS = [
+  { value: 'general', label: 'General', abrev: 'Gral', areas: null },
+  { value: 'juego', label: 'Juego', abrev: 'Juego', areas: ['tecnica', 'tactica', 'fisica', 'actitudinal'] },
+  { value: 'comportamiento', label: 'Comportamiento', abrev: 'Comp', areas: ['social'] },
+]
+
+// Promedio (1 decimal) de las variables de ciertas áreas; sin áreas, de todas
+export function promedioDeAreas(valores, areas) {
+  const claves = areas
+    ? AREAS_EVAL.filter((a) => areas.includes(a.value)).flatMap((a) => a.variables.map((v) => v.value))
+    : Object.keys(valores || {})
+  const notas = claves.map((k) => valores?.[k]).filter((n) => n >= 1)
+  if (!notas.length) return null
+  return Math.round((notas.reduce((x, y) => x + y, 0) / notas.length) * 10) / 10
+}
+
+// { general, juego, comportamiento } de una evaluación ya consolidada
+export function promediosResumen(valores) {
+  return Object.fromEntries(
+    GRUPOS.map((g) => [g.value, promedioDeAreas(valores, g.areas)]))
+}
+
 // Promedio (1 decimal) por área de una evaluación guardada
 export function promediosPorArea(valores) {
   const res = []

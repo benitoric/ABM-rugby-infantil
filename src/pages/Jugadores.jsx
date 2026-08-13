@@ -4,7 +4,7 @@ import {
   estadoJugador, etiquetaPuestos, fechaCompacta, fechaCorta, nombreCompleto,
   puestoPrincipal, puestosOrdenados, tipoJugador, APTITUDES, ESTADOS, PUESTOS,
 } from '../helpers.js'
-import { promedioGeneral, valoresConsolidados } from '../evaluacion.js'
+import { promediosResumen, valoresConsolidados, GRUPOS } from '../evaluacion.js'
 import { base64ABlob } from '../archivos.js'
 import Ficha from './Ficha.jsx'
 
@@ -13,6 +13,21 @@ const VACIO = {
   puestos: [], puesto_principal: '',
   aptitudes: [], estado: 'activo', tutor_nombre: '', tutor_telefono: '',
   ficha_medica_vigente: false, ficha_medica_vence: '', observaciones: '',
+}
+
+// Los promedios de juego y comportamiento, en chico bajo el general
+function SubPromedios({ proms, className = '' }) {
+  const partes = GRUPOS.filter((g) => g.value !== 'general' && proms[g.value] != null)
+  if (!partes.length) return null
+  return (
+    <div className={`eval-sub ${className}`}>
+      {partes.map((g, i) => (
+        <span key={g.value} title={`Promedio de ${g.label.toLowerCase()}`}>
+          {i > 0 && ' · '}{g.abrev} {proms[g.value]}
+        </span>
+      ))}
+    </div>
+  )
 }
 
 export default function Jugadores({ yo }) {
@@ -91,8 +106,8 @@ export default function Jugadores({ yo }) {
   }
 
   // Nota final del jugador: promedia las dos miradas cuando hubo revisión
-  function promedioFinal(j) {
-    return promedioGeneral(valoresConsolidados({
+  function promediosDe(j) {
+    return promediosResumen(valoresConsolidados({
       valores: j.ultima_evaluacion_valores,
       valores_revisor: j.ultima_evaluacion_revisor,
     }))
@@ -350,12 +365,13 @@ export default function Jugadores({ yo }) {
                 {j.ultima_evaluacion ? (
                   <>
                     📋 {fechaCompacta(j.ultima_evaluacion)}
-                    {promedioFinal(j) != null && (
-                      <b> · {promedioFinal(j)}★</b>
-                    )}
+                    {promediosDe(j).general != null && <b> · {promediosDe(j).general}★</b>}
                   </>
                 ) : 'Sin evaluar'}
               </div>
+              {j.ultima_evaluacion && (
+                <SubPromedios proms={promediosDe(j)} className="eval-sub-movil" />
+              )}
             </div>
           </div>
           <div className="celda-puesto">
@@ -389,11 +405,10 @@ export default function Jugadores({ yo }) {
             {j.ultima_evaluacion ? (
               <>
                 <div>{fechaCorta(j.ultima_evaluacion)}</div>
-                {promedioFinal(j) != null && (
-                  <span className="badge eval-prom">
-                    {promedioFinal(j)}★
-                  </span>
+                {promediosDe(j).general != null && (
+                  <span className="badge eval-prom">{promediosDe(j).general}★</span>
                 )}
+                <SubPromedios proms={promediosDe(j)} />
               </>
             ) : '—'}
           </div>

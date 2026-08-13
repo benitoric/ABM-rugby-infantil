@@ -309,6 +309,11 @@ h3 { font-size: 1rem; }
 }
 .col-eval { display: none; }
 .col-eval .badge { margin-top: 2px; }
+/* Juego y comportamiento: más chicos que el promedio general */
+.eval-sub { font-size: 0.55rem; color: var(--texto-suave); line-height: 1.2; margin-top: 1px; }
+@media (min-width: 520px) {
+  .eval-sub-movil { display: none; }
+}
 .eval-fecha-movil {
   font-size: 0.62rem;
   color: var(--texto-suave);
@@ -627,6 +632,7 @@ img.doc-vista { height: auto; }
 }
 .eval-prom { background: var(--celeste); color: var(--primario); font-weight: 600; }
 .eval-general { background: var(--primario); color: #fff; }
+.eval-grupo { background: #c7d9f7; color: var(--primario-oscuro); }
 .eval-detalle-fila { font-size: 0.85rem; padding: 3px 0; }
 .eval-estrellas-off { color: #d5d9e2; letter-spacing: 2px; }
 .eval-delta { margin-left: 6px; font-size: 0.75rem; }

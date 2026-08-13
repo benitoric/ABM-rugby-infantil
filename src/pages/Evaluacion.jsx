@@ -3,7 +3,7 @@ import { api } from '../api.js'
 import { edad, fechaCorta, nombreCompleto } from '../helpers.js'
 import {
   acuerdo, areasParaEdad, bandaEtaria, diferencias, promedioGeneral, promediosPorArea,
-  valoresConsolidados, BANDAS, UMBRAL_DIFERENCIA, VARIABLES_EVAL,
+  promediosResumen, valoresConsolidados, BANDAS, GRUPOS, UMBRAL_DIFERENCIA, VARIABLES_EVAL,
 } from '../evaluacion.js'
 
 function Estrellas({ valor, onCambiar }) {
@@ -215,6 +215,7 @@ export function TarjetaEvaluacion({ ev, anterior, puedeBorrar = false, onBorrar 
   const consolidados = valoresConsolidados(ev)
   const proms = promediosPorArea(consolidados)
   const general = promedioGeneral(consolidados)
+  const resumen = promediosResumen(consolidados)
   const cargadas = Object.keys(ev.valores || {}).length
   const dif = diferencias(ev)
 
@@ -244,6 +245,9 @@ export function TarjetaEvaluacion({ ev, anterior, puedeBorrar = false, onBorrar 
             {ev.revisado_en ? 'Final' : 'General'}: {general}★
           </span>
         )}
+        {GRUPOS.filter((g) => g.value !== 'general' && resumen[g.value] != null).map((g) => (
+          <span key={g.value} className="badge eval-grupo">{g.label}: {resumen[g.value]}★</span>
+        ))}
         {proms.map((p) => (
           <span key={p.area} className="badge eval-prom">{p.label}: {p.promedio}★</span>
         ))}
