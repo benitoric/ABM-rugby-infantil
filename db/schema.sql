@@ -193,6 +193,10 @@ create table if not exists asistencias_partido (
   -- transitorio (se desmarca y vuelve); 'lesionado' además queda pendiente de
   -- seguimiento en la sección Jugadores. Null = en condiciones de jugar.
   condicion text check (condicion in ('golpeado','lesionado')),
+  -- El staff ya revisó esa lesión (la cargó en la ficha o resolvió que no hace
+  -- falta): saca el recordatorio de Jugadores sin borrar lo que pasó en el
+  -- partido, que queda como registro.
+  lesion_atendida boolean not null default false,
   primary key (evento_id, jugador_id)
 );
 
