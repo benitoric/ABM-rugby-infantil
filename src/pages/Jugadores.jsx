@@ -113,6 +113,20 @@ export default function Jugadores({ yo }) {
     }))
   }
 
+  // Saca al jugador del recordatorio de lesiones sin tocar el registro del
+  // partido: para cuando la lesión ya estaba cargada o no requiere seguimiento.
+  async function marcarRevisada(l) {
+    if (!confirm(
+      `¿Sacar a ${l.apellido}, ${l.nombre} del recordatorio?\n\n` +
+      'Lo que quedó registrado del partido no se toca.'
+    )) return
+    await api('stats/lesiones-pendientes', {
+      method: 'PUT',
+      body: { evento_id: l.evento_id, jugador_id: l.jugador_id, atendida: true },
+    })
+    cargar()
+  }
+
   function evaluarA(jugadorId) {
     setRevisar(null)
     setAutoEvaluar(true)
@@ -194,20 +208,25 @@ export default function Jugadores({ yo }) {
           </h3>
           <p className="mini" style={{ margin: '4px 0 8px' }}>
             Tocá cada nombre para cargar la lesión en su ficha y hacerle el
-            seguimiento. El recordatorio desaparece cuando la lesión queda
-            registrada (o si lo desmarcás en el día de partido).
+            seguimiento. Sale solo al registrarla; si ya estaba cargada o no
+            hace falta seguirla, usá "Ya lo revisé".
           </p>
           {lesionesPendientes.map((l) => (
-            <button
-              key={`${l.jugador_id}-${l.evento_id}`}
-              className="asignado-item"
-              onClick={() => setFichaDe(l.jugador_id)}
-            >
-              <span className="crece">{l.apellido}, {l.nombre}</span>
-              <span className="mini">
-                {fechaCompacta(l.fecha)}{l.rival ? ` vs ${l.rival}` : ''} →
-              </span>
-            </button>
+            <div key={`${l.jugador_id}-${l.evento_id}`} className="fila" style={{ flexWrap: 'nowrap', gap: 6 }}>
+              <button className="asignado-item crece" onClick={() => setFichaDe(l.jugador_id)}>
+                <span className="crece">{l.apellido}, {l.nombre}</span>
+                <span className="mini">
+                  {fechaCompacta(l.fecha)}{l.rival ? ` vs ${l.rival}` : ''} →
+                </span>
+              </button>
+              <button
+                className="btn sec chico"
+                title="Sacarlo del recordatorio sin borrar lo del partido"
+                onClick={() => marcarRevisada(l)}
+              >
+                ✓ Ya lo revisé
+              </button>
+            </div>
           ))}
         </div>
       )}

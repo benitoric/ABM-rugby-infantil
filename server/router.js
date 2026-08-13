@@ -978,10 +978,22 @@ async function enrutar(metodo, p, b, req, url) {
          join jugadores j on j.id = ap.jugador_id
          join eventos e on e.id = ap.evento_id
          where ap.condicion = 'lesionado' and j.estado <> 'inactivo'
+           and not ap.lesion_atendida
            and not exists (
              select 1 from lesiones l
              where l.jugador_id = ap.jugador_id and l.fecha >= e.fecha)
          order by e.fecha desc, j.apellido, j.nombre`)
+    }
+    // "Ya lo revisé": saca al jugador del recordatorio sin tocar lo que quedó
+    // registrado del partido. Sirve cuando la lesión ya estaba cargada de
+    // antes o cuando el staff decide que no hace falta hacerle seguimiento.
+    if (metodo === 'PUT' && p[1] === 'lesiones-pendientes' && !p[2]) {
+      if (!b?.evento_id || !b?.jugador_id) throw { codigo: 400, error: 'faltan_datos' }
+      await query(
+        `update asistencias_partido set lesion_atendida = $1
+         where evento_id = $2 and jugador_id = $3`,
+        [b.atendida !== false, b.evento_id, b.jugador_id])
+      return { ok: true }
     }
     if (metodo === 'GET' && p[1] === 'asistencia') {
       // Ausente por defecto: el total es la cantidad de eventos ya ocurridos
