@@ -1006,6 +1006,20 @@ async function enrutar(metodo, p, b, req, url) {
     // "Ya lo revisé": saca al jugador del recordatorio sin tocar lo que quedó
     // registrado del partido. Sirve cuando la lesión ya estaba cargada de
     // antes o cuando el staff decide que no hace falta hacerle seguimiento.
+    // Lesiones abiertas, para el seguimiento que se ve al entrar a la app.
+    // Primero las que ya deberían haber tenido el alta y las más próximas.
+    if (metodo === 'GET' && p[1] === 'lesionados') {
+      return query(
+        `select l.id, l.jugador_id, j.nombre, j.apellido,
+           l.fecha::text as fecha, l.descripcion,
+           l.fecha_retorno_estimada::text as fecha_retorno_estimada,
+           (current_date - l.fecha)::int as dias_lesionado,
+           (l.fecha_retorno_estimada - current_date)::int as dias_para_alta
+         from lesiones l
+         join jugadores j on j.id = l.jugador_id
+         where not l.recuperado and j.estado <> 'inactivo'
+         order by l.fecha_retorno_estimada asc nulls last, l.fecha asc`)
+    }
     if (metodo === 'PUT' && p[1] === 'lesiones-pendientes' && !p[2]) {
       if (!b?.evento_id || !b?.jugador_id) throw { codigo: 400, error: 'faltan_datos' }
       // La condición vive en una tabla u otra según el tipo de evento
