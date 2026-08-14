@@ -357,6 +357,9 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
   const [evento, setEvento] = useState(eventoInicial)
   const [jugadores, setJugadores] = useState([])
   const [marcas, setMarcas] = useState({})
+  // golpeado/lesionado durante el evento; el modal se abre desde cada fila
+  const [condicion, setCondicion] = useState({})
+  const [condicionDe, setCondicionDe] = useState(null)
   const [staff, setStaff] = useState([])
   const [marcasStaff, setMarcasStaff] = useState({})
   const [cargando, setCargando] = useState(true)
@@ -373,8 +376,13 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
       ])
       setJugadores(js.filter((j) => j.estado !== 'inactivo'))
       const m = {}
-      for (const a of asis) m[a.jugador_id] = a.estado
+      const mc = {}
+      for (const a of asis) {
+        m[a.jugador_id] = a.estado
+        if (a.condicion) mc[a.jugador_id] = a.condicion
+      }
       setMarcas(m)
+      setCondicion(mc)
       setStaff(st.filter((s) => s.activo))
       const ms = {}
       for (const a of asisStaff) ms[a.staff_email] = a.estado
@@ -402,6 +410,43 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
     } catch {
       setMarcas((m) => ({ ...m, [jugadorId]: previo }))
       alert('No se pudo guardar la marca. Probá de nuevo.')
+    }
+  }
+
+  // Golpe o lesión durante el evento. Marca al jugador como presente (si se
+  // golpeó, estuvo) y guarda la condición; 'lesionado' queda además pendiente
+  // de seguimiento en la sección Jugadores.
+  async function marcarCondicion(jugadorId, nueva) {
+    const previa = condicion[jugadorId] || null
+    const previoEstado = marcas[jugadorId]
+    setCondicion((m) => {
+      const copia = { ...m }
+      if (nueva) copia[jugadorId] = nueva
+      else delete copia[jugadorId]
+      return copia
+    })
+    if (nueva) setMarcas((m) => ({ ...m, [jugadorId]: 'presente' }))
+    setCondicionDe(null)
+    try {
+      await api(`eventos/${evento.id}/asistencias`, {
+        method: 'PUT',
+        body: {
+          marcas: [{
+            jugador_id: jugadorId,
+            estado: nueva ? 'presente' : previoEstado || 'presente',
+            condicion: nueva,
+          }],
+        },
+      })
+    } catch {
+      setCondicion((m) => {
+        const copia = { ...m }
+        if (previa) copia[jugadorId] = previa
+        else delete copia[jugadorId]
+        return copia
+      })
+      setMarcas((m) => ({ ...m, [jugadorId]: previoEstado }))
+      alert('No se pudo guardar. Probá de nuevo.')
     }
   }
 
@@ -440,13 +485,18 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
   const suspension = suspensionEvento(evento)
 
   function descargarEvento() {
-    const titulo = evento.tipo === 'partido' ? 'partido' : 'entrenamiento'
+    const esPartido = evento.tipo === 'partido'
+    const titulo = esPartido ? 'partido' : 'entrenamiento'
+    // La columna de condición es del entrenamiento: en el partido se toma en
+    // la cancha y no viaja en esta pantalla.
+    const conCondicion = (fila, valor) => (esPartido ? fila : [...fila, valor])
     descargarCSV(`asistencia-${titulo}-${evento.fecha}.csv`, [
-      ['Jugador', 'Asistencia'],
-      ...jugadores.map((j) => [
-        nombreCompleto(j),
-        marcas[j.id] === 'presente' ? 'Presente' : 'Ausente',
-      ]),
+      conCondicion(['Jugador', 'Asistencia'], 'Condición'),
+      ...jugadores.map((j) => conCondicion(
+        [nombreCompleto(j), marcas[j.id] === 'presente' ? 'Presente' : 'Ausente'],
+        condicion[j.id] === 'lesionado' ? 'Lesionado'
+          : condicion[j.id] === 'golpeado' ? 'Golpeado' : '',
+      )),
       ['Staff', 'Asistencia'],
       ...staff.map((s) => [
         nombreStaff(s),
@@ -527,21 +577,41 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
           )}
           {jugadores.map((j) => {
             const presente = marcas[j.id] === 'presente'
+            const cond = condicion[j.id]
             return (
-              <button
-                key={j.id}
-                className="jugador-item compacto"
-                style={presente ? { borderLeft: '4px solid var(--ok)' } : { opacity: 0.65 }}
-                onClick={() => marcar(j.id)}
-              >
-                <div className="crece">
-                  <div style={{ fontWeight: 600 }}>{nombreCompleto(j)}</div>
-                  {j.estado === 'lesionado' && <span className="badge lesionado">lesionado</span>}
-                </div>
-                <span style={{ fontWeight: 800, color: presente ? 'var(--ok)' : 'var(--bad)' }}>
-                  {presente ? 'PRESENTE ✓' : 'AUSENTE'}
-                </span>
-              </button>
+              <div key={j.id} className="fila-asistencia">
+                <button
+                  className="jugador-item compacto crece"
+                  style={presente ? { borderLeft: '4px solid var(--ok)' } : { opacity: 0.65 }}
+                  onClick={() => marcar(j.id)}
+                >
+                  <div className="crece">
+                    <div style={{ fontWeight: 600 }}>{nombreCompleto(j)}</div>
+                    {j.estado === 'lesionado' && <span className="badge lesionado">lesionado</span>}
+                    {cond && (
+                      <div className="mini">
+                        {cond === 'lesionado'
+                          ? '🚑 lesionado · queda para seguimiento'
+                          : '🤕 golpeado'}
+                      </div>
+                    )}
+                  </div>
+                  <span style={{ fontWeight: 800, color: presente ? 'var(--ok)' : 'var(--bad)' }}>
+                    {presente ? 'PRESENTE ✓' : 'AUSENTE'}
+                  </span>
+                </button>
+                {/* En los partidos la condición se toma en la cancha, desde
+                    "Día de partido": ahí queda junto al bloque que jugó. */}
+                {evento.tipo !== 'partido' && (
+                  <button
+                    className={`btn ${cond ? 'peligro' : 'sec'} chico`}
+                    title="Se golpeó o se lesionó"
+                    onClick={() => setCondicionDe(j)}
+                  >
+                    🚑
+                  </button>
+                )}
+              </div>
             )
           })}
 
@@ -578,6 +648,39 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
             </>
           )}
         </>
+      )}
+
+      {condicionDe && (
+        <div className="modal-fondo" onClick={() => setCondicionDe(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="fila entre" style={{ marginBottom: 4 }}>
+              <h3>{nombreCompleto(condicionDe)}</h3>
+              <button className="btn sec chico" onClick={() => setCondicionDe(null)}>Cerrar</button>
+            </div>
+            <p className="mini" style={{ marginBottom: 10 }}>¿Cómo terminó el entrenamiento?</p>
+            {[
+              { valor: null, titulo: '✓ En condiciones', detalle: 'Terminó bien, sin golpes.' },
+              { valor: 'golpeado', titulo: '🤕 Golpeado', detalle: 'Se golpeó y paró, pero no hace falta seguimiento.' },
+              {
+                valor: 'lesionado',
+                titulo: '🚑 Lesionado',
+                detalle: 'Queda como recordatorio en Jugadores para cargarle la lesión en la ficha.',
+              },
+            ].map((op) => {
+              const actual = (condicion[condicionDe.id] || null) === op.valor
+              return (
+                <button
+                  key={op.titulo}
+                  className={`opcion-condicion${actual ? ' activa' : ''}`}
+                  onClick={() => marcarCondicion(condicionDe.id, op.valor)}
+                >
+                  <b>{op.titulo}{actual ? ' · actual' : ''}</b>
+                  <span className="mini">{op.detalle}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
       )}
     </div>
   )
