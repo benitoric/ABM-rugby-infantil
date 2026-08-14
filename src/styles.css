@@ -511,6 +511,10 @@ h3 { font-size: 1rem; }
 .aviso-lesion { border-left: 4px solid var(--bad); }
 .aviso-faltas { border-left: 4px solid var(--warn); }
 
+/* Historial de golpes y lesiones marcados en un evento (ficha del jugador) */
+.incidente { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+.incidente + .incidente { border-top: 1px solid var(--borde); }
+
 /* Fila de la toma de asistencia: el toque grande marca presente/ausente y el
    botón de al lado abre golpeado / lesionado. */
 .fila-asistencia { display: flex; align-items: center; gap: 6px; }

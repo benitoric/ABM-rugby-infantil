@@ -696,6 +696,26 @@ async function enrutar(metodo, p, b, req, url) {
       const documentos = await query(
         `select ${COLS_DOCUMENTO} from documentos where jugador_id = $1
          order by created_at`, [p[1]])
+      // Golpes y lesiones marcados en el momento: los del partido salen de la
+      // asistencia de la cancha y los del entrenamiento de la asistencia común.
+      // Quedan como historial aunque la lesión ya se haya cargado en la ficha.
+      const incidentes = await query(
+        `select * from (
+           select e.id as evento_id, e.fecha::text as fecha, e.tipo, ap.condicion,
+             (select string_agg(bl.rival, ' / ') from bloques bl
+              where bl.evento_id = e.id and bl.rival is not null) as rival
+           from asistencias_partido ap
+           join eventos e on e.id = ap.evento_id
+           where ap.jugador_id = $1 and ap.condicion is not null
+           union all
+           select e.id as evento_id, e.fecha::text as fecha, e.tipo, a.condicion,
+             null::text as rival
+           from asistencias a
+           join eventos e on e.id = a.evento_id
+           where a.jugador_id = $1 and a.condicion is not null
+             and e.tipo = 'entrenamiento'
+         ) t
+         order by fecha desc`, [p[1]])
       // Ausente por defecto: cuentan todos los eventos ya ocurridos en los que
       // se tomó asistencia; presente solo si tiene la marca explícita.
       const [tot] = await query(
@@ -730,7 +750,7 @@ async function enrutar(metodo, p, b, req, url) {
       const pct = (presentes, totales) =>
         totales ? Math.round((100 * presentes) / totales) : null
       return {
-        jugador, seguimientos, lesiones, evaluaciones, documentos,
+        jugador, seguimientos, lesiones, evaluaciones, documentos, incidentes,
         stats: {
           entrenamientos: pct(pres.ent, tot.ent),
           partidos: pct(pres.par, tot.par),
