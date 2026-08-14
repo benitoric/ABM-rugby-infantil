@@ -401,14 +401,32 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
   async function marcar(jugadorId) {
     const previo = marcas[jugadorId]
     const nuevo = previo === 'presente' ? 'ausente' : 'presente'
+    // Solo un presente puede estar golpeado o lesionado: al pasarlo a ausente
+    // se limpia la condición (si no, quedaría marcada sin forma de sacarla).
+    const previaCondicion = condicion[jugadorId] || null
+    const limpiarCondicion = nuevo === 'ausente' && previaCondicion
     setMarcas((m) => ({ ...m, [jugadorId]: nuevo }))
+    if (limpiarCondicion) {
+      setCondicion((m) => {
+        const copia = { ...m }
+        delete copia[jugadorId]
+        return copia
+      })
+    }
     try {
       await api(`eventos/${evento.id}/asistencias`, {
         method: 'PUT',
-        body: { marcas: [{ jugador_id: jugadorId, estado: nuevo }] },
+        body: {
+          marcas: [limpiarCondicion
+            ? { jugador_id: jugadorId, estado: nuevo, condicion: null }
+            : { jugador_id: jugadorId, estado: nuevo }],
+        },
       })
     } catch {
       setMarcas((m) => ({ ...m, [jugadorId]: previo }))
+      if (limpiarCondicion) {
+        setCondicion((m) => ({ ...m, [jugadorId]: previaCondicion }))
+      }
       alert('No se pudo guardar la marca. Probá de nuevo.')
     }
   }
@@ -600,9 +618,10 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
                     {presente ? 'PRESENTE ✓' : 'AUSENTE'}
                   </span>
                 </button>
-                {/* En los partidos la condición se toma en la cancha, desde
-                    "Día de partido": ahí queda junto al bloque que jugó. */}
-                {evento.tipo !== 'partido' && (
+                {/* Solo para los presentes: al ausente no se le puede haber
+                    golpeado nada. En los partidos la condición se toma en la
+                    cancha, desde "Día de partido". */}
+                {evento.tipo !== 'partido' && presente && (
                   <button
                     className={`btn ${cond ? 'peligro' : 'sec'} chico`}
                     title="Se golpeó o se lesionó"
