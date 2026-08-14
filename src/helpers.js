@@ -45,15 +45,15 @@ export function abrevAptitudes(j) {
 // los que puede ocupar (puede ser más de uno); la clasificación forward/
 // back/mixto se deriva de ahí.
 export const PUESTOS = [
-  { value: 'pilar', label: 'Pilar', abrev: 'Pil', tipo: 'forward' },
-  { value: 'hooker', label: 'Hooker', abrev: 'Hoo', tipo: 'forward' },
-  { value: 'segunda', label: 'Segunda línea', abrev: '2ª', tipo: 'forward' },
-  { value: 'octavo', label: 'Octavo', abrev: '8vo', tipo: 'forward' },
-  { value: 'medio_scrum', label: 'Medio scrum', abrev: 'MS', tipo: 'back' },
-  { value: 'apertura', label: 'Apertura', abrev: 'Ap', tipo: 'back' },
-  { value: 'centro', label: 'Centro', abrev: 'Ce', tipo: 'back' },
-  { value: 'wing', label: 'Wing', abrev: 'Wg', tipo: 'back' },
-  { value: 'fullback', label: 'Fullback', abrev: 'FB', tipo: 'back' },
+  { value: 'pilar', label: 'Pilar', plural: 'Pilares', abrev: 'Pil', tipo: 'forward' },
+  { value: 'hooker', label: 'Hooker', plural: 'Hookers', abrev: 'Hoo', tipo: 'forward' },
+  { value: 'segunda', label: 'Segunda línea', plural: 'Segundas líneas', abrev: '2ª', tipo: 'forward' },
+  { value: 'octavo', label: 'Octavo', plural: 'Octavos', abrev: '8vo', tipo: 'forward' },
+  { value: 'medio_scrum', label: 'Medio scrum', plural: 'Medios scrum', abrev: 'MS', tipo: 'back' },
+  { value: 'apertura', label: 'Apertura', plural: 'Aperturas', abrev: 'Ap', tipo: 'back' },
+  { value: 'centro', label: 'Centro', plural: 'Centros', abrev: 'Ce', tipo: 'back' },
+  { value: 'wing', label: 'Wing', plural: 'Wings', abrev: 'Wg', tipo: 'back' },
+  { value: 'fullback', label: 'Fullback', plural: 'Fullbacks', abrev: 'FB', tipo: 'back' },
 ]
 
 const TIPO_PUESTO = Object.fromEntries(PUESTOS.map((p) => [p.value, p.tipo]))

@@ -528,6 +528,27 @@ function ArmadoPartido({ partido }) {
       x.apellido.localeCompare(y.apellido))
   }, [jugadores])
 
+  // Los mismos jugadores partidos en secciones con el título de su puesto
+  const gruposPorPuesto = useMemo(() => {
+    const grupos = []
+    const visibles = porPuestoYJuego.filter((j) =>
+      confirmacion[j.id] === 'presente' || asignacion[j.id])
+    for (const j of visibles) {
+      const clave = puestoPrincipal(j) || 'sin'
+      const ultimo = grupos[grupos.length - 1]
+      if (ultimo?.clave === clave) {
+        ultimo.jugadores.push(j)
+        continue
+      }
+      grupos.push({
+        clave,
+        titulo: PUESTOS.find((pu) => pu.value === clave)?.plural || 'Sin puesto principal',
+        jugadores: [j],
+      })
+    }
+    return grupos
+  }, [porPuestoYJuego, confirmacion, asignacion])
+
   if (!listo) return <div className="vacio">Preparando bloques…</div>
 
   // En la solapa de cada bloque: presentes sobre convocados una vez tomada
@@ -673,10 +694,14 @@ function ArmadoPartido({ partido }) {
 
           {/* Solo los que confirmaron en la sección Asistencia (más los que ya
               estén asignados a un bloque, para no ocultar un armado hecho),
-              agrupados por puesto y de mejor a peor promedio de juego */}
-          {porPuestoYJuego
-            .filter((j) => confirmacion[j.id] === 'presente' || asignacion[j.id])
-            .map((j) => {
+              agrupados bajo el título de su puesto y de mejor a peor promedio
+              de juego */}
+          {gruposPorPuesto.map((g) => (
+            <div key={g.clave}>
+              <div className="mini puesto-grupo">
+                {g.titulo} ({g.jugadores.length})
+              </div>
+              {g.jugadores.map((j) => {
             const confirmado = confirmacion[j.id] === 'presente'
             const asignado = sugerencia
               ? sugerencia.asignacion[j.id] || null
@@ -718,7 +743,9 @@ function ArmadoPartido({ partido }) {
                 </div>
               </div>
             )
-          })}
+              })}
+            </div>
+          ))}
 
           <h3 style={{ marginTop: 16 }}>Staff a cargo</h3>
           <p className="mini">
