@@ -16,7 +16,11 @@ pantalla de inicio" del teléfono y queda como una app más).
    21:00) o **extra**, y cualquier evento se puede **suspender** indicando el
    motivo (clima, feriado u otro) y una nota libre. En los partidos la
    suspensión es por bloque: puede caerse uno y jugarse el otro. Lo suspendido
-   no cuenta para los porcentajes de asistencia.
+   no cuenta para los porcentajes de asistencia. Al tomar asistencia a un
+   entrenamiento se puede marcar a un jugador como **golpeado** o
+   **lesionado**; el lesionado queda como recordatorio en Jugadores para
+   cargarle la lesión en la ficha (en los partidos eso se marca en la cancha,
+   desde "Día de partido").
 4. **Bloques del día de partido**: asignación de los presentes a los bloques
    que presenta el club (normalmente 2, pero al crear el partido se puede
    elegir de 1 a 6). Los campos de rival y lugar de juego autocompletan con

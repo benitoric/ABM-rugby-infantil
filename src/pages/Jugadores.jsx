@@ -114,11 +114,11 @@ export default function Jugadores({ yo }) {
   }
 
   // Saca al jugador del recordatorio de lesiones sin tocar el registro del
-  // partido: para cuando la lesión ya estaba cargada o no requiere seguimiento.
+  // evento: para cuando la lesión ya estaba cargada o no requiere seguimiento.
   async function marcarRevisada(l) {
     if (!confirm(
       `¿Sacar a ${l.apellido}, ${l.nombre} del recordatorio?\n\n` +
-      'Lo que quedó registrado del partido no se toca.'
+      'Lo que quedó registrado del evento no se toca.'
     )) return
     await api('stats/lesiones-pendientes', {
       method: 'PUT',
@@ -203,8 +203,8 @@ export default function Jugadores({ yo }) {
         <div className="tarjeta aviso-lesion">
           <h3>
             🚑 {lesionesPendientes.length === 1
-              ? 'Un jugador se lesionó en un partido'
-              : `${lesionesPendientes.length} jugadores se lesionaron en partidos`}
+              ? 'Un jugador se lesionó'
+              : `${lesionesPendientes.length} jugadores se lesionaron`}
           </h3>
           <p className="mini" style={{ margin: '4px 0 8px' }}>
             Tocá cada nombre para cargar la lesión en su ficha y hacerle el
@@ -216,7 +216,9 @@ export default function Jugadores({ yo }) {
               <button className="asignado-item crece" onClick={() => setFichaDe(l.jugador_id)}>
                 <span className="crece">{l.apellido}, {l.nombre}</span>
                 <span className="mini">
-                  {fechaCompacta(l.fecha)}{l.rival ? ` vs ${l.rival}` : ''} →
+                  {fechaCompacta(l.fecha)}
+                  {l.tipo === 'entrenamiento' ? ' · entrenamiento' : ''}
+                  {l.rival ? ` vs ${l.rival}` : ''} →
                 </span>
               </button>
               <button

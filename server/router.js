@@ -966,31 +966,50 @@ async function enrutar(metodo, p, b, req, url) {
          group by j.id, j.nombre, j.apellido
          order by tiempos, j.apellido, j.nombre`, [anio])
     }
-    // Lesionados durante un partido que todavía no tienen la lesión cargada
-    // en su ficha: alimentan el recordatorio de seguimiento en Jugadores.
+    // Lesionados en un partido o en un entrenamiento que todavía no tienen la
+    // lesión cargada en su ficha: alimentan el recordatorio de seguimiento en
+    // Jugadores. El partido guarda la condición en asistencias_partido (la que
+    // toma el staff en la cancha) y el entrenamiento en asistencias.
     if (metodo === 'GET' && p[1] === 'lesiones-pendientes') {
       return query(
-        `select j.id as jugador_id, j.nombre, j.apellido,
-           e.fecha::text as fecha, e.id as evento_id,
-           (select string_agg(bl.rival, ' / ') from bloques bl
-            where bl.evento_id = e.id and bl.rival is not null) as rival
-         from asistencias_partido ap
-         join jugadores j on j.id = ap.jugador_id
-         join eventos e on e.id = ap.evento_id
-         where ap.condicion = 'lesionado' and j.estado <> 'inactivo'
-           and not ap.lesion_atendida
-           and not exists (
-             select 1 from lesiones l
-             where l.jugador_id = ap.jugador_id and l.fecha >= e.fecha)
-         order by e.fecha desc, j.apellido, j.nombre`)
+        `select * from (
+           select j.id as jugador_id, j.nombre, j.apellido,
+             e.fecha::text as fecha, e.id as evento_id, e.tipo,
+             (select string_agg(bl.rival, ' / ') from bloques bl
+              where bl.evento_id = e.id and bl.rival is not null) as rival
+           from asistencias_partido ap
+           join jugadores j on j.id = ap.jugador_id
+           join eventos e on e.id = ap.evento_id
+           where ap.condicion = 'lesionado' and j.estado <> 'inactivo'
+             and not ap.lesion_atendida
+             and not exists (
+               select 1 from lesiones l
+               where l.jugador_id = ap.jugador_id and l.fecha >= e.fecha)
+           union all
+           select j.id as jugador_id, j.nombre, j.apellido,
+             e.fecha::text as fecha, e.id as evento_id, e.tipo, null::text as rival
+           from asistencias a
+           join jugadores j on j.id = a.jugador_id
+           join eventos e on e.id = a.evento_id
+           where a.condicion = 'lesionado' and e.tipo = 'entrenamiento'
+             and j.estado <> 'inactivo' and not a.lesion_atendida
+             and not exists (
+               select 1 from lesiones l
+               where l.jugador_id = a.jugador_id and l.fecha >= e.fecha)
+         ) t
+         order by fecha desc, apellido, nombre`)
     }
     // "Ya lo revisé": saca al jugador del recordatorio sin tocar lo que quedó
     // registrado del partido. Sirve cuando la lesión ya estaba cargada de
     // antes o cuando el staff decide que no hace falta hacerle seguimiento.
     if (metodo === 'PUT' && p[1] === 'lesiones-pendientes' && !p[2]) {
       if (!b?.evento_id || !b?.jugador_id) throw { codigo: 400, error: 'faltan_datos' }
+      // La condición vive en una tabla u otra según el tipo de evento
+      const [ev] = await query('select tipo from eventos where id = $1', [b.evento_id])
+      if (!ev) throw { codigo: 404, error: 'no_existe' }
+      const tabla = ev.tipo === 'partido' ? 'asistencias_partido' : 'asistencias'
       await query(
-        `update asistencias_partido set lesion_atendida = $1
+        `update ${tabla} set lesion_atendida = $1
          where evento_id = $2 and jugador_id = $3`,
         [b.atendida !== false, b.evento_id, b.jugador_id])
       return { ok: true }
@@ -1150,23 +1169,38 @@ async function enrutar(metodo, p, b, req, url) {
     }
     if (p[2] === 'asistencias' && p[1]) {
       if (metodo === 'GET') {
-        return query('select jugador_id, estado from asistencias where evento_id = $1', [p[1]])
+        return query(
+          'select jugador_id, estado, condicion from asistencias where evento_id = $1', [p[1]])
       }
       if (metodo === 'PUT') {
-        // b.marcas: [{jugador_id, estado|null}] — null borra la marca
+        // b.marcas: [{jugador_id, estado|null, condicion?}] — estado null borra
+        // la marca; condicion (golpe o lesión en el entrenamiento) solo se toca
+        // si viene en el objeto.
         for (const m of b.marcas || []) {
           if (m.estado === null) {
             await query('delete from asistencias where evento_id = $1 and jugador_id = $2',
               [p[1], m.jugador_id])
-          } else {
-            if (!['presente', 'ausente'].includes(m.estado)) {
-              throw { codigo: 400, error: 'estado_invalido' }
-            }
+            continue
+          }
+          if (!['presente', 'ausente'].includes(m.estado)) {
+            throw { codigo: 400, error: 'estado_invalido' }
+          }
+          if (!('condicion' in m)) {
             await query(
               `insert into asistencias (evento_id, jugador_id, estado) values ($1,$2,$3)
                on conflict (evento_id, jugador_id) do update set estado = excluded.estado`,
               [p[1], m.jugador_id, m.estado])
+            continue
           }
+          const cond = m.condicion || null
+          if (cond && !['golpeado', 'lesionado'].includes(cond)) {
+            throw { codigo: 400, error: 'condicion_invalida' }
+          }
+          await query(
+            `insert into asistencias (evento_id, jugador_id, estado, condicion) values ($1,$2,$3,$4)
+             on conflict (evento_id, jugador_id)
+             do update set estado = excluded.estado, condicion = excluded.condicion`,
+            [p[1], m.jugador_id, m.estado, cond])
         }
         return { ok: true }
       }

@@ -33,8 +33,8 @@ async function inicializar() {
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
     `select exists (select 1 from information_schema.columns
-       where table_schema = 'public' and table_name = 'asistencias_partido'
-         and column_name = 'lesion_atendida') as aplicadas`)
+       where table_schema = 'public' and table_name = 'asistencias'
+         and column_name = 'condicion') as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -178,6 +178,14 @@ export async function migrar(pool) {
   await pool.query('alter table asistencias_partido drop constraint if exists asistencias_partido_condicion_check')
   await pool.query(`alter table asistencias_partido add constraint asistencias_partido_condicion_check
     check (condicion in ('golpeado','lesionado'))`)
+  // Golpeados y lesionados durante un entrenamiento (mismos valores que en
+  // el partido, sobre la asistencia común)
+  await pool.query('alter table asistencias add column if not exists condicion text')
+  await pool.query('alter table asistencias drop constraint if exists asistencias_condicion_check')
+  await pool.query(`alter table asistencias add constraint asistencias_condicion_check
+    check (condicion in ('golpeado','lesionado'))`)
+  await pool.query(`alter table asistencias
+    add column if not exists lesion_atendida boolean not null default false`)
   // Staff a cargo de cada bloque, con su presencia efectiva del día
   await pool.query(`create table if not exists bloque_staff (
     bloque_id uuid not null references bloques(id) on delete cascade,
