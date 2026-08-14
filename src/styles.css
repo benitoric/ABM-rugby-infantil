@@ -852,3 +852,14 @@ details.tarjeta summary {
   font-size: 1rem;
 }
 .puesto-btn.apto { background: var(--dorado); border-color: var(--dorado); color: var(--primario-oscuro); }
+
+/* Título de cada puesto en el armado de bloques */
+.puesto-grupo {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--primario);
+  margin: 14px 0 4px;
+  padding-bottom: 3px;
+  border-bottom: 2px solid var(--dorado);
+}
