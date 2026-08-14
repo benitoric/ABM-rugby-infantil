@@ -136,6 +136,7 @@ function ArmadoPartido({ partido }) {
   const [sugerencia, setSugerencia] = useState(null)
   const [califs, setCalifs] = useState(null)
   const [publicando, setPublicando] = useState(false)
+  const [vistaPrevia, setVistaPrevia] = useState(false)
   const [listo, setListo] = useState(false)
   const [sugerencias, recargarSugerencias] = useSugerencias()
 
@@ -623,20 +624,35 @@ function ArmadoPartido({ partido }) {
               van (sección Asistencia). Tocá de nuevo el mismo botón para
               sacarlo del bloque.
             </p>
-            {!sugerencia && (
-              <div className="fila" style={{ gap: 6 }}>
-                {/* El reparto automático equilibra dos bloques; con más, el
-                    armado se hace a mano */}
-                {bloques.length === 2 ? (
-                  <button className="btn chico" onClick={sugerirBloques}>✨ Sugerir armado</button>
-                ) : (
-                  <span className="mini">Armado automático: solo con 2 bloques.</span>
-                )}
-                <button className="btn sec chico" onClick={limpiarBloques}>🧹 Limpiar</button>
-                <button className="btn sec chico" onClick={() => setPublicando(true)}>📣 Publicar</button>
-              </div>
-            )}
+            <div className="fila" style={{ gap: 6, flexWrap: 'wrap' }}>
+              {!sugerencia && (
+                <>
+                  {/* El reparto automático equilibra dos bloques; con más, el
+                      armado se hace a mano */}
+                  {bloques.length === 2 ? (
+                    <button className="btn chico" onClick={sugerirBloques}>✨ Sugerir armado</button>
+                  ) : (
+                    <span className="mini">Armado automático: solo con 2 bloques.</span>
+                  )}
+                  <button className="btn sec chico" onClick={limpiarBloques}>🧹 Limpiar</button>
+                  <button className="btn sec chico" onClick={() => setPublicando(true)}>📣 Publicar</button>
+                </>
+              )}
+              {/* También sirve con una propuesta abierta: se ve cómo quedaría */}
+              <button className="btn sec chico" onClick={() => setVistaPrevia(true)}>👁 Vista previa</button>
+            </div>
           </div>
+
+          {vistaPrevia && (
+            <VistaPreviaBloques
+              bloques={bloques}
+              jugadores={jugadores}
+              asignacion={sugerencia ? sugerencia.asignacion : asignacion}
+              propuesta={!!sugerencia}
+              juegoDe={juegoDe}
+              onCerrar={() => setVistaPrevia(false)}
+            />
+          )}
 
           {publicando && (
             <Publicacion
@@ -1057,6 +1073,91 @@ function ControlAsistencia({
         })
       })()}
     </>
+  )
+}
+
+// Vista previa de cómo quedaron los bloques: cada uno con sus forwards y sus
+// backs (según el puesto principal), del mejor al peor promedio de juego. Es
+// la mirada de control antes de aplicar o publicar.
+function VistaPreviaBloques({ bloques, jugadores, asignacion, propuesta, juegoDe, onCerrar }) {
+  const tipoDe = (j) => {
+    const principal = puestoPrincipal(j)
+    const pu = PUESTOS.find((x) => x.value === principal)
+    if (pu) return pu.tipo
+    // sin principal elegido, al menos ubica la línea por la posición derivada
+    const t = tipoJugador(j)
+    if (t === 'Forward') return 'forward'
+    if (t === 'Back') return 'back'
+    return 'sin'
+  }
+  const promedio = (lista) => {
+    const notas = lista.map(juegoDe).filter((n) => n != null)
+    return notas.length ? notas.reduce((s, n) => s + n, 0) / notas.length : null
+  }
+  const LINEAS = [
+    { clave: 'forward', label: 'Forwards' },
+    { clave: 'back', label: 'Backs' },
+    { clave: 'sin', label: 'Sin puesto definido' },
+  ]
+
+  return (
+    <div className="modal-fondo" onClick={onCerrar}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="fila entre" style={{ marginBottom: 8 }}>
+          <h3>👁 Vista previa {propuesta ? 'de la propuesta' : 'de los bloques'}</h3>
+          <button className="btn sec chico" onClick={onCerrar}>Cerrar</button>
+        </div>
+        {bloques.map((bl) => {
+          const del = jugadores.filter((j) => asignacion[j.id] === bl.id)
+          const prom = promedio(del)
+          return (
+            <div key={bl.id} className="tarjeta" style={{ marginBottom: 10 }}>
+              <div className="fila entre">
+                <b>
+                  {bl.nombre || `Bloque ${bl.numero}`}
+                  {bl.rival ? ` vs ${bl.rival}` : ''}
+                </b>
+                <span className="mini">
+                  {del.length} jugadores{prom != null ? ` · juego ★${prom.toFixed(1)}` : ''}
+                </span>
+              </div>
+              {!del.length && <p className="mini">Sin jugadores asignados.</p>}
+              {LINEAS.map((linea) => {
+                const dela = del
+                  .filter((j) => tipoDe(j) === linea.clave)
+                  .sort((x, y) => (juegoDe(y) ?? 0) - (juegoDe(x) ?? 0) ||
+                    x.apellido.localeCompare(y.apellido))
+                if (!dela.length) return null
+                const promLinea = promedio(dela)
+                return (
+                  <div key={linea.clave}>
+                    <div className="mini puesto-grupo">
+                      {linea.label} ({dela.length})
+                      {promLinea != null ? ` · ★${promLinea.toFixed(1)}` : ''}
+                    </div>
+                    {dela.map((j) => (
+                      <div key={j.id} className="fila entre" style={{ padding: '3px 0' }}>
+                        <span style={{ fontSize: '0.9rem' }}>
+                          {nombreCompleto(j)}
+                          <span className="mini"> · {etiquetaPuestos(j) || 'sin puesto'}</span>
+                        </span>
+                        <b className="mini">
+                          {juegoDe(j) != null ? `★${juegoDe(j).toFixed(1)}` : '—'}
+                        </b>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })}
+        <p className="mini">
+          Agrupados por la línea del puesto principal y ordenados por promedio
+          de juego. El ★ de cada título es el promedio de esa línea.
+        </p>
+      </div>
+    </div>
   )
 }
 
