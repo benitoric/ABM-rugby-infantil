@@ -503,6 +503,10 @@ async function exigirTiempoAbierto(tiempoId) {
 
 // Un evento cuenta para las estadísticas si no está suspendido del todo: los
 // partidos con un solo bloque suspendido siguen contando (el otro se jugó).
+// A partir de cuántas faltas seguidas a entrenamientos se avisa en la
+// pantalla de inicio ("más de 3" = se avisa recién con la cuarta).
+const FALTAS_SEGUIDAS_AVISO = 3
+
 function eventoVigente(alias) {
   return `(not ${alias}.suspendido and (
     not exists (select 1 from bloques bl where bl.evento_id = ${alias}.id)
@@ -1027,6 +1031,44 @@ async function enrutar(metodo, p, b, req, url) {
          where evento_id = $2 and jugador_id = $3`,
         [b.atendida !== false, b.evento_id, b.jugador_id])
       return { ok: true }
+    }
+    // Jugadores activos que vienen faltando a entrenamientos seguidos. Se
+    // miran los entrenamientos ya ocurridos, no suspendidos y con asistencia
+    // tomada; ausente por defecto, así que solo corta la racha una marca
+    // explícita de presente. No cuentan los anteriores al alta del jugador.
+    if (metodo === 'GET' && p[1] === 'ausencias-seguidas') {
+      return query(
+        `with entrenamientos as (
+           select e.id, e.fecha, e.created_at as creado
+           from eventos e
+           where e.tipo = 'entrenamiento' and e.fecha <= current_date
+             and ${eventoVigente('e')}
+             and exists (select 1 from asistencias a where a.evento_id = e.id)
+         ),
+         marcas as (
+           select j.id as jugador_id, en.fecha,
+             (a.estado = 'presente') as fue,
+             row_number() over (partition by j.id order by en.fecha desc, en.creado desc) as pos
+           from jugadores j
+           join entrenamientos en on en.fecha >= j.created_at::date
+           left join asistencias a on a.evento_id = en.id and a.jugador_id = j.id
+           where j.estado = 'activo'
+         ),
+         ultimo_presente as (
+           select jugador_id, min(pos) as pos from marcas where fue group by jugador_id
+         )
+         select m.jugador_id, j.nombre, j.apellido,
+           count(*)::int as faltas,
+           min(m.fecha)::text as desde,
+           max(m.fecha)::text as hasta
+         from marcas m
+         join jugadores j on j.id = m.jugador_id
+         left join ultimo_presente u on u.jugador_id = m.jugador_id
+         where u.pos is null or m.pos < u.pos
+         group by m.jugador_id, j.nombre, j.apellido
+         having count(*) > $1
+         order by count(*) desc, j.apellido, j.nombre`,
+        [FALTAS_SEGUIDAS_AVISO])
     }
     if (metodo === 'GET' && p[1] === 'asistencia') {
       // Ausente por defecto: el total es la cantidad de eventos ya ocurridos
