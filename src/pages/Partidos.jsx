@@ -5,6 +5,7 @@ import {
   etiquetaPartido, etiquetaPuestos, fechaCorta, FORMACION, nombreCompleto, nombreStaff,
   puedeJugarDe, puestoFormacion, puestoPrincipal, tipoJugador, PUESTOS,
 } from '../helpers.js'
+import { promediosResumen, valoresConsolidados } from '../evaluacion.js'
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 
 const MAX_TIEMPOS = 6
@@ -505,6 +506,28 @@ function ArmadoPartido({ partido }) {
       x.nombre.localeCompare(y.nombre))
   }, [jugadores, confirmacion])
 
+  // Promedio de juego de la última evaluación: es el que ordena el plantel y
+  // el que el servidor usa para balancear los bloques
+  const juegoDe = (j) => promediosResumen(valoresConsolidados({
+    valores: j.ultima_evaluacion_valores,
+    valores_revisor: j.ultima_evaluacion_revisor,
+  })).juego
+
+  // Para armar bloques conviene ver el plantel por puesto y, dentro de cada
+  // puesto, del mejor al peor promedio de juego: así se reparte de a pares.
+  // Los puestos van en el orden de la formación (1 → 15) y los que todavía no
+  // tienen principal elegido quedan al final.
+  const porPuestoYJuego = useMemo(() => {
+    const rango = (j) => {
+      const i = PUESTOS.findIndex((pu) => pu.value === puestoPrincipal(j))
+      return i < 0 ? PUESTOS.length : i
+    }
+    return [...jugadores].sort((x, y) =>
+      rango(x) - rango(y) ||
+      (juegoDe(y) ?? 0) - (juegoDe(x) ?? 0) ||
+      x.apellido.localeCompare(y.apellido))
+  }, [jugadores])
+
   if (!listo) return <div className="vacio">Preparando bloques…</div>
 
   // En la solapa de cada bloque: presentes sobre convocados una vez tomada
@@ -649,8 +672,9 @@ function ArmadoPartido({ partido }) {
           )}
 
           {/* Solo los que confirmaron en la sección Asistencia (más los que ya
-              estén asignados a un bloque, para no ocultar un armado hecho) */}
-          {ordenados
+              estén asignados a un bloque, para no ocultar un armado hecho),
+              agrupados por puesto y de mejor a peor promedio de juego */}
+          {porPuestoYJuego
             .filter((j) => confirmacion[j.id] === 'presente' || asignacion[j.id])
             .map((j) => {
             const confirmado = confirmacion[j.id] === 'presente'
@@ -668,7 +692,10 @@ function ArmadoPartido({ partido }) {
                     {confirmado ? 'Confirmó que va' : (confirmacion[j.id] === 'ausente' ? '⚠️ Avisó que no va' : '⚠️ Sin confirmar')}
                     {j.estado === 'lesionado' ? ' · 🤕 lesionado' : ''}
                     {abrevAptitudes(j) ? ` · ${abrevAptitudes(j)}` : ''}
-                    {califs?.[j.id] !== undefined && ` · juego ★${califs[j.id].toFixed(1)}`}
+                    {/* el promedio de juego es el que ordena y el que balancea */}
+                    {juegoDe(j) != null
+                      ? ` · juego ★${juegoDe(j).toFixed(1)}`
+                      : ' · sin evaluar'}
                   </div>
                 </div>
                 <div className="bloque-botones">
