@@ -14,6 +14,8 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
   const [seguimientos, setSeguimientos] = useState([])
   const [evaluaciones, setEvaluaciones] = useState([])
   const [lesiones, setLesiones] = useState([])
+  // Golpes y lesiones marcados en un entrenamiento o partido
+  const [incidentes, setIncidentes] = useState([])
   const [documentos, setDocumentos] = useState([])
   const [stats, setStats] = useState(null)
   const [editando, setEditando] = useState(false)
@@ -29,10 +31,20 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
     setSeguimientos(d.seguimientos)
     setEvaluaciones(d.evaluaciones || [])
     setLesiones(d.lesiones || [])
+    setIncidentes(d.incidentes || [])
     setDocumentos(d.documentos || [])
     setStats(d.stats)
   }
   useEffect(() => { cargar() }, [jugadorId])
+
+  // El formulario de lesión vive arriba, en su sección: al abrirlo desde el
+  // historial de golpes hay que llevar la vista hasta él.
+  const abierto = !!nuevaLesion
+  useEffect(() => {
+    if (abierto) {
+      document.getElementById('form-lesion')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [abierto])
 
   async function guardarSeguimiento(e) {
     e.preventDefault()
@@ -277,6 +289,7 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
 
       {nuevaLesion && (
         <form
+          id="form-lesion"
           className="tarjeta"
           onSubmit={async (e) => {
             e.preventDefault()
@@ -355,6 +368,51 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
           </div>
         </div>
       ))}
+
+      {incidentes.length > 0 && (
+        <>
+          <h3>Golpes y lesiones en la cancha</h3>
+          <p className="mini">
+            Cada vez que se lo marcó golpeado o lesionado durante un
+            entrenamiento o un partido. Queda como historial aunque la lesión ya
+            esté registrada arriba.
+          </p>
+          <div className="tarjeta">
+            {incidentes.map((inc) => {
+              // Se considera registrada si hay una lesión cargada de esa fecha
+              // en adelante (mismo criterio que el recordatorio de Jugadores)
+              const registrada = lesiones.some((l) => l.fecha >= inc.fecha)
+              const donde = inc.tipo === 'partido'
+                ? `Partido${inc.rival ? ` vs ${inc.rival}` : ''}`
+                : 'Entrenamiento'
+              return (
+                <div key={`${inc.evento_id}-${inc.fecha}`} className="incidente">
+                  <div className="crece">
+                    <b style={{ fontSize: '0.9rem' }}>
+                      {inc.condicion === 'lesionado' ? '🚑 Lesionado' : '🤕 Golpeado'}
+                    </b>
+                    <div className="mini">{fechaCorta(inc.fecha)} · {donde}</div>
+                  </div>
+                  {inc.condicion === 'lesionado' && (registrada ? (
+                    <span className="mini" style={{ color: 'var(--ok)' }}>lesión registrada ✓</span>
+                  ) : (
+                    <button
+                      className="btn sec chico"
+                      onClick={() => setNuevaLesion({
+                        fecha: inc.fecha,
+                        descripcion: `Lesión en ${inc.tipo === 'partido' ? 'el partido' : 'el entrenamiento'} del ${fechaCorta(inc.fecha)}: `,
+                        fecha_retorno_estimada: '',
+                      })}
+                    >
+                      Registrar
+                    </button>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
 
       <div className="tarjeta">
         <h3>Zona peligrosa</h3>
