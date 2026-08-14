@@ -223,7 +223,7 @@ export default function Jugadores({ yo }) {
               : `${faltadores.length} jugadores vienen faltando a los entrenamientos`}
           </h3>
           <p className="mini" style={{ margin: '4px 0 8px' }}>
-            Activos que faltaron a más de 3 entrenamientos seguidos. Se cuentan
+            Activos que faltaron a 3 o más entrenamientos seguidos. Se cuentan
             los entrenamientos con asistencia tomada, sin los suspendidos. Tocá
             el nombre para abrir su ficha.
           </p>

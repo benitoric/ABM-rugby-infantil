@@ -503,8 +503,8 @@ async function exigirTiempoAbierto(tiempoId) {
 
 // Un evento cuenta para las estadísticas si no está suspendido del todo: los
 // partidos con un solo bloque suspendido siguen contando (el otro se jugó).
-// A partir de cuántas faltas seguidas a entrenamientos se avisa en la
-// pantalla de inicio ("más de 3" = se avisa recién con la cuarta).
+// Cuántas faltas seguidas a entrenamientos hacen falta para avisar en la
+// pantalla de inicio: con 3, el aviso salta ya en la tercera falta.
 const FALTAS_SEGUIDAS_AVISO = 3
 
 function eventoVigente(alias) {
@@ -1086,7 +1086,7 @@ async function enrutar(metodo, p, b, req, url) {
          left join ultimo_presente u on u.jugador_id = m.jugador_id
          where u.pos is null or m.pos < u.pos
          group by m.jugador_id, j.nombre, j.apellido
-         having count(*) > $1
+         having count(*) >= $1
          order by count(*) desc, j.apellido, j.nombre`,
         [FALTAS_SEGUIDAS_AVISO])
     }
