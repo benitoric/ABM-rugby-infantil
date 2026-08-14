@@ -489,6 +489,7 @@ h3 { font-size: 1rem; }
 .aviso-evaluar { border-left: 4px solid var(--dorado); }
 .aviso-revisar { border-left: 4px solid var(--info); }
 .aviso-lesion { border-left: 4px solid var(--bad); }
+.aviso-faltas { border-left: 4px solid var(--warn); }
 
 /* Fila de la toma de asistencia: el toque grande marca presente/ausente y el
    botón de al lado abre golpeado / lesionado. */

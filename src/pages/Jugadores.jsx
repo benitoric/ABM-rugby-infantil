@@ -43,6 +43,8 @@ export default function Jugadores({ yo }) {
   const [asign, setAsign] = useState(null)
   // Lesionados durante un partido sin la lesión cargada todavía en su ficha
   const [lesionesPendientes, setLesionesPendientes] = useState([])
+  // Activos que vienen faltando a varios entrenamientos seguidos
+  const [faltadores, setFaltadores] = useState([])
   const [autoEvaluar, setAutoEvaluar] = useState(false)
   const [revisar, setRevisar] = useState(null)
   const [repartiendo, setRepartiendo] = useState(false)
@@ -68,12 +70,14 @@ export default function Jugadores({ yo }) {
   }, [foto])
 
   async function cargar() {
-    const [lista, asignaciones, lesiones] = await Promise.all([
+    const [lista, asignaciones, lesiones, ausencias] = await Promise.all([
       api('jugadores'), api('asignaciones'), api('stats/lesiones-pendientes'),
+      api('stats/ausencias-seguidas'),
     ])
     setJugadores(lista)
     setAsign(asignaciones)
     setLesionesPendientes(lesiones)
+    setFaltadores(ausencias)
     setCargando(false)
   }
   useEffect(() => { cargar().catch(() => setCargando(false)) }, [])
@@ -198,6 +202,33 @@ export default function Jugadores({ yo }) {
           <button className="btn" onClick={() => setEditando({ ...VACIO })}>+ Nuevo</button>
         </div>
       </div>
+
+      {faltadores.length > 0 && (
+        <div className="tarjeta aviso-faltas">
+          <h3>
+            ⚠️ {faltadores.length === 1
+              ? 'Un jugador viene faltando a los entrenamientos'
+              : `${faltadores.length} jugadores vienen faltando a los entrenamientos`}
+          </h3>
+          <p className="mini" style={{ margin: '4px 0 8px' }}>
+            Activos que faltaron a más de 3 entrenamientos seguidos. Se cuentan
+            los entrenamientos con asistencia tomada, sin los suspendidos. Tocá
+            el nombre para abrir su ficha.
+          </p>
+          {faltadores.map((f) => (
+            <button
+              key={f.jugador_id}
+              className="asignado-item"
+              onClick={() => setFichaDe(f.jugador_id)}
+            >
+              <span className="crece">{f.apellido}, {f.nombre}</span>
+              <span className="mini">
+                <b>{f.faltas} faltas</b> · desde {fechaCompacta(f.desde)} →
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {lesionesPendientes.length > 0 && (
         <div className="tarjeta aviso-lesion">
