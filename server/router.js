@@ -1192,10 +1192,12 @@ async function enrutar(metodo, p, b, req, url) {
               [p[1], m.jugador_id, m.estado])
             continue
           }
-          const cond = m.condicion || null
-          if (cond && !['golpeado', 'lesionado'].includes(cond)) {
+          const pedida = m.condicion || null
+          if (pedida && !['golpeado', 'lesionado'].includes(pedida)) {
             throw { codigo: 400, error: 'condicion_invalida' }
           }
+          // Golpeado o lesionado solo tiene sentido en alguien que estuvo
+          const cond = m.estado === 'presente' ? pedida : null
           await query(
             `insert into asistencias (evento_id, jugador_id, estado, condicion) values ($1,$2,$3,$4)
              on conflict (evento_id, jugador_id)
