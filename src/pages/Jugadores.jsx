@@ -30,6 +30,16 @@ function SubPromedios({ proms, className = '' }) {
   )
 }
 
+// Cuánto falta para el alta estimada de una lesión abierta
+function estadoAlta(l) {
+  const d = l.dias_para_alta
+  if (d == null) return { clase: 'inactivo', texto: 'sin fecha de alta' }
+  if (d < 0) return { clase: 'lesionado', texto: `alta vencida hace ${-d} ${-d === 1 ? 'día' : 'días'}` }
+  if (d === 0) return { clase: 'medica-no', texto: 'vuelve hoy' }
+  if (d <= 7) return { clase: 'medica-no', texto: `faltan ${d} ${d === 1 ? 'día' : 'días'}` }
+  return { clase: 'activo', texto: `faltan ${d} días` }
+}
+
 export default function Jugadores({ yo }) {
   const [jugadores, setJugadores] = useState([])
   const [filtro, setFiltro] = useState('activo')
@@ -43,6 +53,7 @@ export default function Jugadores({ yo }) {
   const [asign, setAsign] = useState(null)
   // Lesionados durante un partido sin la lesión cargada todavía en su ficha
   const [lesionesPendientes, setLesionesPendientes] = useState([])
+  const [lesionados, setLesionados] = useState([])
   const [autoEvaluar, setAutoEvaluar] = useState(false)
   const [revisar, setRevisar] = useState(null)
   const [repartiendo, setRepartiendo] = useState(false)
@@ -68,12 +79,14 @@ export default function Jugadores({ yo }) {
   }, [foto])
 
   async function cargar() {
-    const [lista, asignaciones, lesiones] = await Promise.all([
+    const [lista, asignaciones, lesiones, enSeguimiento] = await Promise.all([
       api('jugadores'), api('asignaciones'), api('stats/lesiones-pendientes'),
+      api('stats/lesionados'),
     ])
     setJugadores(lista)
     setAsign(asignaciones)
     setLesionesPendientes(lesiones)
+    setLesionados(enSeguimiento)
     setCargando(false)
   }
   useEffect(() => { cargar().catch(() => setCargando(false)) }, [])
@@ -230,6 +243,31 @@ export default function Jugadores({ yo }) {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {lesionados.length > 0 && (
+        <div className="tarjeta seguimiento-lesiones">
+          <h3>🤕 En recuperación ({lesionados.length})</h3>
+          {lesionados.map((l) => {
+            const alta = estadoAlta(l)
+            return (
+              <button key={l.id} className="lesionado-item" onClick={() => setFichaDe(l.jugador_id)}>
+                <div className="crece" style={{ minWidth: 0 }}>
+                  <div className="fila entre" style={{ flexWrap: 'nowrap', gap: 6 }}>
+                    <b style={{ fontSize: '0.88rem' }}>{l.apellido}, {l.nombre}</b>
+                    <span className={`badge ${alta.clase}`}>{alta.texto}</span>
+                  </div>
+                  <div className="mini lesionado-detalle">{l.descripcion}</div>
+                  <div className="mini">
+                    Desde el {fechaCorta(l.fecha)} · {l.dias_lesionado === 0
+                      ? 'hoy'
+                      : `hace ${l.dias_lesionado} ${l.dias_lesionado === 1 ? 'día' : 'días'}`}
+                  </div>
+                </div>
+              </button>
+            )
+          })}
         </div>
       )}
 
