@@ -483,6 +483,22 @@ h3 { font-size: 1rem; }
   .app { padding-bottom: 0; }
   .contenido { padding: 0; gap: 6px; }
   .planilla th { background: #eee; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* Cada bloque arranca en su propia hoja y ningún cuadro se parte al medio */
+  .planilla-bloque + .planilla-bloque {
+    break-before: page;
+    page-break-before: always;
+  }
+  .planilla-seccion, .planilla table {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* Un título nunca queda solo al pie de la hoja */
+  .planilla h3, .planilla h4 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  /* Si algún cuadro igual no entra, el encabezado se repite en la hoja siguiente */
+  .planilla thead { display: table-header-group; }
 }
 
 /* ---------- aviso de evaluaciones asignadas ---------- */
