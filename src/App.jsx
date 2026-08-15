@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, getToken, setToken, onSesionExpirada } from './api.js'
+import { irA, leerHash, suscribir } from './navegacion.js'
 import Login from './pages/Login.jsx'
 import Jugadores from './pages/Jugadores.jsx'
 import Asistencia from './pages/Asistencia.jsx'
@@ -14,9 +15,18 @@ const TABS = [
   { id: 'staff', label: 'Staff', ico: '🧑‍🏫' },
 ]
 
+// La pestaña activa vive en el hash (#/jugadores, #/partidos/...): sobrevive
+// recargas y descartes de la PWA, y el botón "atrás" vuelve a la vista anterior
+const tabDeHash = () => {
+  const [t] = leerHash()
+  return TABS.some((x) => x.id === t) ? t : 'jugadores'
+}
+
 export default function App() {
   const [staff, setStaff] = useState(undefined) // undefined = cargando, null = sin sesión
-  const [tab, setTab] = useState('jugadores')
+  const [tab, setTab] = useState(tabDeHash)
+
+  useEffect(() => suscribir(() => setTab(tabDeHash())), [])
 
   useEffect(() => {
     onSesionExpirada(() => setStaff(null))
@@ -49,7 +59,9 @@ export default function App() {
           <button
             key={t.id}
             className={tab === t.id ? 'activo' : ''}
-            onClick={() => setTab(t.id)}
+            // Ya activa: no se pisa el hash, que puede tener la posición
+            // interna de la pestaña (partido y vista elegidos)
+            onClick={() => tab !== t.id && irA(t.id)}
           >
             <span className="ico">{t.ico}</span>
             {t.label}

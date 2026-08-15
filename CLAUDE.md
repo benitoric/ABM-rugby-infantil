@@ -22,6 +22,11 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
 - **Deploy**: Vercel (auto-deploy en cada push a `main`). Variables de entorno
   requeridas: `DATABASE_URL` (Neon) y `JWT_SECRET`.
 - Diagnóstico de despliegue: `GET /api/health`.
+- **Navegación**: la posición en la app vive en el hash de la URL
+  (`#/partidos/<id>/<vista>`) con respaldo en localStorage (`src/navegacion.js`),
+  para sobrevivir recargas y descartes de la PWA. La vista de partido se
+  refresca sola (`GET partido/:id/estado` al volver a la app y cada 15 s),
+  salteándose los refrescos mientras haya escrituras propias en vuelo.
 
 ## Desarrollo y pruebas
 
