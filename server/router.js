@@ -1358,6 +1358,43 @@ async function enrutar(metodo, p, b, req, url) {
 
   // ---------- día de partido: bloques y tiempos ----------
   if (p[0] === 'partido') {
+    if (metodo === 'GET' && p[1] && p[2] === 'estado') {
+      // Foto de solo lectura de todo lo que cambia durante un partido, en una
+      // sola llamada: la usa el refresco periódico del día de partido (varios
+      // staff cargando marcas a la vez). No crea bloques ni tiempos faltantes;
+      // de esa migración perezosa se encarga el GET principal al abrir la vista.
+      const eventoId = p[1]
+      const bloques = await query(
+        `select ${COLS_BLOQUE} from bloques where evento_id = $1 order by numero`, [eventoId])
+      const ids = bloques.map((x) => x.id)
+      const tiempos = await query(
+        `select id, bloque_id, numero, cerrado_en::text as cerrado_en, valoracion
+         from tiempos where bloque_id = any($1) order by numero`, [ids])
+      const asignaciones = await query(
+        'select bloque_id, jugador_id from bloque_jugadores where bloque_id = any($1)', [ids])
+      const staff = await query(
+        'select bloque_id, staff_email, presente from bloque_staff where bloque_id = any($1)', [ids])
+      const enCancha = await query(
+        `select tj.tiempo_id, tj.jugador_id, tj.puesto, tj.prestado from tiempo_jugadores tj
+         join tiempos t on t.id = tj.tiempo_id where t.bloque_id = any($1)`, [ids])
+      const confirmaciones = await query(
+        'select jugador_id, estado from asistencias where evento_id = $1', [eventoId])
+      const confirmacionesStaff = await query(
+        'select staff_email, estado from asistencias_staff where evento_id = $1', [eventoId])
+      const asistenciasDia = await query(
+        'select jugador_id, estado, tarde, condicion from asistencias_partido where evento_id = $1',
+        [eventoId])
+      return {
+        bloques,
+        tiempos,
+        asignaciones,
+        staff,
+        en_cancha: enCancha,
+        confirmaciones,
+        confirmaciones_staff: confirmacionesStaff,
+        asistencias_dia: asistenciasDia,
+      }
+    }
     if (metodo === 'GET' && p[1]) {
       const eventoId = p[1]
       // Partidos viejos, creados antes de que existieran los bloques: se les

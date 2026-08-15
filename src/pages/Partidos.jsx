@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { api } from '../api.js'
+import { api, escrituraEnVuelo, marcaEscrituras } from '../api.js'
+import { irA, leerHash, reponer, suscribir } from '../navegacion.js'
 import {
   abrevAptitudes, abrevPuestos, APTITUDES, DIFICULTADES, etiquetaDificultad, etiquetaMotivo,
   etiquetaPartido, etiquetaPuestos, fechaCorta, FORMACION, nombreCompleto, nombreStaff,
@@ -9,6 +10,24 @@ import { promediosResumen, valoresConsolidados } from '../evaluacion.js'
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 
 const MAX_TIEMPOS = 6
+
+// Cada cuánto se refresca solo el estado del partido mientras la vista está
+// abierta y visible (además del refresco inmediato al volver a la app)
+const INTERVALO_REFRESCO = 15000
+
+// Última posición dentro de la pestaña (partido y vista), para retomarla al
+// volver de otra pestaña, cuando el hash ya no la tiene
+const CLAVE_PARTIDO = 'rugby_m12_partido'
+
+function guardarPosicion(partidoId, vista) {
+  try {
+    localStorage.setItem(CLAVE_PARTIDO, [partidoId, vista].filter(Boolean).join('/'))
+  } catch { /* modo privado */ }
+}
+
+function posicionGuardada() {
+  try { return (localStorage.getItem(CLAVE_PARTIDO) || '').split('/') } catch { return [] }
+}
 
 export default function Partidos() {
   const [partidos, setPartidos] = useState([])
@@ -20,11 +39,30 @@ export default function Partidos() {
       const eventos = await api('eventos')
       const ps = eventos.filter((e) => e.tipo === 'partido')
       setPartidos(ps)
-      if (ps.length) setPartidoId(ps[0].id)
+      if (ps.length) {
+        // El partido a mostrar: el del hash (recarga o link directo), si no
+        // el último visitado (vuelta desde otra pestaña), si no el más nuevo
+        const [, hashId, hashVista] = leerHash()
+        const [guardadoId, guardadaVista] = posicionGuardada()
+        const elegido =
+          (ps.some((x) => x.id === hashId) && hashId) ||
+          (ps.some((x) => x.id === guardadoId) && guardadoId) ||
+          ps[0].id
+        const vista = elegido === hashId ? hashVista : (elegido === guardadoId ? guardadaVista : null)
+        reponer('partidos', elegido, vista)
+        setPartidoId(elegido)
+      }
       setCargando(false)
     }
     cargar().catch(() => setCargando(false))
   }, [])
+
+  // Botón "atrás" o link directo: el partido sale del hash
+  useEffect(() => suscribir(() => {
+    const [seccion, id] = leerHash()
+    if (seccion !== 'partidos' || !id) return
+    if (partidos.some((x) => x.id === id)) setPartidoId(id)
+  }), [partidos])
 
   if (cargando) return <div className="vacio">Cargando…</div>
 
@@ -57,7 +95,7 @@ export default function Partidos() {
             Cerrá los bloques para congelar la asistencia y los equipos.
           </p>
           {abiertos.map((p) => (
-            <button key={p.id} className="asignado-item" onClick={() => setPartidoId(p.id)}>
+            <button key={p.id} className="asignado-item" onClick={() => irA('partidos', p.id)}>
               <span className="crece">{fechaCorta(p.fecha)} · {etiquetaPartido(p)}</span>
               <span className="mini">
                 {(p.bloques || []).filter((bl) => !bl.suspendido && !bl.cerrado_en).map((bl) => `B${bl.numero}`).join(' y ')} →
@@ -69,7 +107,7 @@ export default function Partidos() {
 
       <div className="campo no-imprimir">
         <label>Partido</label>
-        <select value={partidoId} onChange={(e) => setPartidoId(e.target.value)}>
+        <select value={partidoId} onChange={(e) => irA('partidos', e.target.value)}>
           {partidos.map((p) => (
             <option key={p.id} value={p.id}>
               {fechaCorta(p.fecha)} · {etiquetaPartido(p)}
@@ -130,8 +168,9 @@ function ArmadoPartido({ partido }) {
   const [presenciaStaff, setPresenciaStaff] = useState({})
   const [tiempos, setTiempos] = useState([])
   const [enCancha, setEnCancha] = useState({})
-  const [vista, setVista] = useState('bloques')
   const [tiempoSel, setTiempoSel] = useState({})
+  const [actualizado, setActualizado] = useState(null)
+  const [refrescando, setRefrescando] = useState(false)
   const [editandoBloque, setEditandoBloque] = useState(null)
   const [sugerencia, setSugerencia] = useState(null)
   const [califs, setCalifs] = useState(null)
@@ -139,6 +178,80 @@ function ArmadoPartido({ partido }) {
   const [vistaPrevia, setVistaPrevia] = useState(false)
   const [listo, setListo] = useState(false)
   const [sugerencias, recargarSugerencias] = useSugerencias()
+
+  // La vista activa (armar / asistencia / bloque / planilla) vive en el hash:
+  // sobrevive recargas y descartes de la PWA, y "atrás" vuelve a la anterior
+  const [vistaHash, setVistaHash] = useState(() => leerHash()[2] || 'bloques')
+  useEffect(() => suscribir(() => setVistaHash(leerHash()[2] || 'bloques')), [])
+  const setVista = (v) => irA('partidos', partido.id, v === 'bloques' ? null : v)
+  // Un id que no es de este partido (hash viejo) cae a la vista inicial
+  const vista = ['bloques', 'presentes', 'planilla'].includes(vistaHash) ||
+    bloques.some((b) => b.id === vistaHash) ? vistaHash : 'bloques'
+
+  // Última posición, para retomarla al volver desde otra pestaña
+  useEffect(() => {
+    guardarPosicion(partido.id, vistaHash === 'bloques' ? null : vistaHash)
+  }, [partido.id, vistaHash])
+
+  // Vuelca al estado una foto del servidor (carga inicial o refresco). Lo que
+  // es local de esta pantalla (vista, propuesta abierta, selección de tiempo)
+  // no se toca; la selección de tiempo solo se completa donde falte.
+  function aplicarEstado(datos) {
+    setBloques(datos.bloques)
+    setTiempos(datos.tiempos)
+
+    const mConf = {}
+    for (const a of datos.confirmaciones) mConf[a.jugador_id] = a.estado
+    setConfirmacion(mConf)
+
+    const mAsis = {}
+    const mTarde = {}
+    const mCond = {}
+    for (const a of datos.asistencias_dia) {
+      mAsis[a.jugador_id] = a.estado
+      if (a.tarde) mTarde[a.jugador_id] = true
+      if (a.condicion) mCond[a.jugador_id] = a.condicion
+    }
+    setAsistencia(mAsis)
+    setTarde(mTarde)
+    setCondicion(mCond)
+
+    const mConfSf = {}
+    for (const a of datos.confirmaciones_staff) mConfSf[a.staff_email] = a.estado
+    setConfirmacionStaff(mConfSf)
+
+    const mAsig = {}
+    for (const f of datos.asignaciones) mAsig[f.jugador_id] = f.bloque_id
+    setAsignacion(mAsig)
+
+    const mAsigSf = {}
+    const mPresSf = {}
+    for (const f of datos.staff || []) {
+      mAsigSf[f.staff_email] = f.bloque_id
+      if (f.presente !== null) mPresSf[f.staff_email] = f.presente
+    }
+    setAsignacionStaff(mAsigSf)
+    setPresenciaStaff(mPresSf)
+
+    // enCancha: tiempo_id → { jugador_id → { puesto, prestado } }
+    const mCancha = {}
+    for (const f of datos.en_cancha) {
+      if (!mCancha[f.tiempo_id]) mCancha[f.tiempo_id] = {}
+      mCancha[f.tiempo_id][f.jugador_id] = { puesto: f.puesto, prestado: f.prestado }
+    }
+    setEnCancha(mCancha)
+
+    // Cada bloque con un tiempo seleccionado; el que ya tenía uno lo conserva
+    setTiempoSel((prev) => {
+      const sel = {}
+      for (const b of datos.bloques) {
+        const delBloque = datos.tiempos.filter((t) => t.bloque_id === b.id)
+        sel[b.id] = delBloque.some((t) => t.id === prev[b.id]) ? prev[b.id] : delBloque[0]?.id
+      }
+      return sel
+    })
+    setActualizado(Date.now())
+  }
 
   useEffect(() => {
     async function cargar() {
@@ -150,62 +263,47 @@ function ArmadoPartido({ partido }) {
         api(`eventos/${partido.id}/asistencias-staff`),
         api(`eventos/${partido.id}/asistencias-partido`),
       ])
-      setBloques(datos.bloques)
-      setTiempos(datos.tiempos)
       setJugadores(js.filter((j) => j.estado !== 'inactivo'))
       setStaff(sf.filter((s) => s.activo))
-
-      const mConf = {}
-      for (const a of conf) mConf[a.jugador_id] = a.estado
-      setConfirmacion(mConf)
-
-      const mAsis = {}
-      const mTarde = {}
-      const mCond = {}
-      for (const a of asisDia) {
-        mAsis[a.jugador_id] = a.estado
-        if (a.tarde) mTarde[a.jugador_id] = true
-        if (a.condicion) mCond[a.jugador_id] = a.condicion
-      }
-      setAsistencia(mAsis)
-      setTarde(mTarde)
-      setCondicion(mCond)
-
-      const mConfSf = {}
-      for (const a of confSf) mConfSf[a.staff_email] = a.estado
-      setConfirmacionStaff(mConfSf)
-
-      const mAsig = {}
-      for (const f of datos.asignaciones) mAsig[f.jugador_id] = f.bloque_id
-      setAsignacion(mAsig)
-
-      const mAsigSf = {}
-      const mPresSf = {}
-      for (const f of datos.staff || []) {
-        mAsigSf[f.staff_email] = f.bloque_id
-        if (f.presente !== null) mPresSf[f.staff_email] = f.presente
-      }
-      setAsignacionStaff(mAsigSf)
-      setPresenciaStaff(mPresSf)
-
-      // enCancha: tiempo_id → { jugador_id → { puesto, prestado } }
-      const mCancha = {}
-      for (const f of datos.en_cancha) {
-        if (!mCancha[f.tiempo_id]) mCancha[f.tiempo_id] = {}
-        mCancha[f.tiempo_id][f.jugador_id] = { puesto: f.puesto, prestado: f.prestado }
-      }
-      setEnCancha(mCancha)
-
-      const sel = {}
-      for (const b of datos.bloques) {
-        const primero = datos.tiempos.find((t) => t.bloque_id === b.id)
-        if (primero) sel[b.id] = primero.id
-      }
-      setTiempoSel(sel)
+      aplicarEstado({
+        ...datos,
+        confirmaciones: conf,
+        confirmaciones_staff: confSf,
+        asistencias_dia: asisDia,
+      })
       setListo(true)
     }
     cargar()
   }, [partido.id])
+
+  // Con varios staff cargando marcas a la vez, lo que toca otro tiene que
+  // aparecer solo: se trae una foto fresca al volver a la app y cada tanto.
+  // Nunca mientras haya cambios propios en vuelo, para no pisarlos.
+  async function refrescar(manual) {
+    if (!manual && (document.hidden || escrituraEnVuelo())) return
+    const marca = marcaEscrituras()
+    if (manual) setRefrescando(true)
+    try {
+      const datos = await api(`partido/${partido.id}/estado`)
+      // Si mientras viajaba el pedido salió una escritura propia, la foto
+      // puede no incluirla: se descarta y el próximo refresco trae todo
+      if (escrituraEnVuelo() || marcaEscrituras() !== marca) return
+      if (datos.bloques.length) aplicarEstado(datos)
+    } catch { /* sin señal: se reintenta en el próximo refresco */ }
+    finally { if (manual) setRefrescando(false) }
+  }
+
+  useEffect(() => {
+    if (!listo) return
+    const id = setInterval(() => refrescar(false), INTERVALO_REFRESCO)
+    // Volver a la app (desbloquear el teléfono, salir de WhatsApp): refresco al toque
+    const alVolver = () => { if (!document.hidden) refrescar(false) }
+    document.addEventListener('visibilitychange', alVolver)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', alVolver)
+    }
+  }, [listo])
 
   async function asignar(jugadorId, bloqueId) {
     const actual = asignacion[jugadorId]
@@ -581,6 +679,8 @@ function ArmadoPartido({ partido }) {
         </button>
       </div>
 
+      <Frescura fecha={actualizado} refrescando={refrescando} onRefrescar={() => refrescar(true)} />
+
       {vista === 'presentes' && (
         <ControlAsistencia
           bloques={bloques}
@@ -917,6 +1017,30 @@ function ArmadoPartido({ partido }) {
         )
       })}
     </>
+  )
+}
+
+// Cuándo se trajo la última foto del servidor, con refresco a pedido: la
+// referencia de frescura cuando varios staff cargan marcas a la vez
+function Frescura({ fecha, refrescando, onRefrescar }) {
+  // Tic periódico solo para que el "hace X s" no quede congelado
+  const [, setTic] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setTic((t) => t + 1), 5000)
+    return () => clearInterval(id)
+  }, [])
+  if (!fecha) return null
+  const seg = Math.max(0, Math.round((Date.now() - fecha) / 1000))
+  const texto = seg < 10 ? 'Actualizado recién'
+    : seg < 90 ? `Actualizado hace ${seg} s`
+    : `Actualizado hace ${Math.round(seg / 60)} min`
+  return (
+    <div className="fila entre no-imprimir" style={{ margin: '2px 0 6px' }}>
+      <span className="mini">🔄 {texto} · los cambios de otros aparecen solos</span>
+      <button className="btn sec chico" disabled={refrescando} onClick={onRefrescar}>
+        {refrescando ? 'Actualizando…' : 'Actualizar'}
+      </button>
+    </div>
   )
 }
 
