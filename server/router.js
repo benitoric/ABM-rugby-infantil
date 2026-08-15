@@ -72,9 +72,10 @@ const MAX_BLOQUES = 6
 // físicos que no entrenan (los roles salen de ROLES_STAFF en src/helpers.js).
 const ROLES_EVALUADORES = ['Cabeza de división', 'Entrenador', 'PF/entrenador']
 
-// Acciones reservadas: borrar evaluaciones. Las puede hacer la cabeza de
-// división y el dueño del repositorio (el email sembrado en db/schema.sql),
-// que conserva el permiso aunque cambie de rol o no tenga ninguno.
+// Acciones reservadas (borrar evaluaciones, reabrir un bloque cerrado): las
+// puede hacer la cabeza de división y el dueño del repositorio (el email
+// sembrado en db/schema.sql), que conserva todas las atribuciones aunque
+// cambie de rol o no tenga ninguno. Todo control por rol pasa por acá.
 const EMAIL_DUENIO = 'benitoric@gmail.com'
 function puedeAdministrar(yo) {
   return yo.email === EMAIL_DUENIO || yo.rol === 'Cabeza de división'
@@ -1710,14 +1711,14 @@ async function enrutar(metodo, p, b, req, url) {
       return filas[0]
     }
     if (metodo === 'POST' && p[1] === 'bloque-cerrar') {
-      // Cierra el bloque (cualquiera del staff) o lo reabre (solo la cabeza
-      // de división), dejando rastro de quién y cuándo.
+      // Cierra el bloque (cualquiera del staff) o lo reabre (solo quien puede
+      // administrar), dejando rastro de quién y cuándo.
       if (b.cerrado) {
         await query(
           `update bloques set cerrado_en = now(), cerrado_por = $2
            where id = $1 and cerrado_en is null`, [b.bloque_id, yo.email])
       } else {
-        if (yo.rol !== 'Cabeza de división') throw { codigo: 403, error: 'solo_cabeza' }
+        if (!puedeAdministrar(yo)) throw { codigo: 403, error: 'solo_cabeza' }
         await query(
           'update bloques set cerrado_en = null, cerrado_por = null where id = $1',
           [b.bloque_id])
