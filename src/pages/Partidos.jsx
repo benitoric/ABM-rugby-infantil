@@ -709,6 +709,7 @@ function ArmadoPartido({ partido }) {
           asignacion={asignacion}
           asistencia={asistencia}
           confirmacion={confirmacion}
+          condicion={condicion}
           tiempos={tiempos}
           enCancha={enCancha}
           staff={staff}
@@ -1613,7 +1614,7 @@ function BalanceBloques({ bloques, jugadores, asignacion, califs }) {
   )
 }
 
-function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, confirmacion = {}, tiempos, enCancha, staff = [], asignacionStaff = {} }) {
+function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, confirmacion = {}, condicion = {}, tiempos, enCancha, staff = [], asignacionStaff = {} }) {
   return (
     <div className="planilla">
       <div className="fila entre no-imprimir">
@@ -1731,8 +1732,80 @@ function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, co
                     </tbody>
                   </table>
                   </div>
+
+                  <div className="planilla-seccion">
+                    <h4>Ranking de tiempos jugados</h4>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Jugador</th>
+                          <th>Tiempos</th>
+                          <th>Prestados</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...delBloque]
+                          .sort((x, y) => jugados(y.id) - jugados(x.id) ||
+                            nombreCompleto(x).localeCompare(nombreCompleto(y), 'es'))
+                          .map((j, i, orden) => {
+                            // misma posición para los que empatan en tiempos
+                            const puesto = orden.findIndex((o) => jugados(o.id) === jugados(j.id)) + 1
+                            const prestados = tiemposBloque
+                              .filter((t) => (enCancha[t.id] || {})[j.id]?.prestado).length
+                            return (
+                              <tr key={j.id}>
+                                <td>{puesto}</td>
+                                <td>{nombreCompleto(j)}</td>
+                                <td><b>{jugados(j.id)}</b> de {tiemposBloque.length}</td>
+                                <td>{prestados || ''}</td>
+                              </tr>
+                            )
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
                 </>
               )}
+
+              <div className="planilla-seccion">
+                <h4>Golpeados y lesionados</h4>
+                {(() => {
+                  const tocados = delBloque.filter((j) => condicion[j.id])
+                  if (!tocados.length) {
+                    return <p className="mini">Sin golpeados ni lesionados.</p>
+                  }
+                  return (
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Jugador</th>
+                          <th>Qué pasó</th>
+                          <th>Tiempos jugados</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tocados.map((j) => (
+                          <tr key={j.id}>
+                            <td>{nombreCompleto(j)}</td>
+                            <td>
+                              {condicion[j.id] === 'lesionado'
+                                ? '🚑 Lesionado · requiere seguimiento'
+                                : '🤕 Golpeado · salió del juego'}
+                            </td>
+                            <td>{jugados(j.id)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )
+                })()}
+
+                <h4>Incidentes y situaciones a destacar</h4>
+                {bl.cronica
+                  ? <p style={{ whiteSpace: 'pre-wrap' }}>{bl.cronica}</p>
+                  : <p className="mini">Sin incidentes.</p>}
+              </div>
             </div>
           )
         })}
