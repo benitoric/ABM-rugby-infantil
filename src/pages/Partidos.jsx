@@ -2001,15 +2001,29 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
     await onReemplazar(tiempo.id, [])
   }
 
-  // Premisas que no se están cumpliendo en el tiempo a la vista
+  // El panel amarillo guarda SOLO lo que hay que arreglar antes de cerrar el
+  // tiempo: en un tiempo bien cargado queda vacío. Lo que es inevitable (un
+  // puesto forzado) se marca en su celda, y lo que es balance de la jornada
+  // (equidad y préstamos) se revisa al cerrar.
   const avisos = []
   if (tiempo) {
     if (enJuego.length !== 13) {
-      avisos.push(`Hay ${enJuego.length} jugadores en cancha: deberían ser 13.`)
+      const faltan = FORMACION.filter((f) => !ocupante[f.num])
+      avisos.push(
+        `Hay ${enJuego.length} en cancha (deberían ser 13)` +
+        (faltan.length ? `: falta cubrir ${faltan.map((f) => f.num).join(', ')}.` : '.') +
+        (sinPuesto.length ? ` Sin puesto: ${sinPuesto.map((j) => j.apellido).join(', ')}.` : ''))
     }
-    // ¿Por qué el puesto quedó forzado? Se explica dónde está cada
-    // especialista del puesto, para que la decisión se entienda de un vistazo
-    const justificacion = (f, oc) => {
+    // Quedó marcado fuera de juego pero sigue figurando en este tiempo
+    for (const j of enJuego.filter((x) => condicion[x.id])) {
+      avisos.push(`${j.apellido} está ${condicion[j.id]} y sigue en cancha.`)
+    }
+  }
+
+  // ¿Por qué el puesto quedó forzado? Se explica dónde está cada especialista
+  // del puesto. Ya no va al panel: se muestra al tocar al jugador.
+  const justificacion = (() => {
+    const fn = (f, oc) => {
       const especialistas = jugadores.filter((j) =>
         j.id !== oc.id && (j.puestos || []).includes(f.puesto))
       const faltaron = ausentes.filter((j) => (j.puestos || []).includes(f.puesto))
@@ -2033,39 +2047,40 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
       }
       return especialistas.map(motivo).join('; ')
     }
-    for (const f of FORMACION) {
-      const oc = ocupante[f.num]
-      if (!oc) continue
-      if (!puedeJugarDe(oc, f.num)) {
-        avisos.push(`${oc.apellido} (${etiquetaPuestos(oc) || tipoJugador(oc)}) está de ${f.num} (${f.label}) — ${justificacion(f, oc)}.`)
-      }
-      if (f.conductor && !(oc.aptitudes || []).includes('conduccion')) {
-        avisos.push(`El ${f.num} (${oc.apellido}) no tiene aptitud de conducción.`)
-      }
+    return fn
+  })()
+
+  // Por qué este jugador está donde está: lo que antes era un aviso suelto,
+  // ahora se lee al tocarlo
+  const observacionDe = (j) => {
+    const e = mapa[j.id]
+    if (!e || e.prestado || !e.puesto) return null
+    const f = FORMACION.find((x) => x.num === e.puesto)
+    if (!f) return null
+    if (!puedeJugarDe(j, f.num)) {
+      return `Juega de ${f.num} (${f.label}) sin ser su puesto — ${justificacion(f, j)}.`
     }
-    if (sinPuesto.length) {
-      avisos.push(`En cancha sin puesto asignado: ${sinPuesto.map((j) => j.apellido).join(', ')}.`)
+    if (f.conductor && !(j.aptitudes || []).includes('conduccion')) {
+      return `Es el ${f.num} y no tiene aptitud de conducción.`
     }
-    // Quedó marcado fuera de juego pero sigue figurando en este tiempo
-    const tocadosEnCancha = enJuego.filter((j) => condicion[j.id])
-    for (const j of tocadosEnCancha) {
-      avisos.push(`${j.apellido} está ${condicion[j.id]} y todavía figura en cancha en este tiempo.`)
-    }
+    return null
   }
-  // Premisas de la jornada completa (equidad de tiempos y rotación de préstamos)
+
+  // Balance de la jornada: no es urgencia del momento, se revisa al cerrar
+  const balance = []
   const tiemposConDatos = tiempos.filter((t) => Object.keys(enCancha[t.id] || {}).length)
   if (tiemposConDatos.length >= 2 && disponibles.length) {
     const promedio = disponibles.reduce((s, j) => s + (jugados[j.id] || 0), 0) / disponibles.length
     const rezagados = disponibles.filter((j) => (jugados[j.id] || 0) <= promedio - 1)
     if (rezagados.length) {
-      avisos.push(`${rezagados.map((j) => j.apellido).join(', ')}: van abajo del promedio de tiempos (${promedio.toFixed(1)}).`)
+      balance.push(`${rezagados.map((j) => j.apellido).join(', ')}: van abajo del promedio de tiempos (${promedio.toFixed(1)}).`)
     }
   }
   const masPrestado = jugadores.reduce((mejor, j) =>
     ((prestadosHoy[j.id] || 0) > (prestadosHoy[mejor?.id] || 0) ? j : mejor), null)
   if (masPrestado && prestadosHoy[masPrestado.id] >= 2 &&
       jugadores.some((j) => !prestadosHoy[j.id])) {
-    avisos.push(`${masPrestado.apellido} ya fue prestado ${prestadosHoy[masPrestado.id]} veces hoy y otros ninguna.`)
+    balance.push(`${masPrestado.apellido} ya fue prestado ${prestadosHoy[masPrestado.id]} veces hoy y otros ninguna.`)
   }
 
   const chipJugador = (j, extra = '') => {
@@ -2182,8 +2197,8 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
           {avisos.map((a, i) => <div key={i}>⚠️ {a}</div>)}
         </div>
       )}
-      {avisos.length === 0 && enJuego.length === 13 && (
-        <p className="mini" style={{ color: 'var(--ok)' }}>✓ Formación completa, sin observaciones.</p>
+      {avisos.length === 0 && enJuego.length === 13 && !tiempoCerrado && (
+        <p className="mini" style={{ color: 'var(--ok)' }}>✓ Listo para cerrar el tiempo.</p>
       )}
 
       {/* Panel de acciones fijo abajo (con el celular en la mano, al costado
@@ -2193,7 +2208,9 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
           <div className="fila entre" style={{ width: '100%' }}>
             <div className="crece">
               <b>{nombreCompleto(jSel)}</b>
-              <div className="mini">Tocá un puesto para ubicarlo, o…</div>
+              <div className="mini">
+                {observacionDe(jSel) || 'Tocá un puesto para ubicarlo, o…'}
+              </div>
             </div>
             <button className="btn sec chico" onClick={() => setSel(null)}>✕</button>
           </div>
@@ -2343,6 +2360,7 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
           tiempo={cerrandoTiempo}
           vacantes={FORMACION.filter((f) => !Object.values(enCancha[cerrandoTiempo.id] || {})
             .some((e) => !e.prestado && e.puesto === f.num))}
+          balance={balance}
           onCerrar={async (valoracion) => {
             setCerrandoTiempo(null)
             setSel(null)
@@ -2377,7 +2395,7 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
 // Diálogo de cierre de un tiempo: valoración rápida opcional y confirmación.
 // Con puestos vacantes no se puede cerrar: la formación tiene que estar
 // completa (el servidor también lo exige).
-function CerrarTiempo({ tiempo, vacantes, onCerrar, onCancelar }) {
+function CerrarTiempo({ tiempo, vacantes, balance = [], onCerrar, onCancelar }) {
   const [valoracion, setValoracion] = useState(tiempo.valoracion || null)
   return (
     <div className="modal-fondo" onClick={onCancelar}>
@@ -2394,6 +2412,12 @@ function CerrarTiempo({ tiempo, vacantes, onCerrar, onCancelar }) {
             {vacantes.map((f) => `${f.num} (${f.label})`).join(', ')}. Completá
             la formación y volvé a intentar.
           </p>
+        )}
+        {/* El balance de la jornada se revisa acá, no mientras se arma */}
+        {vacantes.length === 0 && balance.length > 0 && (
+          <div className="aviso" style={{ marginTop: 8 }}>
+            {balance.map((t, i) => <div key={i}>⚠️ {t}</div>)}
+          </div>
         )}
         {vacantes.length === 0 && (
           <div className="fila entre" style={{ marginTop: 8 }}>
