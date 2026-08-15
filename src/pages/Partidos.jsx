@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
 import {
   abrevAptitudes, abrevPuestos, APTITUDES, DIFICULTADES, etiquetaDificultad, etiquetaMotivo,
@@ -1107,54 +1107,62 @@ function VistaPreviaBloques({ bloques, jugadores, asignacion, propuesta, juegoDe
           <h3>👁 Vista previa {propuesta ? 'de la propuesta' : 'de los bloques'}</h3>
           <button className="btn sec chico" onClick={onCerrar}>Cerrar</button>
         </div>
-        {bloques.map((bl) => {
-          const del = jugadores.filter((j) => asignacion[j.id] === bl.id)
-          const prom = promedio(del)
-          return (
-            <div key={bl.id} className="tarjeta" style={{ marginBottom: 10 }}>
-              <div className="fila entre">
-                <b>
-                  {bl.nombre || `Bloque ${bl.numero}`}
-                  {bl.rival ? ` vs ${bl.rival}` : ''}
-                </b>
-                <span className="mini">
-                  {del.length} jugadores{prom != null ? ` · juego ★${prom.toFixed(1)}` : ''}
-                </span>
+        {/* Los bloques van uno al lado del otro y las líneas alineadas entre
+            sí: los forwards de un bloque quedan a la par de los del otro */}
+        <div
+          className="previa-grid"
+          style={{ gridTemplateColumns: `repeat(${bloques.length}, minmax(0, 1fr))` }}
+        >
+          {bloques.map((bl) => {
+            const del = jugadores.filter((j) => asignacion[j.id] === bl.id)
+            const prom = promedio(del)
+            return (
+              <div key={bl.id} className="previa-cab">
+                <b>{bl.nombre || `B${bl.numero}`}</b>
+                {bl.rival && <div className="mini">vs {bl.rival}</div>}
+                <div className="mini">
+                  {del.length} jug.{prom != null ? ` · ★${prom.toFixed(1)}` : ''}
+                </div>
               </div>
-              {!del.length && <p className="mini">Sin jugadores asignados.</p>}
-              {LINEAS.map((linea) => {
-                const dela = del
-                  .filter((j) => tipoDe(j) === linea.clave)
-                  .sort((x, y) => (juegoDe(y) ?? 0) - (juegoDe(x) ?? 0) ||
-                    x.apellido.localeCompare(y.apellido))
-                if (!dela.length) return null
-                const promLinea = promedio(dela)
-                return (
-                  <div key={linea.clave}>
-                    <div className="mini puesto-grupo">
-                      {linea.label} ({dela.length})
-                      {promLinea != null ? ` · ★${promLinea.toFixed(1)}` : ''}
-                    </div>
-                    {dela.map((j) => (
-                      <div key={j.id} className="fila entre" style={{ padding: '3px 0' }}>
-                        <span style={{ fontSize: '0.9rem' }}>
-                          {nombreCompleto(j)}
-                          <span className="mini"> · {etiquetaPuestos(j) || 'sin puesto'}</span>
-                        </span>
-                        <b className="mini">
-                          {juegoDe(j) != null ? `★${juegoDe(j).toFixed(1)}` : '—'}
-                        </b>
+            )
+          })}
+
+          {LINEAS.map((linea) => {
+            const porBloque = bloques.map((bl) => jugadores
+              .filter((j) => asignacion[j.id] === bl.id && tipoDe(j) === linea.clave)
+              .sort((x, y) => (juegoDe(y) ?? 0) - (juegoDe(x) ?? 0) ||
+                x.apellido.localeCompare(y.apellido)))
+            if (!porBloque.some((l) => l.length)) return null
+            return (
+              <Fragment key={linea.clave}>
+                <div className="mini puesto-grupo previa-linea">{linea.label}</div>
+                {porBloque.map((lista, i) => {
+                  const promLinea = promedio(lista)
+                  return (
+                    <div key={bloques[i].id} className="previa-col">
+                      <div className="mini" style={{ textAlign: 'center' }}>
+                        {lista.length}{promLinea != null ? ` · ★${promLinea.toFixed(1)}` : ''}
                       </div>
-                    ))}
-                  </div>
-                )
-              })}
-            </div>
-          )
-        })}
-        <p className="mini">
-          Agrupados por la línea del puesto principal y ordenados por promedio
-          de juego. El ★ de cada título es el promedio de esa línea.
+                      {lista.map((j) => (
+                        <div key={j.id} className="previa-jug">
+                          <span className="crece" style={{ minWidth: 0 }}>
+                            {j.apellido}
+                            {abrevPuestos(j) && <span className="mini"> {abrevPuestos(j)}</span>}
+                          </span>
+                          <b>{juegoDe(j) != null ? juegoDe(j).toFixed(1) : '—'}</b>
+                        </div>
+                      ))}
+                      {!lista.length && <div className="mini" style={{ textAlign: 'center' }}>—</div>}
+                    </div>
+                  )
+                })}
+              </Fragment>
+            )
+          })}
+        </div>
+        <p className="mini" style={{ marginTop: 8 }}>
+          Cada línea enfrentada entre bloques, ordenada por promedio de juego.
+          El número de la derecha es ese promedio.
         </p>
       </div>
     </div>

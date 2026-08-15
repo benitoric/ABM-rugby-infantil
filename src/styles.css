@@ -863,3 +863,25 @@ details.tarjeta summary {
   padding-bottom: 3px;
   border-bottom: 2px solid var(--dorado);
 }
+
+/* Vista previa de los bloques, uno al lado del otro y con las líneas
+   (forwards / backs) enfrentadas */
+.previa-grid { display: grid; gap: 4px 8px; align-items: start; }
+.previa-cab {
+  text-align: center;
+  padding-bottom: 5px;
+  border-bottom: 2px solid var(--primario);
+}
+.previa-linea { grid-column: 1 / -1; text-align: center; }
+.previa-col { display: flex; flex-direction: column; gap: 3px; }
+.previa-jug {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 4px 7px;
+  font-size: 0.82rem;
+}
+.previa-jug .crece { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
