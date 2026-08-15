@@ -1514,7 +1514,7 @@ function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, co
           const jugados = (jid) =>
             tiemposBloque.filter((t) => (enCancha[t.id] || {})[jid]).length
           return (
-            <div key={bl.id}>
+            <div key={bl.id} className="planilla-bloque">
               <h3>
                 {bl.nombre || `Bloque ${bl.numero}`} vs {bl.rival || 'a definir'} ({delBloque.length} jugadores)
                 {bl.suspendido ? ' · SUSPENDIDO' : ''}
@@ -1537,6 +1537,7 @@ function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, co
               {!delBloque.length && <p className="mini">Sin jugadores asignados.</p>}
               {delBloque.length > 0 && (
                 <>
+                  <div className="planilla-seccion">
                   <table>
                     <thead>
                       <tr>
@@ -1570,6 +1571,8 @@ function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, co
                   <p className="mini">
                     Número = camiseta · ✔ = en cancha sin puesto · P = prestado al rival.
                   </p>
+                  </div>
+                  <div className="planilla-seccion">
                   <h4>Formación por tiempo</h4>
                   <table>
                     <thead>
@@ -1603,13 +1606,14 @@ function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, co
                       </tr>
                     </tbody>
                   </table>
+                  </div>
                 </>
               )}
             </div>
           )
         })}
 
-        <p className="mini" style={{ marginTop: 10 }}>
+        <p className="mini planilla-seccion" style={{ marginTop: 10 }}>
           Sin bloque: {jugadores.filter((j) => !asignacion[j.id]).map(nombreCompleto).join(' · ') || '—'}
         </p>
       </div>
