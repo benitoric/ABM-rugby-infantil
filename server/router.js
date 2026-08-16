@@ -3,6 +3,9 @@ import { autenticar, crearToken, hashClave, compararClave } from './auth.js'
 // El catálogo de la evaluación es compartido con el frontend: así el promedio
 // de juego se calcula igual en los dos lados (src/evaluacion.js no toca el DOM)
 import { promedioDeAreas, GRUPOS } from '../src/evaluacion.js'
+// Ídem con el catálogo de tests físicos: la lista de tests válidos y sus
+// unidades viven en un solo lado (src/tests.js tampoco toca el DOM)
+import { CLAVES_SEMAFORO, CLAVES_TEST } from '../src/tests.js'
 
 const COLS_JUGADOR = `id, nombre, apellido, fecha_nacimiento::text as fecha_nacimiento,
   dni, posicion, puestos, puesto_principal, aptitudes, estado, tutor_nombre, tutor_telefono, ficha_medica_vigente,
@@ -45,6 +48,10 @@ const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora,
 const COLS_SEGUIMIENTO = `id, jugador_id, fecha::text as fecha, area, valoracion, comentario, autor_email`
 const COLS_EVALUACION = `id, jugador_id, fecha::text as fecha, valores, comentario, autor_email,
   revisor_email, valores_revisor, comentario_revisor, revisado_en::date::text as revisado_en`
+// El valor va a float: numeric llega como texto desde pg y el frontend lo
+// necesita como número para formatearlo y comparar mediciones.
+const COLS_TEST = `id, jugador_id, evento_id, fecha::text as fecha, test,
+  valor::float8 as valor, semaforo, nota, autor_email`
 // Metadatos del documento: nunca el contenido (se pide aparte al abrirlo)
 const COLS_DOCUMENTO = `id, jugador_id, tipo, nombre, mime,
   octet_length(datos) as bytes, created_at::date::text as fecha, subido_por,
@@ -105,6 +112,23 @@ function puntajesValidos(crudo) {
     if (Number.isInteger(n) && n >= 1 && n <= 5) valores[k] = n
   }
   return valores
+}
+
+// Una medición de test físico tal como se guarda: el test tiene que estar en
+// el catálogo y el valor ser un número positivo, ya en la unidad base (la
+// conversión de mm:ss a segundos la hace el frontend, con src/tests.js).
+function medicionValida(test, valor) {
+  if (!CLAVES_TEST.includes(test)) throw { codigo: 400, error: 'test_invalido' }
+  const n = Number(valor)
+  if (!Number.isFinite(n) || n <= 0) throw { codigo: 400, error: 'valor_invalido' }
+  return Math.round(n * 100) / 100
+}
+
+// El semáforo es siempre opcional: sin color, la medición vale igual
+function semaforoValido(s) {
+  if (!s) return null
+  if (!CLAVES_SEMAFORO.includes(s)) throw { codigo: 400, error: 'semaforo_invalido' }
+  return s
 }
 
 // Parejas cruzadas al azar: cada uno revisa lo que evaluó el otro. Con un
@@ -697,6 +721,9 @@ async function enrutar(metodo, p, b, req, url) {
       const documentos = await query(
         `select ${COLS_DOCUMENTO} from documentos where jugador_id = $1
          order by created_at`, [p[1]])
+      const tests = await query(
+        `select ${COLS_TEST} from tests_fisicos where jugador_id = $1
+         order by fecha desc, created_at desc`, [p[1]])
       // Golpes y lesiones marcados en el momento: los del partido salen de la
       // asistencia de la cancha y los del entrenamiento de la asistencia común.
       // Quedan como historial aunque la lesión ya se haya cargado en la ficha.
@@ -751,7 +778,7 @@ async function enrutar(metodo, p, b, req, url) {
       const pct = (presentes, totales) =>
         totales ? Math.round((100 * presentes) / totales) : null
       return {
-        jugador, seguimientos, lesiones, evaluaciones, documentos, incidentes,
+        jugador, seguimientos, lesiones, evaluaciones, documentos, incidentes, tests,
         stats: {
           entrenamientos: pct(pres.ent, tot.ent),
           partidos: pct(pres.par, tot.par),
@@ -773,6 +800,36 @@ async function enrutar(metodo, p, b, req, url) {
     }
     if (metodo === 'DELETE' && p[1]) {
       await query('delete from seguimientos where id = $1', [p[1]])
+      return { ok: true }
+    }
+  }
+
+  // ---------- tests físicos ----------
+  // Carga suelta desde la ficha, para el que faltó el día que se tomó el test
+  // y se lo miden en otro momento. La carga en tanda vive en eventos/:id/tests.
+  if (p[0] === 'tests') {
+    if (metodo === 'POST' && !p[1]) {
+      if (!b?.jugador_id) throw { codigo: 400, error: 'faltan_datos' }
+      const valor = medicionValida(b.test, b.valor)
+      const filas = await query(
+        `insert into tests_fisicos (jugador_id, fecha, test, valor, semaforo, nota, autor_email)
+         values ($1,$2,$3,$4,$5,$6,$7)
+         on conflict (jugador_id, fecha, test) do update
+           set valor = excluded.valor, semaforo = excluded.semaforo,
+               nota = excluded.nota, autor_email = excluded.autor_email
+         returning ${COLS_TEST}`,
+        [b.jugador_id, b.fecha || new Date().toISOString().slice(0, 10), b.test, valor,
+         semaforoValido(b.semaforo), b.nota?.trim() || null, yo.email])
+      return filas[0]
+    }
+    if (metodo === 'DELETE' && p[1]) {
+      // Corregir lo propio no requiere permisos; tocar lo de otro, sí
+      const [fila] = await query('select autor_email from tests_fisicos where id = $1', [p[1]])
+      if (!fila) throw { codigo: 404, error: 'no_existe' }
+      if (fila.autor_email !== yo.email && !puedeAdministrar(yo)) {
+        throw { codigo: 403, error: 'solo_autor' }
+      }
+      await query('delete from tests_fisicos where id = $1', [p[1]])
       return { ok: true }
     }
   }
@@ -1282,6 +1339,49 @@ async function enrutar(metodo, p, b, req, url) {
             [p[1], m.jugador_id, m.estado, cond])
         }
         return { ok: true }
+      }
+    }
+    // Tests físicos tomados en ese entrenamiento. Junto a lo cargado hoy
+    // viajan las mediciones anteriores de cada jugador, para que el PF vea
+    // contra qué está comparando sin salir de la pantalla.
+    if (p[2] === 'tests' && p[1]) {
+      const [evento] = await query('select fecha::text as fecha from eventos where id = $1', [p[1]])
+      if (!evento) throw { codigo: 404, error: 'no_existe' }
+      if (metodo === 'GET') {
+        const tests = await query(
+          `select ${COLS_TEST} from tests_fisicos where evento_id = $1`, [p[1]])
+        const previas = await query(
+          `select distinct on (jugador_id, test) ${COLS_TEST}
+           from tests_fisicos
+           where fecha < $1
+           order by jugador_id, test, fecha desc, created_at desc`, [evento.fecha])
+        return { tests, previas }
+      }
+      if (metodo === 'PUT') {
+        // b.marcas: [{jugador_id, test, valor, semaforo?}] — valor null borra
+        // la medición (se cargó a quien no era, o se anotó mal).
+        const guardadas = []
+        for (const m of b.marcas || []) {
+          if (!m?.jugador_id) throw { codigo: 400, error: 'faltan_datos' }
+          if (!CLAVES_TEST.includes(m.test)) throw { codigo: 400, error: 'test_invalido' }
+          if (m.valor == null || m.valor === '') {
+            await query(
+              'delete from tests_fisicos where jugador_id = $1 and fecha = $2 and test = $3',
+              [m.jugador_id, evento.fecha, m.test])
+            continue
+          }
+          const [fila] = await query(
+            `insert into tests_fisicos (jugador_id, evento_id, fecha, test, valor, semaforo, autor_email)
+             values ($1,$2,$3,$4,$5,$6,$7)
+             on conflict (jugador_id, fecha, test) do update
+               set valor = excluded.valor, semaforo = excluded.semaforo,
+                   evento_id = excluded.evento_id, autor_email = excluded.autor_email
+             returning ${COLS_TEST}`,
+            [m.jugador_id, p[1], evento.fecha, m.test, medicionValida(m.test, m.valor),
+             semaforoValido(m.semaforo), yo.email])
+          guardadas.push(fila)
+        }
+        return { guardadas }
       }
     }
     if (p[2] === 'asistencias-partido' && p[1]) {

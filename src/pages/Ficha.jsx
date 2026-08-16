@@ -8,6 +8,7 @@ import { FormJugador } from './Jugadores.jsx'
 import { FormEvaluacion, TarjetaEvaluacion } from './Evaluacion.jsx'
 import Documentos from './Documentos.jsx'
 import GraficoEvolucion from './GraficoEvolucion.jsx'
+import { TestsDeJugador } from './TestsFisicos.jsx'
 
 export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar = null, onVolver }) {
   const [j, setJ] = useState(null)
@@ -17,6 +18,8 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
   // Golpes y lesiones marcados en un entrenamiento o partido
   const [incidentes, setIncidentes] = useState([])
   const [documentos, setDocumentos] = useState([])
+  // Mediciones de los PF, de la más nueva a la más vieja
+  const [tests, setTests] = useState([])
   const [stats, setStats] = useState(null)
   const [editando, setEditando] = useState(false)
   const [nuevo, setNuevo] = useState(null)
@@ -33,6 +36,7 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
     setLesiones(d.lesiones || [])
     setIncidentes(d.incidentes || [])
     setDocumentos(d.documentos || [])
+    setTests(d.tests || [])
     setStats(d.stats)
   }
   useEffect(() => { cargar() }, [jugadorId])
@@ -207,6 +211,8 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
           }}
         />
       ))}
+
+      <TestsDeJugador jugadorId={jugadorId} tests={tests} onCambio={cargar} />
 
       <div className="fila entre">
         <h3>Notas de seguimiento</h3>

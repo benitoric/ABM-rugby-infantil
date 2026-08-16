@@ -6,6 +6,7 @@ import {
   suspensionEvento,
 } from '../helpers.js'
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
+import TestsFisicos from './TestsFisicos.jsx'
 
 const BLOQUE_VACIO = { rival: '', dificultad: '', lugar: '', hora_convocatoria: '' }
 
@@ -365,6 +366,8 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
   const [cargando, setCargando] = useState(true)
   const [errorCarga, setErrorCarga] = useState(null)
   const [intento, setIntento] = useState(0)
+  // Los PF toman los tests físicos sobre los presentes de este entrenamiento
+  const [midiendo, setMidiendo] = useState(false)
 
   useEffect(() => {
     async function cargar() {
@@ -502,6 +505,17 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
   const presentes = jugadores.filter((j) => marcas[j.id] === 'presente').length
   const suspension = suspensionEvento(evento)
 
+  // Al volver de los tests se recarga la asistencia, que pudo cambiar mientras
+  // tanto (el PF puede haber medido a alguien que todavía no estaba marcado)
+  if (midiendo) {
+    return (
+      <TestsFisicos
+        evento={evento}
+        onVolver={() => { setMidiendo(false); setIntento((n) => n + 1) }}
+      />
+    )
+  }
+
   function descargarEvento() {
     const esPartido = evento.tipo === 'partido'
     const titulo = esPartido ? 'partido' : 'entrenamiento'
@@ -579,6 +593,12 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
           <button className="btn sec" onClick={marcarTodosPresentes}>
             Marcar presentes a todos
           </button>
+
+          {evento.tipo === 'entrenamiento' && (
+            <button className="btn sec" onClick={() => setMidiendo(true)}>
+              ⏱ Tests físicos
+            </button>
+          )}
 
           {!cargando && !errorCarga && jugadores.length > 0 && (
             <ReportePuestos jugadores={jugadores} marcas={marcas} />

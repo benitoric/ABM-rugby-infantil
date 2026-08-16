@@ -32,9 +32,7 @@ async function inicializar() {
   // fallar igual en Postgres por la carrera en el catálogo.
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
-    `select exists (select 1 from information_schema.columns
-       where table_schema = 'public' and table_name = 'asistencias'
-         and column_name = 'condicion') as aplicadas`)
+    `select to_regclass('public.tests_fisicos') is not null as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -203,6 +201,25 @@ export async function migrar(pool) {
     recuperado boolean not null default false,
     created_at timestamptz not null default now()
   )`)
+  // Tests físicos de los PF. Una fila por medición (jugador + fecha + test):
+  // se toman sueltos, de a un test por vez. Es la última migración, así que
+  // su existencia es el testigo de que todo lo de arriba ya corrió.
+  await pool.query(`create table if not exists tests_fisicos (
+    id uuid primary key default gen_random_uuid(),
+    jugador_id uuid not null references jugadores(id) on delete cascade,
+    evento_id uuid references eventos(id) on delete set null,
+    fecha date not null default current_date,
+    test text not null check (test in
+      ('resistencia','salto_largo','velocidad_20m','peso','talla')),
+    valor numeric(7,2) not null check (valor > 0),
+    semaforo text check (semaforo in ('verde','amarillo','rojo')),
+    nota text,
+    autor_email text,
+    created_at timestamptz not null default now(),
+    unique (jugador_id, fecha, test)
+  )`)
+  await pool.query(`create index if not exists tests_fisicos_jugador_idx
+    on tests_fisicos (jugador_id, test, fecha desc)`)
 }
 
 // Tolera los formatos habituales al pegar la cadena de Neon: comillas,
