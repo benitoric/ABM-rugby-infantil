@@ -1416,10 +1416,13 @@ async function enrutar(metodo, p, b, req, url) {
            and bloques.rival is null and e.rival is not null`, [eventoId])
       const bloques = await query(
         `select ${COLS_BLOQUE} from bloques where evento_id = $1 order by numero`, [eventoId])
+      // Un bloque nace con 4 tiempos, pero solo la primera vez: si ya tiene
+      // (aunque se hayan borrado algunos), no se recrean.
       for (const bl of bloques) {
         await query(
-          `insert into tiempos (bloque_id, numero) values ($1,1),($1,2),($1,3),($1,4)
-           on conflict (bloque_id, numero) do nothing`, [bl.id])
+          `insert into tiempos (bloque_id, numero)
+           select $1, n from generate_series(1, 4) as n
+           where not exists (select 1 from tiempos where bloque_id = $1)`, [bl.id])
       }
       const ids = bloques.map((x) => x.id)
       const tiempos = await query(
@@ -1735,6 +1738,30 @@ async function enrutar(metodo, p, b, req, url) {
          select $1, coalesce(max(numero), 0) + 1 from tiempos where bloque_id = $1
          returning id, bloque_id, numero`, [b.bloque_id])
       return filas[0]
+    }
+    if (metodo === 'DELETE' && p[1] === 'tiempo' && p[2]) {
+      // Borra un tiempo agregado por error o que no se jugó. Solo si está
+      // abierto, si no hay tiempos cerrados después (para no correr la
+      // numeración de lo ya jugado) y si no es el único del bloque.
+      const [t] = await query(
+        `select t.id, t.bloque_id, t.numero, t.cerrado_en, bl.cerrado_en as bc
+         from tiempos t join bloques bl on bl.id = t.bloque_id where t.id = $1`, [p[2]])
+      if (!t) throw { codigo: 404, error: 'no_existe' }
+      if (t.bc) throw { codigo: 409, error: 'bloque_cerrado' }
+      if (t.cerrado_en) throw { codigo: 409, error: 'tiempo_cerrado' }
+      const [{ total }] = await query(
+        'select count(*)::int as total from tiempos where bloque_id = $1', [t.bloque_id])
+      if (total <= 1) throw { codigo: 409, error: 'ultimo_tiempo' }
+      const [posterior] = await query(
+        `select 1 from tiempos where bloque_id = $1 and numero > $2 and cerrado_en is not null
+         limit 1`, [t.bloque_id, t.numero])
+      if (posterior) throw { codigo: 409, error: 'hay_tiempos_cerrados_despues' }
+      await query('delete from tiempos where id = $1', [t.id])
+      // Los que venían después corren un lugar, así la numeración queda seguida
+      await query(
+        'update tiempos set numero = numero - 1 where bloque_id = $1 and numero > $2',
+        [t.bloque_id, t.numero])
+      return { ok: true }
     }
     if (metodo === 'POST' && p[1] === 'cancha') {
       await exigirTiempoAbierto(b.tiempo_id)

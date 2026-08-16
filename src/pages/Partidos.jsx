@@ -597,6 +597,47 @@ function ArmadoPartido({ partido }) {
     setTiempos((ts) => [...ts, nuevo].sort((a, b) => a.numero - b.numero))
   }
 
+  // Borra un tiempo agregado por error o que no se jugó. Los que venían
+  // después corren un lugar, así la numeración queda seguida.
+  async function borrarTiempo(tiempo) {
+    const cargados = Object.keys(enCancha[tiempo.id] || {}).length
+    if (!confirm(
+      `¿Borrar el tiempo T${tiempo.numero}?\n\n` +
+      (cargados
+        ? `Tiene ${cargados} jugadores cargados y se pierde ese armado. `
+        : 'Está vacío. ') +
+      'Los tiempos siguientes se renumeran.'
+    )) return
+    try {
+      await api(`partido/tiempo/${tiempo.id}`, { method: 'DELETE' })
+    } catch (e) {
+      alert(e?.error === 'hay_tiempos_cerrados_despues'
+        ? 'No se puede borrar: hay tiempos ya cerrados después de este.'
+        : e?.error === 'ultimo_tiempo'
+          ? 'El bloque tiene que quedar con al menos un tiempo.'
+          : 'No se pudo borrar el tiempo. Probá de nuevo.')
+      return
+    }
+    setEnCancha((m) => {
+      const copia = { ...m }
+      delete copia[tiempo.id]
+      return copia
+    })
+    setTiempos((ts) => ts
+      .filter((t) => t.id !== tiempo.id)
+      .map((t) => (t.bloque_id === tiempo.bloque_id && t.numero > tiempo.numero
+        ? { ...t, numero: t.numero - 1 }
+        : t)))
+    // queda seleccionado el anterior (o el primero del bloque)
+    setTiempoSel((m) => {
+      const quedan = tiempos
+        .filter((t) => t.bloque_id === tiempo.bloque_id && t.id !== tiempo.id)
+        .sort((a, b) => a.numero - b.numero)
+      const previo = [...quedan].reverse().find((t) => t.numero < tiempo.numero)
+      return { ...m, [tiempo.bloque_id]: (previo || quedan[0])?.id }
+    })
+  }
+
   const ordenados = useMemo(() => {
     const prioridad = (j) => (confirmacion[j.id] === 'presente' ? 0 : 1)
     return [...jugadores].sort((x, y) =>
@@ -1012,6 +1053,7 @@ function ArmadoPartido({ partido }) {
           onMover={moverEnCancha}
           onReemplazar={reemplazarTiempo}
           onAgregarTiempo={() => agregarTiempo(b.id)}
+          onBorrarTiempo={borrarTiempo}
           onCerrarTiempo={cerrarTiempo}
           onCerrarBloque={cerrarBloque}
         />
@@ -1882,7 +1924,7 @@ function BalancePartido({ bloque, onActualizado }) {
   )
 }
 
-function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = [], confirmacion = {}, tarde = {}, condicion = {}, onCondicion, asistenciaSinTomar, staff = [], onIrAPresentes, tiempos, tiempoSel, onSelTiempo, enCancha, onMover, onReemplazar, onAgregarTiempo, onCerrarTiempo, onCerrarBloque }) {
+function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = [], confirmacion = {}, tarde = {}, condicion = {}, onCondicion, asistenciaSinTomar, staff = [], onIrAPresentes, tiempos, tiempoSel, onSelTiempo, enCancha, onMover, onReemplazar, onAgregarTiempo, onBorrarTiempo, onCerrarTiempo, onCerrarBloque }) {
   const [sel, setSel] = useState(null)
   const [nPrestar, setNPrestar] = useState(0)
   const [sugiriendo, setSugiriendo] = useState(false)
@@ -2217,8 +2259,24 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
             </button>
           ))}
         </div>
-        {!bloqueCerrado && tiempos.length < MAX_TIEMPOS && (
-          <button className="btn sec chico" onClick={onAgregarTiempo}>+ Tiempo</button>
+        {!bloqueCerrado && (
+          <div className="fila" style={{ gap: 6 }}>
+            {/* Se borra el tiempo a la vista: solo si está abierto, no es el
+                único y no hay tiempos ya cerrados después */}
+            {!tiempoCerrado && tiempos.length > 1 &&
+              !tiempos.some((t) => t.numero > tiempo.numero && t.cerrado_en) && (
+              <button
+                className="btn sec chico"
+                title={`Borrar el tiempo T${tiempo.numero}`}
+                onClick={() => onBorrarTiempo(tiempo)}
+              >
+                🗑 T{tiempo.numero}
+              </button>
+            )}
+            {tiempos.length < MAX_TIEMPOS && (
+              <button className="btn sec chico" onClick={onAgregarTiempo}>+ Tiempo</button>
+            )}
+          </div>
         )}
       </div>
 
