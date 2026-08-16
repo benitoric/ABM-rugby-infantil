@@ -32,7 +32,7 @@ async function inicializar() {
   // fallar igual en Postgres por la carrera en el catálogo.
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
-    `select to_regclass('public.tests_fisicos') is not null as aplicadas`)
+    `select to_regclass('public.trabajo_fisico') is not null as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -202,8 +202,7 @@ export async function migrar(pool) {
     created_at timestamptz not null default now()
   )`)
   // Tests físicos de los PF. Una fila por medición (jugador + fecha + test):
-  // se toman sueltos, de a un test por vez. Es la última migración, así que
-  // su existencia es el testigo de que todo lo de arriba ya corrió.
+  // se toman sueltos, de a un test por vez.
   await pool.query(`create table if not exists tests_fisicos (
     id uuid primary key default gen_random_uuid(),
     jugador_id uuid not null references jugadores(id) on delete cascade,
@@ -220,6 +219,17 @@ export async function migrar(pool) {
   )`)
   await pool.query(`create index if not exists tests_fisicos_jugador_idx
     on tests_fisicos (jugador_id, test, fecha desc)`)
+  // Planilla del PF: el trabajo físico de la primera media hora de cada
+  // entrenamiento. Es la última migración, así que su existencia es el
+  // testigo de que todo lo de arriba ya corrió.
+  await pool.query(`create table if not exists trabajo_fisico (
+    evento_id uuid primary key references eventos(id) on delete cascade,
+    variables jsonb not null default '{}',
+    carga text check (carga in ('baja','media','alta')),
+    observaciones text,
+    autor_email text,
+    actualizado_en timestamptz not null default now()
+  )`)
 }
 
 // Tolera los formatos habituales al pegar la cadena de Neon: comillas,
