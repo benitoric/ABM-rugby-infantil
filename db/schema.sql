@@ -265,6 +265,21 @@ create table if not exists tests_fisicos (
 create index if not exists tests_fisicos_jugador_idx
   on tests_fisicos (jugador_id, test, fecha desc);
 
+-- Planilla del PF: el trabajo físico específico de la primera media hora del
+-- entrenamiento. Una sola fila por entrenamiento (es lo que se entrenó ese
+-- día, no una medición de cada chico), con las variables trabajadas en jsonb:
+-- { variable: { minutos: int, intensidad: 'baja'|'media'|'alta' } } según el
+-- catálogo de src/trabajoFisico.js.
+create table if not exists trabajo_fisico (
+  evento_id uuid primary key references eventos(id) on delete cascade,
+  variables jsonb not null default '{}',
+  -- Carga general de la sesión, la misma escala que la intensidad
+  carga text check (carga in ('baja','media','alta')),
+  observaciones text,
+  autor_email text,
+  actualizado_en timestamptz not null default now()
+);
+
 -- Primer miembro del staff (crea su contraseña en el primer ingreso)
 insert into staff (email, nombre) values ('benitoric@gmail.com', 'Benito')
 on conflict (email) do nothing;

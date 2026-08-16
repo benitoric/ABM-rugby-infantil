@@ -170,14 +170,18 @@ export default function TestsFisicos({ evento, onVolver }) {
   const cargados = visibles.filter((j) => mediciones[clave(j.id, test)]).length
 
   return (
-    <div className="contenido">
-      <div className="fila entre">
-        <button className="btn sec chico" onClick={onVolver}>← Volver</button>
-        <span className="mini">{fechaCorta(evento.fecha)}</span>
-      </div>
+    <>
+      {/* Embebida como pestaña del entrenamiento no lleva su propio "Volver":
+          la vuelta al listado de eventos ya está arriba de las pestañas. */}
+      {onVolver && (
+        <div className="fila entre">
+          <button className="btn sec chico" onClick={onVolver}>← Volver</button>
+          <span className="mini">{fechaCorta(evento.fecha)}</span>
+        </div>
+      )}
 
       <div className="tarjeta">
-        <h2>⏱ Tests físicos</h2>
+        <h3>Tests físicos</h3>
         <p className="mini" style={{ marginTop: 2 }}>
           Elegí el test y cargá a los que midieron hoy. Cada medición se guarda
           sola al salir del campo; el color es opcional y se puede poner después.
@@ -233,7 +237,7 @@ export default function TestsFisicos({ evento, onVolver }) {
           onGuardar={guardar}
         />
       ))}
-    </div>
+    </>
   )
 }
 

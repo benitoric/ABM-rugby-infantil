@@ -6,6 +6,9 @@ import { promedioDeAreas, GRUPOS } from '../src/evaluacion.js'
 // Ídem con el catálogo de tests físicos: la lista de tests válidos y sus
 // unidades viven en un solo lado (src/tests.js tampoco toca el DOM)
 import { CLAVES_SEMAFORO, CLAVES_TEST } from '../src/tests.js'
+import {
+  limpiarVariables, CLAVES_FISICAS, CLAVES_INTENSIDAD, MAX_MINUTOS,
+} from '../src/trabajoFisico.js'
 
 const COLS_JUGADOR = `id, nombre, apellido, fecha_nacimiento::text as fecha_nacimiento,
   dni, posicion, puestos, puesto_principal, aptitudes, estado, tutor_nombre, tutor_telefono, ficha_medica_vigente,
@@ -129,6 +132,31 @@ function semaforoValido(s) {
   if (!s) return null
   if (!CLAVES_SEMAFORO.includes(s)) throw { codigo: 400, error: 'semaforo_invalido' }
   return s
+}
+
+// Intensidad de una variable física y carga general de la sesión comparten
+// escala (baja/media/alta) y las dos son opcionales
+function intensidadValida(i) {
+  if (!i) return null
+  if (!CLAVES_INTENSIDAD.includes(i)) throw { codigo: 400, error: 'intensidad_invalida' }
+  return i
+}
+
+// Las variables del trabajo físico tal como se guardan. Rechaza lo que no
+// entra en el catálogo o en el rango en vez de descartarlo en silencio: un
+// dato mal mandado tiene que avisar, no desaparecer.
+function variablesFisicasValidas(crudo) {
+  for (const [k, v] of Object.entries(crudo || {})) {
+    if (!CLAVES_FISICAS.includes(k)) throw { codigo: 400, error: 'variable_invalida' }
+    if (v?.minutos != null && v.minutos !== '') {
+      const n = Number(v.minutos)
+      if (!Number.isInteger(n) || n <= 0 || n > MAX_MINUTOS) {
+        throw { codigo: 400, error: 'minutos_invalidos' }
+      }
+    }
+    intensidadValida(v?.intensidad)
+  }
+  return limpiarVariables(crudo)
 }
 
 // Parejas cruzadas al azar: cada uno revisa lo que evaluó el otro. Con un
@@ -1339,6 +1367,37 @@ async function enrutar(metodo, p, b, req, url) {
             [p[1], m.jugador_id, m.estado, cond])
         }
         return { ok: true }
+      }
+    }
+    // Planilla del PF: el trabajo físico de la primera media hora. Es una
+    // sola fila por entrenamiento, así que se guarda entera de una.
+    if (p[2] === 'trabajo-fisico' && p[1]) {
+      if (metodo === 'GET') {
+        const [fila] = await query(
+          `select evento_id, variables, carga, observaciones, autor_email,
+                  actualizado_en::text as actualizado_en
+           from trabajo_fisico where evento_id = $1`, [p[1]])
+        // Sin planilla cargada devuelve el registro vacío: al frontend le da
+        // lo mismo estrenar la pantalla que retomar lo que ya había
+        return fila || { evento_id: p[1], variables: {}, carga: null, observaciones: null }
+      }
+      if (metodo === 'PUT') {
+        const [evento] = await query('select tipo from eventos where id = $1', [p[1]])
+        if (!evento) throw { codigo: 404, error: 'no_existe' }
+        if (evento.tipo !== 'entrenamiento') throw { codigo: 400, error: 'solo_entrenamientos' }
+        const variables = variablesFisicasValidas(b?.variables)
+        const filas = await query(
+          `insert into trabajo_fisico (evento_id, variables, carga, observaciones, autor_email, actualizado_en)
+           values ($1,$2,$3,$4,$5, now())
+           on conflict (evento_id) do update
+             set variables = excluded.variables, carga = excluded.carga,
+                 observaciones = excluded.observaciones,
+                 autor_email = excluded.autor_email, actualizado_en = now()
+           returning evento_id, variables, carga, observaciones, autor_email,
+                     actualizado_en::text as actualizado_en`,
+          [p[1], JSON.stringify(variables), intensidadValida(b?.carga),
+           b?.observaciones?.trim() || null, yo.email])
+        return filas[0]
       }
     }
     // Tests físicos tomados en ese entrenamiento. Junto a lo cargado hoy

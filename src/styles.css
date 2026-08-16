@@ -954,3 +954,35 @@ details.tarjeta summary {
 
 .test-valor { font-size: 1.25rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .curva-test { width: 100%; max-width: 260px; height: 40px; margin-top: 8px; display: block; }
+
+/* ---------- trabajo físico del PF ---------- */
+/* Pestañas internas del entrenamiento (asistencia / físico / tests) */
+.sub-nav {
+  display: flex;
+  gap: 4px;
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 4px;
+  margin-bottom: 10px;
+}
+.sub-nav button {
+  flex: 1 1 0;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  padding: 8px 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sub-nav button.activo { background: var(--primario); color: #fff; }
+
+/* La intensidad usa los chips comunes; al activarse toma el color de su nivel */
+.chip.intensidad-baja.activo { background: var(--ok); border-color: var(--ok); }
+.chip.intensidad-media.activo { background: var(--warn); border-color: var(--warn); }
+.chip.intensidad-alta.activo { background: var(--bad); border-color: var(--bad); }
+.fila-test .chip { padding: 5px 9px; font-size: 0.75rem; }
