@@ -134,6 +134,13 @@ function semaforoValido(s) {
   return s
 }
 
+// Fecha 'YYYY-MM-DD' válida de verdad (el 31/02 no pasa)
+function esFecha(s) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s || '')) return false
+  const d = new Date(`${s}T00:00:00Z`)
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s
+}
+
 // Intensidad de una variable física y carga general de la sesión comparten
 // escala (baja/media/alta) y las dos son opcionales
 function intensidadValida(i) {
@@ -1061,6 +1068,29 @@ async function enrutar(metodo, p, b, req, url) {
 
   // ---------- estadísticas ----------
   if (p[0] === 'stats') {
+    // Trabajo físico de un rango de fechas. Devuelve TODOS los entrenamientos
+    // del período, con su planilla cuando la tienen: los que no la tienen son
+    // parte del dato (dicen qué tan completo está el registro).
+    if (metodo === 'GET' && p[1] === 'fisico') {
+      const desde = url.searchParams.get('desde')
+      const hasta = url.searchParams.get('hasta')
+      if (!esFecha(desde) || !esFecha(hasta)) throw { codigo: 400, error: 'rango_invalido' }
+      const modalidad = url.searchParams.get('modalidad') || null
+      if (modalidad && !['rutina', 'extra'].includes(modalidad)) {
+        throw { codigo: 400, error: 'modalidad_invalida' }
+      }
+      const sesiones = await query(
+        `select e.id as evento_id, e.fecha::text as fecha, e.modalidad,
+                tf.variables, tf.carga, tf.observaciones, tf.autor_email
+         from eventos e
+         left join trabajo_fisico tf on tf.evento_id = e.id
+         where e.tipo = 'entrenamiento' and not e.suspendido
+           and e.fecha between $1 and $2
+           and ($3::text is null or e.modalidad = $3)
+         order by e.fecha`,
+        [desde, hasta, modalidad])
+      return { desde, hasta, modalidad, sesiones }
+    }
     if (metodo === 'GET' && p[1] === 'tiempos') {
       const anio = Number(url.searchParams.get('anio')) || new Date().getFullYear()
       return query(
