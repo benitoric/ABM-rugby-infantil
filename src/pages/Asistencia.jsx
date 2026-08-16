@@ -8,6 +8,7 @@ import {
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 import TestsFisicos from './TestsFisicos.jsx'
 import TrabajoFisico from './TrabajoFisico.jsx'
+import EstadisticaFisica from './EstadisticaFisica.jsx'
 
 // Pestañas de un entrenamiento. El partido no las lleva: su trabajo del día
 // vive en la sección "Día de partido".
@@ -25,9 +26,10 @@ const BLOQUE_VACIO = { rival: '', dificultad: '', lugar: '', hora_convocatoria: 
 // (el tope lo comparte el check de la tabla bloques y la API)
 const CANTIDADES_BLOQUE = [1, 2, 3, 4, 5, 6]
 
-export default function Asistencia() {
+export default function Asistencia({ yo }) {
   const [eventos, setEventos] = useState([])
   const [eventoSel, setEventoSel] = useState(null)
+  const [verEstadisticaFisica, setVerEstadisticaFisica] = useState(false)
   const [creando, setCreando] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [sugerencias, recargarSugerencias] = useSugerencias()
@@ -40,6 +42,10 @@ export default function Asistencia() {
 
   if (eventoSel) {
     return <TomarAsistencia evento={eventoSel} onVolver={() => { setEventoSel(null); cargar() }} />
+  }
+
+  if (verEstadisticaFisica) {
+    return <EstadisticaFisica yo={yo} onVolver={() => setVerEstadisticaFisica(false)} />
   }
 
   const hoy = new Date().toISOString().slice(0, 10)
@@ -62,6 +68,7 @@ export default function Asistencia() {
       <div className="fila entre">
         <h2>Eventos</h2>
         <div className="fila">
+          <button className="btn sec" onClick={() => setVerEstadisticaFisica(true)}>📊 Física</button>
           <button className="btn sec" onClick={descargarResumen}>Resumen CSV</button>
           <button
             className="btn"

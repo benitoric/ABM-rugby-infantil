@@ -986,3 +986,30 @@ details.tarjeta summary {
 .chip.intensidad-media.activo { background: var(--warn); border-color: var(--warn); }
 .chip.intensidad-alta.activo { background: var(--bad); border-color: var(--bad); }
 .fila-test .chip { padding: 5px 9px; font-size: 0.75rem; }
+
+/* ---------- estadística de trabajo físico ---------- */
+.barra-fila { margin-bottom: 10px; }
+.barra {
+  height: 8px;
+  background: #edf0f6;
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 4px 0 3px;
+}
+.barra-relleno { height: 100%; background: var(--primario); border-radius: 999px; }
+.barra-relleno.nivel-baja { background: var(--ok); }
+.barra-relleno.nivel-media { background: var(--warn); }
+.barra-relleno.nivel-alta { background: var(--bad); }
+
+.sesion-fila { padding: 7px 0; border-bottom: 1px solid var(--borde); }
+.sesion-fila:last-child { border-bottom: none; }
+
+.opcion-seccion {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.opcion-seccion input { margin-top: 3px; flex: 0 0 auto; width: 18px; height: 18px; }
