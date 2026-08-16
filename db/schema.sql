@@ -238,6 +238,33 @@ create table if not exists tiempo_jugadores (
   primary key (tiempo_id, jugador_id)
 );
 
+-- Tests físicos que toman los preparadores físicos en los entrenamientos.
+-- Una fila por medición (jugador + fecha + test), no por "sesión": los tests
+-- se toman sueltos y aleatorios, así que agruparlos dejaría sesiones a medio
+-- llenar. El semáforo es la valoración del PF junto al número, y es opcional:
+-- primero se anota la medición, que es lo que apura en la cancha.
+create table if not exists tests_fisicos (
+  id uuid primary key default gen_random_uuid(),
+  jugador_id uuid not null references jugadores(id) on delete cascade,
+  -- Entrenamiento en el que se tomó; null si se cargó suelto desde la ficha
+  evento_id uuid references eventos(id) on delete set null,
+  fecha date not null default current_date,
+  test text not null check (test in
+    ('resistencia','salto_largo','velocidad_20m','peso','talla')),
+  -- Siempre en la unidad base del test (ver src/tests.js): la resistencia se
+  -- anota en minutos y segundos pero se guarda en segundos.
+  valor numeric(7,2) not null check (valor > 0),
+  semaforo text check (semaforo in ('verde','amarillo','rojo')),
+  nota text,
+  autor_email text,
+  created_at timestamptz not null default now(),
+  -- Volver a cargar el mismo test el mismo día corrige la medición
+  unique (jugador_id, fecha, test)
+);
+
+create index if not exists tests_fisicos_jugador_idx
+  on tests_fisicos (jugador_id, test, fecha desc);
+
 -- Primer miembro del staff (crea su contraseña en el primer ingreso)
 insert into staff (email, nombre) values ('benitoric@gmail.com', 'Benito')
 on conflict (email) do nothing;
