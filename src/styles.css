@@ -303,7 +303,7 @@ h3 { font-size: 1rem; }
 /* Listado de jugadores como tabla: mismas columnas en encabezado y filas */
 .fila-jugador {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 46px 66px 68px;
+  grid-template-columns: minmax(0, 1fr) 44px 44px 46px 58px;
   align-items: center;
   gap: 3px;
 }
@@ -323,7 +323,7 @@ h3 { font-size: 1rem; }
 }
 .eval-fecha-movil b { color: var(--primario); }
 @media (min-width: 520px) {
-  .fila-jugador { grid-template-columns: minmax(0, 1fr) 88px 104px 88px 84px; }
+  .fila-jugador { grid-template-columns: minmax(0, 1fr) 74px 88px 104px 88px 84px; }
   .col-eval { display: block; }
   .eval-fecha-movil { display: none; }
 }
@@ -337,17 +337,13 @@ h3 { font-size: 1rem; }
   margin-top: 2px;
   overflow-wrap: anywhere;
 }
-/* Asistencia debajo del nombre: total en color y la apertura por tipo al lado */
-.asistencia-linea {
-  font-size: 0.6rem;
-  color: var(--texto-suave);
+/* Columna de asistencia: el total en color, y debajo la apertura por tipo */
+.col-asis {
   line-height: 1.2;
-  margin-top: 1px;
+  color: var(--texto-suave);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-.asis-total { font-size: 0.68rem; }
+.asis-total { font-size: 0.78rem; font-weight: 800; }
 .asis-detalle { font-size: 0.54rem; }
 .asis-total.bien { color: var(--ok); }
 .asis-total.regular { color: var(--warn); }
@@ -368,8 +364,14 @@ h3 { font-size: 1rem; }
   letter-spacing: 0.03em;
   color: var(--texto-suave);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .orden-btn.activo { color: var(--primario); }
+/* En el celular las columnas son angostas: encabezados un punto más chicos */
+@media (max-width: 519px) {
+  .orden-btn { font-size: 0.55rem; letter-spacing: 0; }
+}
 .avatar {
   width: 38px;
   height: 38px;

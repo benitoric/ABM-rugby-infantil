@@ -30,25 +30,25 @@ function SubPromedios({ proms, className = '' }) {
   )
 }
 
-// Asistencia junto al nombre: el total primero y abajo la apertura por tipo.
-// La de partidos es la real (los que se presentaron a jugar ese día).
+// Columna de asistencia: manda el total (es por el que se ordena el listado) y
+// abajo la apertura por tipo. La de partidos es la real (los que se
+// presentaron a jugar ese día).
 function Asistencia({ a }) {
-  if (!a || a.total == null) return null
+  if (!a || a.total == null) return <div className="col-asis mini">—</div>
   const clase = a.total >= 75 ? 'bien' : a.total >= 50 ? 'regular' : 'flojo'
   const detalle = (v, presentes, total) =>
     v == null ? '—' : `${v}% (${presentes}/${total})`
+  const pct = (v) => (v == null ? '—' : `${v}%`)
   return (
     <div
-      className="asistencia-linea"
+      className="col-asis"
       title={'Asistencia total ' + detalle(a.total, a.entrenamientos_presentes + a.partidos_presentes, a.entrenamientos_total + a.partidos_total) +
         '\nEntrenamientos ' + detalle(a.entrenamientos, a.entrenamientos_presentes, a.entrenamientos_total) +
         '\nPartidos (asistencia real) ' + detalle(a.partidos, a.partidos_presentes, a.partidos_total)}
     >
       <b className={`asis-total ${clase}`}>{a.total}%</b>
-      <span className="asis-detalle">
-        {' '}ent {a.entrenamientos == null ? '—' : `${a.entrenamientos}%`}
-        {' · '}part {a.partidos == null ? '—' : `${a.partidos}%`}
-      </span>
+      <div className="asis-detalle">ent {pct(a.entrenamientos)}</div>
+      <div className="asis-detalle">part {pct(a.partidos)}</div>
     </div>
   )
 }
@@ -191,7 +191,10 @@ export default function Jugadores({ yo }) {
   const RANGO_ESTADO = { activo: 0, inhabilitado: 1, lesionado: 2, inactivo: 3 }
   const ordenados = [...visibles].sort((a, b) => {
     let cmp = 0
-    if (orden.campo === 'puesto') cmp = (etiquetaPuestos(a) || 'zz').localeCompare(etiquetaPuestos(b) || 'zz')
+    // Sin asistencia calculada (todavía no hubo eventos) va al final de la
+    // lista ascendente, como los que no tienen puesto o evaluación.
+    if (orden.campo === 'asistencia') cmp = (a.asistencia?.total ?? 999) - (b.asistencia?.total ?? 999)
+    else if (orden.campo === 'puesto') cmp = (etiquetaPuestos(a) || 'zz').localeCompare(etiquetaPuestos(b) || 'zz')
     else if (orden.campo === 'aptitudes') cmp = (a.aptitudes || []).length - (b.aptitudes || []).length
     else if (orden.campo === 'estado') cmp = RANGO_ESTADO[estadoJugador(a)] - RANGO_ESTADO[estadoJugador(b)]
     else if (orden.campo === 'evaluacion') cmp = (a.ultima_evaluacion || '').localeCompare(b.ultima_evaluacion || '')
@@ -450,6 +453,7 @@ export default function Jugadores({ yo }) {
       {!cargando && visibles.length > 0 && (
         <div className="fila-jugador tabla-cab">
           {encabezado('nombre', 'Jugador')}
+          {encabezado('asistencia', 'Asist.')}
           {encabezado('puesto', 'Puesto')}
           {encabezado('aptitudes', 'Aptitudes')}
           {encabezado('estado', 'Estado')}
@@ -473,7 +477,6 @@ export default function Jugadores({ yo }) {
             )}
             <div className="crece" style={{ minWidth: 0 }}>
               <div className="nombre-jugador">{nombreCompleto(j)}</div>
-              <Asistencia a={j.asistencia} />
               <div className="eval-fecha-movil">
                 {j.ultima_evaluacion ? (
                   <>
@@ -487,6 +490,7 @@ export default function Jugadores({ yo }) {
               )}
             </div>
           </div>
+          <Asistencia a={j.asistencia} />
           <div className="celda-puesto">
             {tipoJugador(j) && (
               <span className={`badge puesto-${tipoJugador(j).toLowerCase()}`}>
