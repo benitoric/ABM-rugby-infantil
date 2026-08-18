@@ -337,6 +337,21 @@ h3 { font-size: 1rem; }
   margin-top: 2px;
   overflow-wrap: anywhere;
 }
+/* Asistencia debajo del nombre: total en color y la apertura por tipo al lado */
+.asistencia-linea {
+  font-size: 0.6rem;
+  color: var(--texto-suave);
+  line-height: 1.2;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.asis-total { font-size: 0.68rem; }
+.asis-detalle { font-size: 0.54rem; }
+.asis-total.bien { color: var(--ok); }
+.asis-total.regular { color: var(--warn); }
+.asis-total.flojo { color: var(--bad); }
 .celda-nombre { gap: 6px; flex-wrap: nowrap; min-width: 0; }
 @media (max-width: 519px) {
   .celda-nombre .avatar { display: none; }
@@ -449,7 +464,8 @@ h3 { font-size: 1rem; }
   color: #f59e0b;
 }
 
-.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+/* Entran 3 por fila en el celular y las que haga falta en pantallas anchas */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
 .stat {
   background: var(--tarjeta);
   border-radius: var(--radio);

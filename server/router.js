@@ -573,6 +573,47 @@ function eventoVigente(alias) {
     or exists (select 1 from bloques bl where bl.evento_id = ${alias}.id and not bl.suspendido)))`
 }
 
+// De dónde sale la asistencia de cada tipo de evento: el entrenamiento se marca
+// en `asistencias` y el partido en `asistencias_partido`, que es la asistencia
+// real tomada en la cancha el día del partido (el que efectivamente se presentó
+// a jugar). La confirmación previa del partido, que también vive en
+// `asistencias`, nunca cuenta como asistencia.
+const TABLA_ASISTENCIA = { entrenamiento: 'asistencias', partido: 'asistencias_partido' }
+
+// Denominador, igual para todos los jugadores: eventos ya ocurridos, vigentes y
+// con asistencia efectivamente tomada. El que no figura presente cuenta ausente.
+function sqlTotalesAsistencia() {
+  const porTipo = (tipo) => `(select count(*)::int from eventos e
+     where e.tipo = '${tipo}' and e.fecha <= current_date
+       and exists (select 1 from ${TABLA_ASISTENCIA[tipo]} a where a.evento_id = e.id)
+       and ${eventoVigente('e')})`
+  return `select ${porTipo('entrenamiento')} as ent, ${porTipo('partido')} as par`
+}
+
+// Presencias de un jugador (subconsultas escalares para el id que reciba)
+function sqlPresentesAsistencia(idJugador) {
+  const porTipo = (tipo) => `(select count(*)::int from ${TABLA_ASISTENCIA[tipo]} a
+     join eventos e on e.id = a.evento_id
+     where a.jugador_id = ${idJugador} and a.estado = 'presente'
+       and e.tipo = '${tipo}' and e.fecha <= current_date and ${eventoVigente('e')})`
+  return { ent: porTipo('entrenamiento'), par: porTipo('partido') }
+}
+
+// Porcentajes de asistencia: total (entrenamientos + partidos) y cada tipo.
+// Null cuando todavía no hay eventos de ese tipo con asistencia tomada.
+function resumenAsistencia(presentes, totales) {
+  const pct = (p, t) => (t ? Math.round((100 * p) / t) : null)
+  return {
+    total: pct(presentes.ent + presentes.par, totales.ent + totales.par),
+    entrenamientos: pct(presentes.ent, totales.ent),
+    partidos: pct(presentes.par, totales.par),
+    entrenamientos_presentes: presentes.ent,
+    entrenamientos_total: totales.ent,
+    partidos_presentes: presentes.par,
+    partidos_total: totales.par,
+  }
+}
+
 export async function handle(req, res) {
   try {
     const url = new URL(req.url, 'http://localhost')
@@ -666,12 +707,16 @@ async function enrutar(metodo, p, b, req, url) {
     if (metodo === 'GET' && !p[1]) {
       // La miniatura del primer documento con imagen acompaña al listado: son
       // unos pocos KB por jugador, contra cientos si se mandara el archivo.
-      return query(`select ${COLS_JUGADOR},
+      const pres = sqlPresentesAsistencia('jugadores.id')
+      const [totales] = await query(sqlTotalesAsistencia())
+      const filas = await query(`select ${COLS_JUGADOR},
         ue.fecha::text as ultima_evaluacion,
         ue.valores as ultima_evaluacion_valores,
         ue.valores_revisor as ultima_evaluacion_revisor,
         doc.documento_id,
-        doc.miniatura
+        doc.miniatura,
+        ${pres.ent} as asis_ent,
+        ${pres.par} as asis_par
         from jugadores
         left join lateral (
           select e.fecha, e.valores, e.valores_revisor from evaluaciones e
@@ -685,6 +730,10 @@ async function enrutar(metodo, p, b, req, url) {
           order by d.created_at limit 1
         ) doc on true
         order by apellido, nombre`)
+      return filas.map(({ asis_ent, asis_par, ...j }) => ({
+        ...j,
+        asistencia: resumenAsistencia({ ent: asis_ent, par: asis_par }, totales),
+      }))
     }
     if (metodo === 'POST' && !p[1]) {
       const d = datosJugador(b)
@@ -781,21 +830,10 @@ async function enrutar(metodo, p, b, req, url) {
          order by fecha desc`, [p[1]])
       // Ausente por defecto: cuentan todos los eventos ya ocurridos en los que
       // se tomó asistencia; presente solo si tiene la marca explícita.
-      const [tot] = await query(
-        `select count(*) filter (where e.tipo = 'entrenamiento')::int as ent,
-                count(*) filter (where e.tipo = 'partido')::int as par
-         from eventos e
-         where e.fecha <= current_date
-           and exists (select 1 from asistencias a where a.evento_id = e.id)
-           and ${eventoVigente('e')}`)
+      const [tot] = await query(sqlTotalesAsistencia())
+      const sqlPres = sqlPresentesAsistencia('$1')
       const [pres] = await query(
-        `select count(*) filter (where ev.tipo = 'entrenamiento')::int as ent,
-                count(*) filter (where ev.tipo = 'partido')::int as par
-         from asistencias a
-         join eventos ev on ev.id = a.evento_id
-         where a.jugador_id = $1 and a.estado = 'presente' and ev.fecha <= current_date
-           and ${eventoVigente('ev')}`,
-        [p[1]])
+        `select ${sqlPres.ent} as ent, ${sqlPres.par} as par`, [p[1]])
       const [{ total }] = await query(
         'select count(*)::int as total from tiempo_jugadores where jugador_id = $1', [p[1]])
       // Rastro de las confirmaciones incumplidas: avisó que iba (asistencias,
@@ -810,13 +848,13 @@ async function enrutar(metodo, p, b, req, url) {
            and coalesce(ap.estado, 'ausente') = 'ausente'
            and exists (select 1 from asistencias_partido x where x.evento_id = e.id)
            and ${eventoVigente('e')}`, [p[1]])
-      const pct = (presentes, totales) =>
-        totales ? Math.round((100 * presentes) / totales) : null
+      const asistencia = resumenAsistencia(pres, tot)
       return {
         jugador, seguimientos, lesiones, evaluaciones, documentos, incidentes, tests,
         stats: {
-          entrenamientos: pct(pres.ent, tot.ent),
-          partidos: pct(pres.par, tot.par),
+          asistencia_total: asistencia.total,
+          entrenamientos: asistencia.entrenamientos,
+          partidos: asistencia.partidos,
           tiempos: total,
           faltas_avisadas: faltas.total,
         },
@@ -1209,30 +1247,18 @@ async function enrutar(metodo, p, b, req, url) {
     if (metodo === 'GET' && p[1] === 'asistencia') {
       // Ausente por defecto: el total es la cantidad de eventos ya ocurridos
       // con asistencia tomada, igual para todos los jugadores.
-      const [tot] = await query(
-        `select count(*) filter (where e.tipo = 'entrenamiento')::int as ent,
-                count(*) filter (where e.tipo = 'partido')::int as par
-         from eventos e
-         where e.fecha <= current_date
-           and exists (select 1 from asistencias a where a.evento_id = e.id)
-           and ${eventoVigente('e')}`)
+      const [tot] = await query(sqlTotalesAsistencia())
+      const pres = sqlPresentesAsistencia('j.id')
       const filas = await query(
         `select j.id, j.nombre, j.apellido,
-           count(a.id) filter (where ev.tipo = 'entrenamiento' and a.estado = 'presente')::int as ent_presentes,
-           count(a.id) filter (where ev.tipo = 'partido' and a.estado = 'presente')::int as par_presentes
+           ${pres.ent} as ent_presentes,
+           ${pres.par} as par_presentes
          from jugadores j
-         left join asistencias a on a.jugador_id = j.id
-         left join eventos ev on ev.id = a.evento_id
-           and ev.fecha <= current_date and ${eventoVigente('ev')}
          where j.estado <> 'inactivo'
-         group by j.id, j.nombre, j.apellido
          order by j.apellido, j.nombre`)
       return filas.map((f) => ({
         id: f.id, nombre: f.nombre, apellido: f.apellido,
-        entrenamientos_presentes: f.ent_presentes,
-        entrenamientos_total: tot.ent,
-        partidos_presentes: f.par_presentes,
-        partidos_total: tot.par,
+        ...resumenAsistencia({ ent: f.ent_presentes, par: f.par_presentes }, tot),
       }))
     }
   }
