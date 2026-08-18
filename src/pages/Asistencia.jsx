@@ -52,13 +52,14 @@ export default function Asistencia({ yo }) {
 
   async function descargarResumen() {
     const stats = await api('stats/asistencia')
-    const pct = (p, t) => (t ? `${Math.round((100 * p) / t)}%` : '—')
+    const pct = (v) => (v == null ? '—' : `${v}%`)
     descargarCSV('asistencia-resumen.csv', [
-      ['Jugador', 'Entrenamientos asistidos', 'Entrenamientos totales', '% Entren.', 'Partidos asistidos', 'Partidos totales', '% Partidos'],
+      ['Jugador', 'Entrenamientos asistidos', 'Entrenamientos totales', '% Entren.', 'Partidos asistidos', 'Partidos totales', '% Partidos', '% Total'],
       ...stats.map((s) => [
         `${s.apellido}, ${s.nombre}`,
-        s.entrenamientos_presentes, s.entrenamientos_total, pct(s.entrenamientos_presentes, s.entrenamientos_total),
-        s.partidos_presentes, s.partidos_total, pct(s.partidos_presentes, s.partidos_total),
+        s.entrenamientos_presentes, s.entrenamientos_total, pct(s.entrenamientos),
+        s.partidos_presentes, s.partidos_total, pct(s.partidos),
+        pct(s.total),
       ]),
     ])
   }

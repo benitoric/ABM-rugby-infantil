@@ -30,6 +30,29 @@ function SubPromedios({ proms, className = '' }) {
   )
 }
 
+// Asistencia junto al nombre: el total primero y abajo la apertura por tipo.
+// La de partidos es la real (los que se presentaron a jugar ese día).
+function Asistencia({ a }) {
+  if (!a || a.total == null) return null
+  const clase = a.total >= 75 ? 'bien' : a.total >= 50 ? 'regular' : 'flojo'
+  const detalle = (v, presentes, total) =>
+    v == null ? '—' : `${v}% (${presentes}/${total})`
+  return (
+    <div
+      className="asistencia-linea"
+      title={'Asistencia total ' + detalle(a.total, a.entrenamientos_presentes + a.partidos_presentes, a.entrenamientos_total + a.partidos_total) +
+        '\nEntrenamientos ' + detalle(a.entrenamientos, a.entrenamientos_presentes, a.entrenamientos_total) +
+        '\nPartidos (asistencia real) ' + detalle(a.partidos, a.partidos_presentes, a.partidos_total)}
+    >
+      <b className={`asis-total ${clase}`}>{a.total}%</b>
+      <span className="asis-detalle">
+        {' '}ent {a.entrenamientos == null ? '—' : `${a.entrenamientos}%`}
+        {' · '}part {a.partidos == null ? '—' : `${a.partidos}%`}
+      </span>
+    </div>
+  )
+}
+
 // Cuánto falta para el alta estimada de una lesión abierta
 function estadoAlta(l) {
   const d = l.dias_para_alta
@@ -450,6 +473,7 @@ export default function Jugadores({ yo }) {
             )}
             <div className="crece" style={{ minWidth: 0 }}>
               <div className="nombre-jugador">{nombreCompleto(j)}</div>
+              <Asistencia a={j.asistencia} />
               <div className="eval-fecha-movil">
                 {j.ultima_evaluacion ? (
                   <>

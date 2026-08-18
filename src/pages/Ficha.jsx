@@ -153,10 +153,14 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
       {stats && (
         <div className="stat-grid">
           <div className="stat">
+            <div className="valor">{stats.asistencia_total == null ? '—' : `${stats.asistencia_total}%`}</div>
+            <div className="etiqueta">Asist. total</div>
+          </div>
+          <div className="stat">
             <div className="valor">{stats.entrenamientos == null ? '—' : `${stats.entrenamientos}%`}</div>
             <div className="etiqueta">Asist. entren.</div>
           </div>
-          <div className="stat">
+          <div className="stat" title="Asistencia real: los que se presentaron a jugar el día del partido">
             <div className="valor">{stats.partidos == null ? '—' : `${stats.partidos}%`}</div>
             <div className="etiqueta">Asist. partidos</div>
           </div>
