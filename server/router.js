@@ -862,7 +862,7 @@ async function enrutar(metodo, p, b, req, url) {
       // Veces que le tocó ser capitán, con el rival del bloque cuando se
       // cargó desde la app (las importadas de la planilla vieja no lo tienen)
       const capitanias = await query(
-        `select c.fecha::text as fecha, bl.numero as bloque, bl.rival
+        `select c.id, c.fecha::text as fecha, bl.numero as bloque, bl.rival
          from capitanias c
          left join bloques bl on bl.id = c.bloque_id
          where c.jugador_id = $1
@@ -1040,6 +1040,25 @@ async function enrutar(metodo, p, b, req, url) {
 
     if (metodo === 'DELETE' && !p[1]) {
       await query('delete from asignaciones_evaluacion')
+      return { ok: true }
+    }
+  }
+
+  // ---------- capitanías ----------
+  // El historial se carga solo al designar capitán en el día de partido; acá
+  // se corrigen los errores y lo importado de la planilla vieja. Es una
+  // corrección de historial, así que queda para la cabeza de división.
+  if (p[0] === 'capitanias') {
+    if ((metodo === 'PUT' || metodo === 'DELETE') && p[1]) {
+      if (!puedeAdministrar(yo)) throw { codigo: 403, error: 'solo_cabeza' }
+      const [fila] = await query('select id from capitanias where id = $1', [p[1]])
+      if (!fila) throw { codigo: 404, error: 'no_existe' }
+      if (metodo === 'DELETE') {
+        await query('delete from capitanias where id = $1', [p[1]])
+        return { ok: true }
+      }
+      if (!esFecha(b.fecha)) throw { codigo: 400, error: 'fecha_invalida' }
+      await query('update capitanias set fecha = $2 where id = $1', [p[1], b.fecha])
       return { ok: true }
     }
   }
