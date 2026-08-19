@@ -834,6 +834,7 @@ function ArmadoPartido({ partido }) {
               asignacion={asignacion}
               staff={staff}
               asignacionStaff={asignacionStaff}
+              capitan={capitan}
               onCerrar={() => setPublicando(false)}
             />
           )}
@@ -1491,7 +1492,7 @@ function dibujarPlaca({ fecha, secciones }) {
     }
 
     lista(`Jugadores (${s.jugadores.length})`,
-      s.jugadores.map((j, i) => `${i + 1}. ${j.apellido.toUpperCase()}, ${j.nombre}`))
+      s.jugadores.map((j, i) => `${i + 1}. ${j.apellido.toUpperCase()}, ${j.nombre}${j.id === s.capitan ? ' (c)' : ''}`))
     if (s.staff.length) {
       lista('Staff a cargo', s.staff.map((st) => {
         const ap = (st.apellido || '').toUpperCase()
@@ -1513,12 +1514,14 @@ function dibujarPlaca({ fecha, secciones }) {
   return c.toDataURL('image/png')
 }
 
-function Publicacion({ partido, bloques, jugadores, asignacion, staff, asignacionStaff, onCerrar }) {
+function Publicacion({ partido, bloques, jugadores, asignacion, staff, asignacionStaff, capitan = {}, onCerrar }) {
   const placa = useMemo(() => {
     const secciones = bloques
       .filter((b) => !b.suspendido)
       .map((b) => ({
         bloque: b,
+        // El capitán del bloque sale con "(c)" al lado del nombre
+        capitan: capitan[b.id] || null,
         jugadores: jugadores
           .filter((j) => asignacion[j.id] === b.id)
           .sort((x, y) => nombreCompleto(x).localeCompare(nombreCompleto(y), 'es')),
@@ -1533,7 +1536,7 @@ function Publicacion({ partido, bloques, jugadores, asignacion, staff, asignacio
       nombre: `bloques-${partido.fecha}.png`,
       sinStaff: secciones.filter((s) => !s.staff.length).map((s) => s.bloque.numero),
     }
-  }, [bloques, jugadores, asignacion, staff, asignacionStaff, partido.fecha])
+  }, [bloques, jugadores, asignacion, staff, asignacionStaff, capitan, partido.fecha])
 
   async function compartir() {
     const blob = await (await fetch(placa.url)).blob()
