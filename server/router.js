@@ -1698,6 +1698,9 @@ async function enrutar(metodo, p, b, req, url) {
         `delete from tiempo_jugadores where jugador_id = $1
          and tiempo_id in (select id from tiempos where bloque_id = any($2))`,
         [b.jugador_id, ids])
+      // Si era el capitán del bloque del que sale, el bloque queda sin capitán
+      await query('delete from capitanias where jugador_id = $1 and bloque_id = any($2)',
+        [b.jugador_id, ids])
       if (b.bloque_id) {
         await query('insert into bloque_jugadores (bloque_id, jugador_id) values ($1,$2)',
           [b.bloque_id, b.jugador_id])
@@ -1763,6 +1766,7 @@ async function enrutar(metodo, p, b, req, url) {
         `delete from tiempo_jugadores
          where tiempo_id in (select id from tiempos where bloque_id = any($1))`, [ids])
       await query('delete from bloque_jugadores where bloque_id = any($1)', [ids])
+      await query('delete from capitanias where bloque_id = any($1)', [ids])
       return { ok: true }
     }
     if (metodo === 'POST' && p[1] === 'sugerir-bloques') {
