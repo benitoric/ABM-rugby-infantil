@@ -32,7 +32,7 @@ async function inicializar() {
   // fallar igual en Postgres por la carrera en el catálogo.
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
-    `select to_regclass('public.trabajo_fisico') is not null as aplicadas`)
+    `select to_regclass('public.capitanias') is not null as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -220,8 +220,7 @@ export async function migrar(pool) {
   await pool.query(`create index if not exists tests_fisicos_jugador_idx
     on tests_fisicos (jugador_id, test, fecha desc)`)
   // Planilla del PF: el trabajo físico de la primera media hora de cada
-  // entrenamiento. Es la última migración, así que su existencia es el
-  // testigo de que todo lo de arriba ya corrió.
+  // entrenamiento.
   await pool.query(`create table if not exists trabajo_fisico (
     evento_id uuid primary key references eventos(id) on delete cascade,
     variables jsonb not null default '{}',
@@ -230,6 +229,35 @@ export async function migrar(pool) {
     autor_email text,
     actualizado_en timestamptz not null default now()
   )`)
+  // Capitanes de cada bloque. Es la última migración, así que la existencia
+  // de la tabla es el testigo de que todo lo de arriba ya corrió.
+  await pool.query(`create table if not exists capitanias (
+    id uuid primary key default gen_random_uuid(),
+    jugador_id uuid not null references jugadores(id) on delete cascade,
+    fecha date not null,
+    bloque_id uuid references bloques(id) on delete cascade,
+    created_at timestamptz not null default now(),
+    unique (bloque_id)
+  )`)
+  await importarCapitanes(pool)
+}
+
+// Arranca el historial de capitanes con la planilla que se venía llevando
+// aparte. Corre una sola vez: con la tabla ya cargada no toca nada.
+async function importarCapitanes(pool) {
+  const { rows: [{ n }] } = await pool.query('select count(*)::int as n from capitanias')
+  if (n) return
+  const { rows: jugadores } = await pool.query('select id, nombre, apellido from jugadores')
+  if (!jugadores.length) return
+  const { emparejar } = await import('./capitanes-iniciales.js')
+  const { filas, sinEmparejar } = emparejar(jugadores)
+  for (const f of filas) {
+    await pool.query('insert into capitanias (jugador_id, fecha) values ($1, $2)',
+      [f.jugador_id, f.fecha])
+  }
+  if (sinEmparejar.length) {
+    console.warn('Capitanes sin emparejar con la lista de jugadores:', sinEmparejar.join(' | '))
+  }
 }
 
 // Tolera los formatos habituales al pegar la cadena de Neon: comillas,

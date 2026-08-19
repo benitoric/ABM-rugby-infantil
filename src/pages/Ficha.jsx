@@ -20,6 +20,8 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
   const [documentos, setDocumentos] = useState([])
   // Mediciones de los PF, de la más nueva a la más vieja
   const [tests, setTests] = useState([])
+  // Veces que le tocó ser capitán (una fila por partido)
+  const [capitanias, setCapitanias] = useState([])
   const [stats, setStats] = useState(null)
   const [editando, setEditando] = useState(false)
   const [nuevo, setNuevo] = useState(null)
@@ -37,6 +39,7 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
     setIncidentes(d.incidentes || [])
     setDocumentos(d.documentos || [])
     setTests(d.tests || [])
+    setCapitanias(d.capitanias || [])
     setStats(d.stats)
   }
   useEffect(() => { cargar() }, [jugadorId])
@@ -167,6 +170,10 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
           <div className="stat">
             <div className="valor">{stats.tiempos}</div>
             <div className="etiqueta">Tiempos jugados</div>
+          </div>
+          <div className="stat" title="Veces que fue capitán de su bloque">
+            <div className="valor">{stats.capitanias || 0}</div>
+            <div className="etiqueta">Capitán</div>
           </div>
           {stats.faltas_avisadas > 0 && (
             <div className="stat">
@@ -378,6 +385,31 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
           </div>
         </div>
       ))}
+
+      <h3>Capitán</h3>
+      {capitanias.length === 0 ? (
+        <div className="vacio">
+          Todavía no fue capitán. La idea es que todos pasen por el rol: al
+          armar los bloques aparece destacado.
+        </div>
+      ) : (
+        <div className="tarjeta">
+          <p className="mini" style={{ marginTop: 0 }}>
+            Fue capitán {capitanias.length} {capitanias.length === 1 ? 'vez' : 'veces'}.
+          </p>
+          {capitanias.map((c, i) => (
+            <div key={`${c.fecha}-${i}`} className="incidente">
+              <div className="crece">
+                <b style={{ fontSize: '0.9rem' }}>🎖 {fechaCorta(c.fecha)}</b>
+                <div className="mini">
+                  {c.bloque ? `Bloque ${c.bloque}` : 'Registro anterior a la app'}
+                  {c.rival ? ` · vs ${c.rival}` : ''}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {incidentes.length > 0 && (
         <>

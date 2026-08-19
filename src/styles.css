@@ -1031,3 +1031,10 @@ details.tarjeta summary {
   cursor: pointer;
 }
 .opcion-seccion input { margin-top: 3px; flex: 0 0 auto; width: 18px; height: 18px; }
+
+/* Capitanes: la idea es que todos pasen por el rol, así que los que todavía
+   no lo fueron se ven de una al armar los bloques */
+.pendiente-capitan {
+  color: var(--warn);
+  font-weight: 700;
+}
