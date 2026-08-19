@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { api, escrituraEnVuelo, marcaEscrituras } from '../api.js'
 import { irA, leerHash, reponer, suscribir } from '../navegacion.js'
 import {
@@ -190,6 +190,17 @@ function ArmadoPartido({ partido }) {
   const [vistaPrevia, setVistaPrevia] = useState(false)
   const [listo, setListo] = useState(false)
   const [sugerencias, recargarSugerencias] = useSugerencias()
+  // Al cerrar un modal tocando la pantalla, el celular manda después un click
+  // "fantasma" sobre lo que quedó debajo: si justo cae encima de un botón de
+  // la lista (el 🎖 del capitán, por ejemplo) lo aprieta sin que nadie lo
+  // haya tocado. Los botones de la lista ignoran los clicks del ratito
+  // siguiente al cierre.
+  const ignorarClicksHasta = useRef(0)
+  const clickFantasma = () => Date.now() < ignorarClicksHasta.current
+  const cerrarModal = (cerrar) => () => {
+    ignorarClicksHasta.current = Date.now() + 500
+    cerrar()
+  }
 
   // La vista activa (armar / asistencia / bloque / planilla) vive en el hash:
   // sobrevive recargas y descartes de la PWA, y "atrás" vuelve a la anterior
@@ -323,9 +334,14 @@ function ArmadoPartido({ partido }) {
   }, [listo])
 
   async function asignar(jugadorId, bloqueId) {
+    if (clickFantasma()) return
     const actual = asignacion[jugadorId]
     const nuevo = actual === bloqueId ? null : bloqueId
     setAsignacion((m) => ({ ...m, [jugadorId]: nuevo }))
+    // Al salir del bloque deja de ser su capitán (el servidor hace lo mismo)
+    if (actual && capitan[actual] === jugadorId) {
+      setCapitan((m) => ({ ...m, [actual]: null }))
+    }
     if (actual) {
       // al sacarlo del bloque también sale de los tiempos de ese bloque
       const tiemposDelBloque = tiempos.filter((t) => t.bloque_id === actual).map((t) => t.id)
@@ -350,6 +366,7 @@ function ArmadoPartido({ partido }) {
   // anotado con la fecha del partido, así que el historial se actualiza al
   // toque (por eso el servidor lo devuelve de vuelta).
   async function designarCapitan(jugadorId, bloqueId) {
+    if (clickFantasma()) return
     const nuevo = capitan[bloqueId] === jugadorId ? null : jugadorId
     setCapitan((m) => ({ ...m, [bloqueId]: nuevo }))
     const r = await api('partido/capitan', {
@@ -591,6 +608,7 @@ function ArmadoPartido({ partido }) {
     if (!confirm(`¿Sacar a los ${asignados} jugadores de los bloques? También se vacían los tiempos cargados.`)) return
     setAsignacion({})
     setEnCancha({})
+    setCapitan({})
     setSugerencia(null)
     await api('partido/limpiar-bloques', { method: 'POST', body: { evento_id: partido.id } })
   }
@@ -822,7 +840,7 @@ function ArmadoPartido({ partido }) {
               asignacion={sugerencia ? sugerencia.asignacion : asignacion}
               propuesta={!!sugerencia}
               juegoDe={juegoDe}
-              onCerrar={() => setVistaPrevia(false)}
+              onCerrar={cerrarModal(() => setVistaPrevia(false))}
             />
           )}
 
@@ -835,7 +853,7 @@ function ArmadoPartido({ partido }) {
               staff={staff}
               asignacionStaff={asignacionStaff}
               capitan={capitan}
-              onCerrar={() => setPublicando(false)}
+              onCerrar={cerrarModal(() => setPublicando(false))}
             />
           )}
 
@@ -935,6 +953,7 @@ function ArmadoPartido({ partido }) {
                       key={b.id}
                       className={`bloque-btn ${asignado === b.id ? 'sel' : ''} ${sugerencia && asignado === b.id && (asignacion[j.id] || null) !== b.id ? 'prop' : ''}`}
                       onClick={() => {
+                        if (clickFantasma()) return
                         if (!sugerencia) return asignar(j.id, b.id)
                         // con la propuesta abierta, los botones editan la propuesta
                         setSugerencia((s) => ({
@@ -1295,6 +1314,7 @@ function ControlAsistencia({
 // backs (según el puesto principal), del mejor al peor promedio de juego. Es
 // la mirada de control antes de aplicar o publicar.
 function VistaPreviaBloques({ bloques, jugadores, asignacion, propuesta, juegoDe, onCerrar }) {
+  const cerrarSiEsElFondo = (e) => { if (e.target === e.currentTarget) onCerrar() }
   const tipoDe = (j) => {
     const principal = puestoPrincipal(j)
     const pu = PUESTOS.find((x) => x.value === principal)
@@ -1316,7 +1336,7 @@ function VistaPreviaBloques({ bloques, jugadores, asignacion, propuesta, juegoDe
   ]
 
   return (
-    <div className="modal-fondo" onClick={onCerrar}>
+    <div className="modal-fondo" onClick={cerrarSiEsElFondo}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="fila entre" style={{ marginBottom: 8 }}>
           <h3>👁 Vista previa {propuesta ? 'de la propuesta' : 'de los bloques'}</h3>
@@ -1515,6 +1535,7 @@ function dibujarPlaca({ fecha, secciones }) {
 }
 
 function Publicacion({ partido, bloques, jugadores, asignacion, staff, asignacionStaff, capitan = {}, onCerrar }) {
+  const cerrarSiEsElFondo = (e) => { if (e.target === e.currentTarget) onCerrar() }
   const placa = useMemo(() => {
     const secciones = bloques
       .filter((b) => !b.suspendido)
@@ -1554,7 +1575,7 @@ function Publicacion({ partido, bloques, jugadores, asignacion, staff, asignacio
   }
 
   return (
-    <div className="modal-fondo" onClick={onCerrar}>
+    <div className="modal-fondo" onClick={cerrarSiEsElFondo}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="fila entre" style={{ marginBottom: 10 }}>
           <h3>📣 Publicar para el grupo de padres</h3>
