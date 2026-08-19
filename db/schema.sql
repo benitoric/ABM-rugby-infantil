@@ -215,6 +215,20 @@ create table if not exists bloque_staff (
   primary key (bloque_id, staff_email)
 );
 
+-- Capitanes: en cada partido se elige uno por bloque, y la idea es que todos
+-- los chicos pasen por el rol. Una fila por vez que a un jugador le tocó.
+-- bloque_id queda en null en las capitanías importadas de la planilla vieja,
+-- anteriores a que esto se cargara en la app.
+create table if not exists capitanias (
+  id uuid primary key default gen_random_uuid(),
+  jugador_id uuid not null references jugadores(id) on delete cascade,
+  fecha date not null,
+  bloque_id uuid references bloques(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  -- Un solo capitán por bloque
+  unique (bloque_id)
+);
+
 create table if not exists tiempos (
   id uuid primary key default gen_random_uuid(),
   bloque_id uuid not null references bloques(id) on delete cascade,

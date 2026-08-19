@@ -150,6 +150,13 @@ function RotacionAnual() {
   )
 }
 
+// jugador_id → { veces, ultima } a partir de lo que manda el servidor
+function historialCapitanes(filas) {
+  const m = {}
+  for (const c of filas || []) m[c.jugador_id] = { veces: c.veces, ultima: c.ultima }
+  return m
+}
+
 function ArmadoPartido({ partido }) {
   const [bloques, setBloques] = useState([])
   const [jugadores, setJugadores] = useState([])
@@ -167,6 +174,11 @@ function ArmadoPartido({ partido }) {
   const [asignacionStaff, setAsignacionStaff] = useState({})
   const [presenciaStaff, setPresenciaStaff] = useState({})
   const [tiempos, setTiempos] = useState([])
+  // capitan: bloque_id → jugador_id (uno por bloque).
+  // capitanias: jugador_id → { veces, ultima }, el historial de toda la
+  // temporada, para destacar a los que todavía no pasaron por el rol.
+  const [capitan, setCapitan] = useState({})
+  const [capitanias, setCapitanias] = useState({})
   const [enCancha, setEnCancha] = useState({})
   const [tiempoSel, setTiempoSel] = useState({})
   const [actualizado, setActualizado] = useState(null)
@@ -232,6 +244,11 @@ function ArmadoPartido({ partido }) {
     }
     setAsignacionStaff(mAsigSf)
     setPresenciaStaff(mPresSf)
+
+    const mCap = {}
+    for (const c of datos.capitanes || []) mCap[c.bloque_id] = c.jugador_id
+    setCapitan(mCap)
+    setCapitanias(historialCapitanes(datos.capitanias))
 
     // enCancha: tiempo_id → { jugador_id → { puesto, prestado } }
     const mCancha = {}
@@ -327,6 +344,19 @@ function ArmadoPartido({ partido }) {
       method: 'POST',
       body: { evento_id: partido.id, jugador_id: jugadorId, bloque_id: nuevo },
     })
+  }
+
+  // Capitán del bloque: uno solo, y tocar al que ya está lo saca. Queda
+  // anotado con la fecha del partido, así que el historial se actualiza al
+  // toque (por eso el servidor lo devuelve de vuelta).
+  async function designarCapitan(jugadorId, bloqueId) {
+    const nuevo = capitan[bloqueId] === jugadorId ? null : jugadorId
+    setCapitan((m) => ({ ...m, [bloqueId]: nuevo }))
+    const r = await api('partido/capitan', {
+      method: 'POST',
+      body: { bloque_id: bloqueId, jugador_id: nuevo },
+    })
+    if (r?.capitanias) setCapitanias(historialCapitanes(r.capitanias))
   }
 
   // Control de asistencia del día del partido (asistencias_partido), tomado
@@ -880,8 +910,25 @@ function ArmadoPartido({ partido }) {
                       ? ` · juego ★${juegoDe(j).toFixed(1)}`
                       : ' · sin evaluar'}
                   </div>
+                  {/* La idea es que todos pasen por el rol: los que todavía no
+                      fueron capitanes van destacados */}
+                  <div className="mini">
+                    {capitanias[j.id]
+                      ? `🎖 Capitán ${capitanias[j.id].veces} ${capitanias[j.id].veces === 1 ? 'vez' : 'veces'} · última ${fechaCorta(capitanias[j.id].ultima)}`
+                      : <span className="pendiente-capitan">🎖 Nunca fue capitán</span>}
+                  </div>
                 </div>
                 <div className="bloque-botones">
+                  {/* Un capitán por bloque; se elige entre los de ese bloque */}
+                  {asignado && !sugerencia && (
+                    <button
+                      className={`bloque-btn ${capitan[asignado] === j.id ? 'sel' : ''}`}
+                      title={capitan[asignado] === j.id ? 'Capitán del bloque (tocá para sacarlo)' : 'Designar capitán del bloque'}
+                      onClick={() => designarCapitan(j.id, asignado)}
+                    >
+                      🎖
+                    </button>
+                  )}
                   {bloques.map((b) => (
                     <button
                       key={b.id}

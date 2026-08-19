@@ -561,6 +561,17 @@ async function exigirTiempoAbierto(tiempoId) {
   if (t.tc) throw { codigo: 409, error: 'tiempo_cerrado' }
 }
 
+// ---------- capitanes ----------
+// En cada partido se elige un capitán por bloque y la idea es que todos los
+// chicos pasen por el rol: el historial (cuántas veces y cuándo fue cada uno)
+// viaja con el armado para poder destacar a los que todavía no lo fueron.
+
+async function historialCapitanias() {
+  return query(
+    `select jugador_id, count(*)::int as veces, max(fecha)::text as ultima
+     from capitanias group by jugador_id`)
+}
+
 // Un evento cuenta para las estadísticas si no está suspendido del todo: los
 // partidos con un solo bloque suspendido siguen contando (el otro se jugó).
 // Cuántas faltas seguidas a entrenamientos hacen falta para avisar en la
@@ -848,15 +859,24 @@ async function enrutar(metodo, p, b, req, url) {
            and coalesce(ap.estado, 'ausente') = 'ausente'
            and exists (select 1 from asistencias_partido x where x.evento_id = e.id)
            and ${eventoVigente('e')}`, [p[1]])
+      // Veces que le tocó ser capitán, con el rival del bloque cuando se
+      // cargó desde la app (las importadas de la planilla vieja no lo tienen)
+      const capitanias = await query(
+        `select c.fecha::text as fecha, bl.numero as bloque, bl.rival
+         from capitanias c
+         left join bloques bl on bl.id = c.bloque_id
+         where c.jugador_id = $1
+         order by c.fecha desc`, [p[1]])
       const asistencia = resumenAsistencia(pres, tot)
       return {
-        jugador, seguimientos, lesiones, evaluaciones, documentos, incidentes, tests,
+        jugador, seguimientos, lesiones, evaluaciones, documentos, incidentes, tests, capitanias,
         stats: {
           asistencia_total: asistencia.total,
           entrenamientos: asistencia.entrenamientos,
           partidos: asistencia.partidos,
           tiempos: total,
           faltas_avisadas: faltas.total,
+          capitanias: capitanias.length,
         },
       }
     }
@@ -1600,6 +1620,8 @@ async function enrutar(metodo, p, b, req, url) {
       const asistenciasDia = await query(
         'select jugador_id, estado, tarde, condicion from asistencias_partido where evento_id = $1',
         [eventoId])
+      const capitanes = await query(
+        'select bloque_id, jugador_id from capitanias where bloque_id = any($1)', [ids])
       return {
         bloques,
         tiempos,
@@ -1609,6 +1631,8 @@ async function enrutar(metodo, p, b, req, url) {
         confirmaciones,
         confirmaciones_staff: confirmacionesStaff,
         asistencias_dia: asistenciasDia,
+        capitanes,
+        capitanias: await historialCapitanias(),
       }
     }
     if (metodo === 'GET' && p[1]) {
@@ -1650,7 +1674,12 @@ async function enrutar(metodo, p, b, req, url) {
       const enCancha = await query(
         `select tj.tiempo_id, tj.jugador_id, tj.puesto, tj.prestado from tiempo_jugadores tj
          join tiempos t on t.id = tj.tiempo_id where t.bloque_id = any($1)`, [ids])
-      return { bloques, tiempos, asignaciones, staff, en_cancha: enCancha }
+      const capitanes = await query(
+        'select bloque_id, jugador_id from capitanias where bloque_id = any($1)', [ids])
+      return {
+        bloques, tiempos, asignaciones, staff, en_cancha: enCancha,
+        capitanes, capitanias: await historialCapitanias(),
+      }
     }
     if (metodo === 'POST' && p[1] === 'asignar') {
       // saca al jugador de ambos bloques del evento (y de sus tiempos) y lo pone en el nuevo
@@ -1692,6 +1721,20 @@ async function enrutar(metodo, p, b, req, url) {
           [b.bloque_id, b.staff_email])
       }
       return { ok: true }
+    }
+    if (metodo === 'POST' && p[1] === 'capitan') {
+      // Capitán del bloque: uno solo, y queda anotado con la fecha del partido
+      // para el historial. jugador_id en null saca al que estaba.
+      await exigirBloqueAbierto(b.bloque_id)
+      await query('delete from capitanias where bloque_id = $1', [b.bloque_id])
+      if (b.jugador_id) {
+        const [bl] = await query(
+          `select e.fecha::text as fecha from bloques b join eventos e on e.id = b.evento_id
+           where b.id = $1`, [b.bloque_id])
+        await query('insert into capitanias (jugador_id, fecha, bloque_id) values ($1,$2,$3)',
+          [b.jugador_id, bl.fecha, b.bloque_id])
+      }
+      return { ok: true, capitanias: await historialCapitanias() }
     }
     if (metodo === 'POST' && p[1] === 'staff-presente') {
       // Presencia efectiva del staff el día del partido, sobre su bloque
