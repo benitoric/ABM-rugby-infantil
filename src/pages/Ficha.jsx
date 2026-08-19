@@ -22,6 +22,8 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
   const [tests, setTests] = useState([])
   // Veces que le tocó ser capitán (una fila por partido)
   const [capitanias, setCapitanias] = useState([])
+  // Capitanía cuya fecha se está corrigiendo (solo cabeza de división)
+  const [editandoCap, setEditandoCap] = useState(null)
   const [stats, setStats] = useState(null)
   const [editando, setEditando] = useState(false)
   const [nuevo, setNuevo] = useState(null)
@@ -43,6 +45,22 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
     setStats(d.stats)
   }
   useEffect(() => { cargar() }, [jugadorId])
+
+  // Corrección del historial de capitanías (solo la cabeza de división): la
+  // fecha se edita a mano porque las importadas de la planilla vieja no
+  // tienen partido asociado.
+  async function guardarCapitania(id, fecha) {
+    if (!fecha) return
+    await api(`capitanias/${id}`, { method: 'PUT', body: { fecha } })
+    setEditandoCap(null)
+    cargar()
+  }
+
+  async function borrarCapitania(c) {
+    if (!confirm(`¿Borrar la capitanía del ${fechaCorta(c.fecha)}?`)) return
+    await api(`capitanias/${c.id}`, { method: 'DELETE' })
+    cargar()
+  }
 
   // El formulario de lesión vive arriba, en su sección: al abrirlo desde el
   // historial de golpes hay que llevar la vista hasta él.
@@ -398,7 +416,7 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
             Fue capitán {capitanias.length} {capitanias.length === 1 ? 'vez' : 'veces'}.
           </p>
           {capitanias.map((c, i) => (
-            <div key={`${c.fecha}-${i}`} className="incidente">
+            <div key={c.id || `${c.fecha}-${i}`} className="incidente">
               <div className="crece">
                 <b style={{ fontSize: '0.9rem' }}>🎖 {fechaCorta(c.fecha)}</b>
                 <div className="mini">
@@ -406,6 +424,23 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
                   {c.rival ? ` · vs ${c.rival}` : ''}
                 </div>
               </div>
+              {/* Corregir el historial (fechas mal cargadas, registros de más)
+                  queda reservado a la cabeza de división */}
+              {yo?.admin && c.id && (editandoCap === c.id ? (
+                <div className="fila" style={{ gap: 6 }}>
+                  <input
+                    type="date"
+                    defaultValue={c.fecha}
+                    onChange={(e) => { if (e.target.value) guardarCapitania(c.id, e.target.value) }}
+                  />
+                  <button className="btn sec chico" onClick={() => setEditandoCap(null)}>Cancelar</button>
+                </div>
+              ) : (
+                <div className="fila" style={{ gap: 6 }}>
+                  <button className="btn sec chico" onClick={() => setEditandoCap(c.id)}>Editar</button>
+                  <button className="btn sec chico" onClick={() => borrarCapitania(c)}>Borrar</button>
+                </div>
+              ))}
             </div>
           ))}
         </div>
