@@ -1514,10 +1514,11 @@ function dibujarPlaca({ fecha, secciones }) {
     lista(`Jugadores (${s.jugadores.length})`,
       s.jugadores.map((j, i) => `${i + 1}. ${j.apellido.toUpperCase()}, ${j.nombre}${j.id === s.capitan ? ' (c)' : ''}`))
     if (s.staff.length) {
-      lista('Staff a cargo', s.staff.map((st) => {
-        const ap = (st.apellido || '').toUpperCase()
-        return ap ? `${ap}, ${st.nombre}` : st.nombre || st.email
-      }))
+      // Los jugadores van como "APELLIDO, Nombre" porque es una lista larga
+      // que se busca por apellido; el staff son cuatro nombres y va como en
+      // el resto de la app. Además, no todos tienen cargado el apellido
+      // aparte: los que lo tienen salían con otro formato que el resto.
+      lista('Staff a cargo', s.staff.map(nombreStaff))
     }
   }
 
