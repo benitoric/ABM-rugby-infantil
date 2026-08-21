@@ -48,8 +48,6 @@ export default function Asistencia({ yo }) {
     return <EstadisticaFisica yo={yo} onVolver={() => setVerEstadisticaFisica(false)} />
   }
 
-  const hoy = new Date().toISOString().slice(0, 10)
-
   async function descargarResumen() {
     const stats = await api('stats/asistencia')
     const pct = (v) => (v == null ? '—' : `${v}%`)
@@ -73,10 +71,7 @@ export default function Asistencia({ yo }) {
           <button className="btn sec" onClick={descargarResumen}>Resumen CSV</button>
           <button
             className="btn"
-            onClick={() => setCreando({
-              tipo: 'entrenamiento', modalidad: 'rutina', fecha: hoy, hora: '', hora_fin: '',
-              lugar: '', notas: '', bloques: [{ ...BLOQUE_VACIO }, { ...BLOQUE_VACIO }],
-            })}
+            onClick={() => setCreando(true)}
           >
             + Nuevo evento
           </button>
@@ -121,130 +116,241 @@ export default function Asistencia({ yo }) {
       })}
 
       {creando && (
-        <div className="modal-fondo" onClick={() => setCreando(null)}>
-          <form
-            className="modal"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={async (e) => {
-              e.preventDefault()
-              const esPartido = creando.tipo === 'partido'
-              const bloque = (d, i) => ({
-                numero: i + 1,
-                rival: d.rival?.trim() || null,
-                dificultad: d.dificultad || null,
-                lugar: d.lugar?.trim() || null,
-                hora_convocatoria: d.hora_convocatoria || null,
-              })
-              const esRutina = !esPartido && creando.modalidad === 'rutina'
-              const ev = await api('eventos', {
-                method: 'POST',
-                body: {
-                  tipo: creando.tipo,
-                  modalidad: esPartido ? null : creando.modalidad,
-                  fecha: creando.fecha,
-                  hora: esPartido ? null : (esRutina ? RUTINA.hora : creando.hora || null),
-                  hora_fin: esPartido ? null : (esRutina ? RUTINA.hora_fin : creando.hora_fin || null),
-                  lugar: esPartido ? null : creando.lugar?.trim() || null,
-                  notas: creando.notas?.trim() || null,
-                  bloques: esPartido ? creando.bloques.map(bloque) : undefined,
-                },
-              })
-              setCreando(null)
-              await cargar()
-              recargarSugerencias()
-              setEventoSel(ev)
-            }}
-          >
-            <div className="fila entre" style={{ marginBottom: 12 }}>
-              <h3>Nuevo evento</h3>
-              <button type="button" className="btn sec chico" onClick={() => setCreando(null)}>Cerrar</button>
+        <FormEvento
+          sugerencias={sugerencias}
+          onCerrar={() => setCreando(null)}
+          onGuardado={async (ev) => {
+            setCreando(null)
+            await cargar()
+            recargarSugerencias()
+            setEventoSel(ev)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// Estado inicial del formulario: en blanco para un alta, o con los datos del
+// evento que se está editando.
+function estadoInicial(evento) {
+  if (!evento) {
+    return {
+      tipo: 'entrenamiento',
+      modalidad: 'rutina',
+      fecha: new Date().toISOString().slice(0, 10),
+      hora: '',
+      hora_fin: '',
+      lugar: '',
+      notas: '',
+      bloques: [{ ...BLOQUE_VACIO }, { ...BLOQUE_VACIO }],
+    }
+  }
+  return {
+    tipo: evento.tipo,
+    // Los entrenamientos viejos no tienen modalidad: queda sin elegir hasta
+    // que alguien la marque, en vez de inventarle una.
+    modalidad: evento.modalidad || '',
+    fecha: evento.fecha,
+    hora: (evento.hora || '').slice(0, 5),
+    hora_fin: (evento.hora_fin || '').slice(0, 5),
+    lugar: evento.lugar || '',
+    notas: evento.notas || '',
+    bloques: (evento.bloques || []).map((b) => ({
+      id: b.id,
+      cerrado: !!b.cerrado_en,
+      rival: b.rival || '',
+      dificultad: b.dificultad || '',
+      lugar: b.lugar || '',
+      hora_convocatoria: (b.hora_convocatoria || '').slice(0, 5),
+    })),
+  }
+}
+
+// Alta y edición de un evento. Con `evento` edita ese; sin él, crea uno nuevo.
+// Al editar no se cambian el tipo ni la cantidad de bloques: de esa estructura
+// ya cuelgan la asistencia, los equipos y los tiempos.
+function FormEvento({ evento = null, sugerencias, onCerrar, onGuardado }) {
+  const editando = !!evento
+  const [f, setF] = useState(() => estadoInicial(evento))
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+
+  const esPartido = f.tipo === 'partido'
+  const esRutina = !esPartido && f.modalidad === 'rutina'
+  const editar = (cambios) => setF({ ...f, ...cambios })
+  const editarBloque = (i, cambios) => setF({
+    ...f,
+    bloques: f.bloques.map((x, j) => (j === i ? { ...x, ...cambios } : x)),
+  })
+
+  // Campos del evento, con el horario fijo de la rutina ya resuelto
+  function datosEvento() {
+    return {
+      modalidad: esPartido ? null : f.modalidad || null,
+      fecha: f.fecha,
+      hora: esPartido ? null : (esRutina ? RUTINA.hora : f.hora || null),
+      hora_fin: esPartido ? null : (esRutina ? RUTINA.hora_fin : f.hora_fin || null),
+      lugar: esPartido ? null : f.lugar?.trim() || null,
+      notas: f.notas?.trim() || null,
+    }
+  }
+
+  function datosBloque(d) {
+    return {
+      rival: d.rival?.trim() || null,
+      dificultad: d.dificultad || null,
+      lugar: d.lugar?.trim() || null,
+      hora_convocatoria: d.hora_convocatoria || null,
+    }
+  }
+
+  async function guardar(e) {
+    e.preventDefault()
+    setError('')
+    setGuardando(true)
+    try {
+      if (!editando) {
+        const ev = await api('eventos', {
+          method: 'POST',
+          body: {
+            tipo: f.tipo,
+            ...datosEvento(),
+            bloques: esPartido ? f.bloques.map(datosBloque) : undefined,
+          },
+        })
+        onGuardado(ev)
+        return
+      }
+      // Primero los bloques que cambiaron (los intactos no se tocan, así un
+      // bloque ya cerrado no molesta), y al final el evento, que vuelve con
+      // los bloques al día.
+      for (const [i, bl] of f.bloques.entries()) {
+        const antes = datosBloque(estadoInicial(evento).bloques[i])
+        const ahora = datosBloque(bl)
+        const cambios = Object.fromEntries(
+          Object.entries(ahora).filter(([k, v]) => v !== antes[k]))
+        if (Object.keys(cambios).length) {
+          await api(`partido/bloque/${bl.id}`, { method: 'PUT', body: cambios })
+        }
+      }
+      onGuardado(await api(`eventos/${evento.id}`, { method: 'PUT', body: datosEvento() }))
+    } catch (err) {
+      setError(err?.error === 'bloque_cerrado'
+        ? 'Ese bloque está cerrado: para cambiarle los datos hay que reabrirlo desde "Día de partido".'
+        : 'No se pudo guardar. Probá de nuevo.')
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div className="modal-fondo" onClick={onCerrar}>
+      <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={guardar}>
+        <div className="fila entre" style={{ marginBottom: 12 }}>
+          <h3>{editando ? 'Editar evento' : 'Nuevo evento'}</h3>
+          <button type="button" className="btn sec chico" onClick={onCerrar}>Cerrar</button>
+        </div>
+
+        <div className="campo">
+          <label>Tipo</label>
+          {editando ? (
+            <p className="mini">
+              {esPartido ? 'Partido' : 'Entrenamiento'} · el tipo no se cambia después de
+              creado. Si te equivocaste, borralo y creá el evento de nuevo.
+            </p>
+          ) : (
+            <div className="seg">
+              <button type="button" className={f.tipo === 'entrenamiento' ? 'activo' : ''}
+                onClick={() => editar({ tipo: 'entrenamiento' })}>Entrenamiento</button>
+              <button type="button" className={esPartido ? 'activo' : ''}
+                onClick={() => editar({ tipo: 'partido' })}>Partido</button>
+            </div>
+          )}
+        </div>
+
+        {!esPartido && (
+          <>
+            <div className="campo">
+              <label>Modalidad</label>
+              <div className="seg">
+                <button type="button" className={esRutina ? 'activo' : ''}
+                  onClick={() => editar({ modalidad: 'rutina' })}>De rutina</button>
+                <button type="button" className={f.modalidad === 'extra' ? 'activo' : ''}
+                  onClick={() => editar({ modalidad: 'extra' })}>Extra</button>
+              </div>
+              <p className="mini">
+                {esRutina
+                  ? `Lunes y miércoles de ${RUTINA.hora} a ${RUTINA.hora_fin} hs.`
+                  : f.modalidad === 'extra'
+                    ? 'Cualquier entrenamiento fuera del horario habitual.'
+                    : 'Sin indicar. Elegí una para que quede clasificado.'}
+              </p>
             </div>
 
             <div className="campo">
-              <label>Tipo</label>
-              <div className="seg">
-                <button type="button" className={creando.tipo === 'entrenamiento' ? 'activo' : ''}
-                  onClick={() => setCreando({ ...creando, tipo: 'entrenamiento' })}>Entrenamiento</button>
-                <button type="button" className={creando.tipo === 'partido' ? 'activo' : ''}
-                  onClick={() => setCreando({ ...creando, tipo: 'partido' })}>Partido</button>
-              </div>
+              <label>Fecha</label>
+              <input type="date" required value={f.fecha}
+                onChange={(e) => editar({ fecha: e.target.value })} />
             </div>
-
-            {creando.tipo === 'entrenamiento' && (
-              <>
+            {!esRutina && (
+              <div className="grid2">
                 <div className="campo">
-                  <label>Modalidad</label>
-                  <div className="seg">
-                    <button type="button" className={creando.modalidad === 'rutina' ? 'activo' : ''}
-                      onClick={() => setCreando({ ...creando, modalidad: 'rutina' })}>De rutina</button>
-                    <button type="button" className={creando.modalidad === 'extra' ? 'activo' : ''}
-                      onClick={() => setCreando({ ...creando, modalidad: 'extra' })}>Extra</button>
-                  </div>
-                  <p className="mini">
-                    {creando.modalidad === 'rutina'
-                      ? `Lunes y miércoles de ${RUTINA.hora} a ${RUTINA.hora_fin} hs.`
-                      : 'Cualquier entrenamiento fuera del horario habitual.'}
-                  </p>
+                  <label>Hora de inicio</label>
+                  <input type="time" value={f.hora}
+                    onChange={(e) => editar({ hora: e.target.value })} />
                 </div>
-
                 <div className="campo">
-                  <label>Fecha</label>
-                  <input type="date" required value={creando.fecha}
-                    onChange={(e) => setCreando({ ...creando, fecha: e.target.value })} />
+                  <label>Hora de fin</label>
+                  <input type="time" value={f.hora_fin}
+                    onChange={(e) => editar({ hora_fin: e.target.value })} />
                 </div>
-                {creando.modalidad === 'extra' && (
-                  <div className="grid2">
-                    <div className="campo">
-                      <label>Hora de inicio</label>
-                      <input type="time" value={creando.hora}
-                        onChange={(e) => setCreando({ ...creando, hora: e.target.value })} />
-                    </div>
-                    <div className="campo">
-                      <label>Hora de fin</label>
-                      <input type="time" value={creando.hora_fin}
-                        onChange={(e) => setCreando({ ...creando, hora_fin: e.target.value })} />
-                    </div>
-                  </div>
-                )}
-                {creando.modalidad === 'rutina' && !esDiaDeRutina(creando.fecha) && (
-                  <p className="aviso" style={{ marginBottom: 10 }}>
-                    ⚠️ La fecha elegida no cae lunes ni miércoles. Si es un entrenamiento
-                    fuera del horario habitual, marcalo como "Extra".
-                  </p>
-                )}
-                <div className="campo">
-                  <label>Lugar</label>
-                  <CampoSugerido
-                    placeholder="Ej.: cancha 2 TLT"
-                    value={creando.lugar}
-                    opciones={sugerencias.lugares}
-                    onChange={(v) => setCreando({ ...creando, lugar: v })}
-                  />
-                </div>
-              </>
+              </div>
             )}
+            {esRutina && !esDiaDeRutina(f.fecha) && (
+              <p className="aviso" style={{ marginBottom: 10 }}>
+                ⚠️ La fecha elegida no cae lunes ni miércoles. Si es un entrenamiento
+                fuera del horario habitual, marcalo como "Extra".
+              </p>
+            )}
+            <div className="campo">
+              <label>Lugar</label>
+              <CampoSugerido
+                placeholder="Ej.: cancha 2 TLT"
+                value={f.lugar}
+                opciones={sugerencias.lugares}
+                onChange={(v) => editar({ lugar: v })}
+              />
+            </div>
+          </>
+        )}
 
-            {creando.tipo === 'partido' && (
-              <>
-                <div className="campo">
-                  <label>Fecha</label>
-                  <input type="date" required value={creando.fecha}
-                    onChange={(e) => setCreando({ ...creando, fecha: e.target.value })} />
-                </div>
-                <div className="campo">
-                  <label>Cantidad de bloques</label>
+        {esPartido && (
+          <>
+            <div className="campo">
+              <label>Fecha</label>
+              <input type="date" required value={f.fecha}
+                onChange={(e) => editar({ fecha: e.target.value })} />
+            </div>
+            <div className="campo">
+              <label>Cantidad de bloques</label>
+              {editando ? (
+                <p className="mini">
+                  {f.bloques.length} {f.bloques.length === 1 ? 'bloque' : 'bloques'} · no se
+                  agregan ni se quitan después de creado el partido.
+                </p>
+              ) : (
+                <>
                   <div className="seg">
                     {CANTIDADES_BLOQUE.map((n) => (
                       <button
                         key={n}
                         type="button"
-                        className={creando.bloques.length === n ? 'activo' : ''}
+                        className={f.bloques.length === n ? 'activo' : ''}
                         // Al cambiar la cantidad se conserva lo ya escrito en
                         // los bloques que quedan.
-                        onClick={() => setCreando({
-                          ...creando,
+                        onClick={() => editar({
                           bloques: Array.from({ length: n }, (_, i) =>
-                            creando.bloques[i] || { ...BLOQUE_VACIO }),
+                            f.bloques[i] || { ...BLOQUE_VACIO }),
                         })}
                       >
                         {n}
@@ -252,73 +358,83 @@ export default function Asistencia({ yo }) {
                     ))}
                   </div>
                   <p className="mini">Lo habitual son 2, pero el partido puede tener más.</p>
-                </div>
-
-                {creando.bloques.map((bl, i) => {
-                  // Cambia un campo del bloque i, dejando los demás como están
-                  const editar = (cambios) => setCreando({
-                    ...creando,
-                    bloques: creando.bloques.map((x, j) => (j === i ? { ...x, ...cambios } : x)),
-                  })
-                  return (
-                    <div key={i} className="tarjeta" style={{ marginBottom: 10 }}>
-                      <h3 style={{ marginBottom: 8 }}>Bloque {i + 1}</h3>
-                      <div className="campo">
-                        <label>Rival</label>
-                        <CampoSugerido
-                          placeholder="Ej.: Tucumán Rugby"
-                          value={bl.rival}
-                          opciones={sugerencias.rivales}
-                          onChange={(v) => editar({ rival: v })}
-                        />
-                      </div>
-                      <div className="campo">
-                        <label>Grado de dificultad</label>
-                        <div className="seg">
-                          {DIFICULTADES.map((d) => (
-                            <button
-                              key={d.value}
-                              type="button"
-                              className={bl.dificultad === d.value ? 'activo' : ''}
-                              // tocar la opción elegida la saca (queda sin indicar)
-                              onClick={() => editar({ dificultad: bl.dificultad === d.value ? '' : d.value })}
-                            >
-                              {d.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="grid2">
-                        <div className="campo">
-                          <label>Hora de convocatoria</label>
-                          <input type="time" value={bl.hora_convocatoria}
-                            onChange={(e) => editar({ hora_convocatoria: e.target.value })} />
-                        </div>
-                        <div className="campo">
-                          <label>Lugar de juego</label>
-                          <CampoSugerido
-                            placeholder="Ej.: sede Marcos Paz"
-                            value={bl.lugar}
-                            opciones={sugerencias.lugares}
-                            onChange={(v) => editar({ lugar: v })}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </>
-            )}
-            <div className="campo">
-              <label>Notas</label>
-              <textarea value={creando.notas}
-                onChange={(e) => setCreando({ ...creando, notas: e.target.value })} />
+                </>
+              )}
             </div>
 
-            <button className="btn" style={{ width: '100%' }}>Crear evento</button>
-          </form>
+            {f.bloques.map((bl, i) => (
+              <div key={bl.id || i} className="tarjeta" style={{ marginBottom: 10 }}>
+                <h3 style={{ marginBottom: 8 }}>Bloque {i + 1}</h3>
+                {bl.cerrado ? (
+                  <p className="aviso">
+                    🔒 Bloque cerrado. Sus datos ({bl.rival || 'sin rival'}
+                    {bl.lugar ? ` · ${bl.lugar}` : ''}
+                    {bl.hora_convocatoria ? ` · conv. ${bl.hora_convocatoria} hs` : ''})
+                    quedan como están; para cambiarlos hay que reabrirlo desde "Día de partido".
+                  </p>
+                ) : (
+                  <>
+                    <div className="campo">
+                      <label>Rival</label>
+                      <CampoSugerido
+                        placeholder="Ej.: Tucumán Rugby"
+                        value={bl.rival}
+                        opciones={sugerencias.rivales}
+                        onChange={(v) => editarBloque(i, { rival: v })}
+                      />
+                    </div>
+                    <div className="campo">
+                      <label>Grado de dificultad</label>
+                      <div className="seg">
+                        {DIFICULTADES.map((d) => (
+                          <button
+                            key={d.value}
+                            type="button"
+                            className={bl.dificultad === d.value ? 'activo' : ''}
+                            // tocar la opción elegida la saca (queda sin indicar)
+                            onClick={() => editarBloque(i, {
+                              dificultad: bl.dificultad === d.value ? '' : d.value,
+                            })}
+                          >
+                            {d.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="grid2">
+                      <div className="campo">
+                        <label>Hora de convocatoria</label>
+                        <input type="time" value={bl.hora_convocatoria}
+                          onChange={(e) => editarBloque(i, { hora_convocatoria: e.target.value })} />
+                      </div>
+                      <div className="campo">
+                        <label>Lugar de juego</label>
+                        <CampoSugerido
+                          placeholder="Ej.: sede Marcos Paz"
+                          value={bl.lugar}
+                          opciones={sugerencias.lugares}
+                          onChange={(v) => editarBloque(i, { lugar: v })}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </>
+        )}
+
+        <div className="campo">
+          <label>Notas</label>
+          <textarea value={f.notas} onChange={(e) => editar({ notas: e.target.value })} />
         </div>
-      )}
+
+        {error && <p className="aviso" style={{ marginBottom: 10 }}>{error}</p>}
+
+        <button className="btn" style={{ width: '100%' }} disabled={guardando}>
+          {editando ? 'Guardar cambios' : 'Crear evento'}
+        </button>
+      </form>
     </div>
   )
 }
@@ -380,6 +496,9 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
   // golpeado/lesionado durante el evento; el modal se abre desde cada fila
   const [condicion, setCondicion] = useState({})
   const [condicionDe, setCondicionDe] = useState(null)
+  // Edición de los datos del evento (fecha, horario, lugar, bloques, notas)
+  const [editando, setEditando] = useState(false)
+  const [sugerencias, recargarSugerencias] = useSugerencias()
   const [staff, setStaff] = useState([])
   const [marcasStaff, setMarcasStaff] = useState({})
   const [cargando, setCargando] = useState(true)
@@ -552,6 +671,7 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
       <div className="fila entre">
         <button className="btn sec chico" onClick={onVolver}>← Volver</button>
         <div className="fila">
+          <button className="btn sec chico" onClick={() => setEditando(true)}>Editar</button>
           <button className="btn sec chico" onClick={descargarEvento}>Descargar CSV</button>
           <button className="btn peligro chico" onClick={borrarEvento}>Borrar evento</button>
         </div>
@@ -711,6 +831,19 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
             </>
           )}
         </>
+      )}
+
+      {editando && (
+        <FormEvento
+          evento={evento}
+          sugerencias={sugerencias}
+          onCerrar={() => setEditando(false)}
+          onGuardado={(ev) => {
+            setEvento(ev)
+            setEditando(false)
+            recargarSugerencias()
+          }}
+        />
       )}
 
       {condicionDe && (
