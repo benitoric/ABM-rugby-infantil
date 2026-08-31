@@ -294,6 +294,36 @@ create table if not exists trabajo_fisico (
   actualizado_en timestamptz not null default now()
 );
 
+-- Ajustes internos de la app. Hoy guarda el par de claves VAPID del push, que
+-- se genera solo la primera vez que alguien activa los avisos: así no hay que
+-- cargar nada a mano en las variables de entorno.
+create table if not exists ajustes (
+  clave text primary key,
+  valor text not null
+);
+
+-- Notificaciones push: una fila por celular (o navegador) que activó los
+-- avisos. El endpoint lo da el navegador y es único; las claves son las que
+-- permiten cifrar el mensaje para ese dispositivo.
+create table if not exists push_suscripciones (
+  endpoint text primary key,
+  staff_email text not null references staff(email) on delete cascade,
+  p256dh text not null,
+  auth text not null,
+  creada_en timestamptz not null default now()
+);
+
+-- Avisos ya mandados, para no repetir si la tarea diaria corre más de una vez.
+-- referencia identifica el motivo del aviso (por ahora, el id del jugador que
+-- cumple años).
+create table if not exists avisos_enviados (
+  tipo text not null,
+  referencia text not null,
+  fecha date not null,
+  enviado_en timestamptz not null default now(),
+  primary key (tipo, referencia, fecha)
+);
+
 -- Primer miembro del staff (crea su contraseña en el primer ingreso)
 insert into staff (email, nombre) values ('benitoric@gmail.com', 'Benito')
 on conflict (email) do nothing;

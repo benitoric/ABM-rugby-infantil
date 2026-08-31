@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { ROLES_STAFF, nombreStaff } from '../helpers.js'
+import Avisos from './Avisos.jsx'
 
 export default function Staff({ yo }) {
   const [staff, setStaff] = useState([])
@@ -82,6 +83,8 @@ export default function Staff({ yo }) {
 
   return (
     <div className="contenido">
+      <Avisos />
+
       <h2>Staff</h2>
       <p className="suave">
         Todos los del staff tienen acceso completo a la app. Para sumar a alguien:
