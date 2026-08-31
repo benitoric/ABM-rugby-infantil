@@ -10,7 +10,7 @@ import Documentos from './Documentos.jsx'
 import GraficoEvolucion from './GraficoEvolucion.jsx'
 import { TestsDeJugador } from './TestsFisicos.jsx'
 
-export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar = null, onVolver }) {
+export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar = null, onBoletin = null, onVolver }) {
   const [j, setJ] = useState(null)
   const [seguimientos, setSeguimientos] = useState([])
   const [evaluaciones, setEvaluaciones] = useState([])
@@ -119,6 +119,9 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
       <div className="fila entre">
         <button className="btn sec chico" onClick={onVolver}>← Volver</button>
         <div className="fila">
+          {onBoletin && (
+            <button className="btn sec chico" onClick={onBoletin}>📄 Boletín</button>
+          )}
           <button className="btn sec chico" onClick={() => setEditando(true)}>Editar</button>
           {j.estado !== 'inactivo' && (
             <button className="btn peligro chico" onClick={darDeBaja}>Dar de baja</button>

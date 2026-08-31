@@ -7,6 +7,7 @@ import {
 } from '../helpers.js'
 import { promediosResumen, valoresConsolidados, GRUPOS } from '../evaluacion.js'
 import { base64ABlob } from '../archivos.js'
+import Boletin from './Boletin.jsx'
 import Ficha from './Ficha.jsx'
 
 const VACIO = {
@@ -90,6 +91,8 @@ export default function Jugadores({ yo }) {
   const [autoEvaluar, setAutoEvaluar] = useState(false)
   const [revisar, setRevisar] = useState(null)
   const [repartiendo, setRepartiendo] = useState(false)
+  // Boletín mensual: null, 'todos' o el id de un jugador
+  const [boletinDe, setBoletinDe] = useState(null)
 
   // Ampliación de la foto del DNI: se baja el archivo completo recién al tocarla
   async function abrirFoto(j) {
@@ -222,6 +225,16 @@ export default function Jugadores({ yo }) {
     )
   }
 
+  if (boletinDe) {
+    return (
+      <Boletin
+        jugadorId={boletinDe === 'todos' ? null : boletinDe}
+        yo={yo}
+        onVolver={() => setBoletinDe(null)}
+      />
+    )
+  }
+
   if (fichaDe) {
     return (
       <Ficha
@@ -229,6 +242,7 @@ export default function Jugadores({ yo }) {
         yo={yo}
         evaluarAlAbrir={autoEvaluar}
         revisar={revisar}
+        onBoletin={() => { setBoletinDe(fichaDe); setFichaDe(null) }}
         onVolver={() => { setFichaDe(null); setAutoEvaluar(false); setRevisar(null); cargar() }}
       />
     )
@@ -241,6 +255,7 @@ export default function Jugadores({ yo }) {
       <div className="fila entre">
         <h2>Jugadores ({visibles.length})</h2>
         <div className="fila">
+          <button className="btn sec" onClick={() => setBoletinDe('todos')}>📄 Boletines</button>
           <button className="btn sec" onClick={() => setImportando(true)}>Importar lista</button>
           <button className="btn" onClick={() => setEditando({ ...VACIO })}>+ Nuevo</button>
         </div>
