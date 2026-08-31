@@ -3,7 +3,8 @@
     { "source": "/api/:ruta*", "destination": "/api/index?ruta=:ruta*" }
   ],
   "crons": [
-    { "path": "/api/index?ruta=cron/cumpleanos", "schedule": "0 12 * * *" }
+    { "path": "/api/index?ruta=cron/cumpleanos", "schedule": "0 12 * * *" },
+    { "path": "/api/index?ruta=cron/boletines", "schedule": "0 13 1 * *" }
   ],
   "headers": [
     {

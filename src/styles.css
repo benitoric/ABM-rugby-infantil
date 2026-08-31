@@ -1047,3 +1047,131 @@ details.tarjeta summary {
   color: var(--warn);
   font-weight: 700;
 }
+
+/* ---------- boletín mensual ---------- */
+/* La hoja en pantalla replica el PDF que se comparte, para poder revisarla
+   antes de mandarla. */
+.hoja-boletin { padding: 0 14px 14px; }
+.boletin-cabecera {
+  background: var(--primario);
+  color: #fff;
+  border-bottom: 4px solid var(--dorado);
+  margin: 0 -14px;
+  padding: 12px 14px 11px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-radius: var(--radio) var(--radio) 0 0;
+}
+.boletin-cabecera h2 { font-size: 1.3rem; }
+.boletin-cabecera .mini { color: #cfdcf5; }
+.boletin-kicker {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--dorado);
+}
+.boletin-nota {
+  background: #fdf4e3;
+  border-left: 3px solid var(--warn);
+  padding: 8px 10px;
+  margin-top: 10px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #7a4c05;
+}
+.boletin-titulo {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--texto-suave);
+  border-bottom: 1px solid var(--borde);
+  padding-bottom: 4px;
+  margin: 14px 0 8px;
+}
+.hoja-boletin .stat .mini { margin-top: 2px; }
+
+.boletin-barra {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 2px 8px;
+  align-items: center;
+  font-size: 0.75rem;
+  margin-bottom: 6px;
+}
+.boletin-barra .quien { grid-column: 1 / -1; color: var(--texto-suave); }
+.boletin-barra .quien.propia { color: var(--texto); font-weight: 600; }
+.boletin-barra .pista { display: block; height: 13px; background: #eef1f6; }
+.boletin-barra .relleno { display: block; height: 100%; background: var(--primario); }
+.boletin-barra .relleno.suave { background: #ccd8ee; }
+.boletin-barra .cifra { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+
+.boletin-meses { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; align-items: end; }
+.boletin-mes { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.boletin-mes .par { display: flex; align-items: flex-end; gap: 2px; height: 48px; }
+.boletin-mes .vos, .boletin-mes .division { display: block; width: 12px; background: var(--primario); }
+.boletin-mes .division { background: #ccd8ee; }
+.boletin-mes.actual .vos { background: var(--dorado); }
+.boletin-mes .pct { font-size: 0.62rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.boletin-mes .nombre { font-size: 0.58rem; text-transform: uppercase; color: var(--texto-suave); }
+
+.boletin-medallas { display: flex; flex-wrap: wrap; gap: 6px; }
+.boletin-medalla {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid #f0dd8a;
+  background: #fff6cc;
+}
+.boletin-medalla .marca {
+  background: var(--dorado);
+  color: #4a3c00;
+  font-weight: 800;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+}
+.boletin-medalla .texto { padding: 4px 10px 5px 8px; line-height: 1.25; }
+.boletin-medalla b { display: block; font-size: 0.75rem; }
+.boletin-medalla small { font-size: 0.65rem; color: #7a6a25; }
+
+.boletin-lista { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; }
+.boletin-lista div { display: flex; justify-content: space-between; gap: 10px; }
+.boletin-lista .rot { color: var(--texto-suave); }
+.boletin-lista .val { font-weight: 600; text-align: right; }
+
+.boletin-agenda { display: flex; flex-direction: column; }
+.boletin-dia {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--borde);
+  font-size: 0.78rem;
+}
+.boletin-dia .fecha { width: 62px; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
+.boletin-dia .apunte { font-size: 0.66rem; color: var(--warn); }
+.boletin-dia .marca { font-weight: 700; }
+.boletin-dia .marca.fue { color: var(--ok); }
+.boletin-dia .marca.falto { color: var(--bad); }
+.boletin-dia .marca.lesion { color: var(--texto-suave); font-weight: 500; }
+
+.boletin-pie {
+  border-top: 2px solid var(--primario);
+  margin-top: 14px;
+  padding-top: 10px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+/* En el celular el boletín va de a dos columnas como mucho: con cuatro, los
+   números quedan partidos en tres renglones. */
+.hoja-boletin .stat-grid { grid-template-columns: repeat(2, 1fr); }
+.boletin-dos { display: grid; grid-template-columns: 1fr; gap: 0 16px; }
+@media (min-width: 520px) {
+  .hoja-boletin .stat-grid { grid-template-columns: repeat(4, 1fr); }
+  .boletin-dos { grid-template-columns: 1fr 1fr; }
+}

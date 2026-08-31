@@ -7,6 +7,33 @@ import { enviar, todasLasSuscripciones } from './push.js'
 // que el saludo salga el día que corresponde y no de madrugada.
 const ZONA = 'America/Argentina/Tucuman'
 
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+  'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+
+// Aviso del día 1: ya cerró el mes, están los boletines de todos los chicos.
+// El PDF se arma en la app al abrirlos; acá solo se avisa que hay novedad.
+export async function avisarBoletines() {
+  const [{ mes }] = await query(
+    `select to_char((now() at time zone $1) - interval '1 month', 'YYYY-MM') as mes`, [ZONA])
+  const [anio, numero] = mes.split('-')
+  const nombre = `${MESES[Number(numero) - 1]} de ${anio}`
+
+  const marca = await query(
+    `insert into avisos_enviados (tipo, referencia, fecha)
+     values ('boletin', $1, (now() at time zone $2)::date)
+     on conflict do nothing returning referencia`,
+    [mes, ZONA])
+  if (!marca.length) return { mes, avisados: 0, repetido: true }
+
+  const avisados = await enviar(await todasLasSuscripciones(), {
+    titulo: `📄 Boletines de ${nombre}`,
+    cuerpo: 'Ya están los boletines del mes para repartir entre los chicos.',
+    url: '#jugadores',
+    tag: `boletines-${mes}`,
+  })
+  return { mes, avisados }
+}
+
 export async function avisarCumpleanos() {
   const [{ hoy }] = await query(
     `select (now() at time zone $1)::date::text as hoy`, [ZONA])

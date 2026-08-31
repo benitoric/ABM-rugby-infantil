@@ -31,6 +31,13 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   `cron/cumpleanos`, que saluda a los que cumplen ese día; `avisos_enviados`
   evita repetir el saludo si la tarea corre de más. En iPhone los avisos solo
   llegan si la app está agregada a la pantalla de inicio.
+- **Boletín mensual**: hoja A4 por jugador (`server/boletin.js` arma los
+  números, `src/boletin.js` dibuja el PDF con el generador propio) con la
+  asistencia del mes, la comparación contra la división, el ranking y las
+  distinciones. Se abre desde Jugadores → "Boletines" o desde la ficha, y
+  **nunca muestra evaluaciones ni tests físicos**: lo lee el propio chico. Los
+  eventos que se perdió estando lesionado no le cuentan como falta. El día 1
+  de cada mes la tarea `cron/boletines` avisa por push que ya están.
 - **Navegación**: la posición en la app vive en el hash de la URL
   (`#/partidos/<id>/<vista>`) con respaldo en localStorage (`src/navegacion.js`),
   para sobrevivir recargas y descartes de la PWA. La vista de partido se

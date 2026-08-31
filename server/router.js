@@ -718,12 +718,34 @@ async function enrutar(metodo, p, b, req, url) {
     const { avisarCumpleanos } = await import('./notificaciones.js')
     return avisarCumpleanos()
   }
+  // El día 1 de cada mes: avisa que ya están los boletines del mes cerrado
+  if (p[0] === 'cron' && p[1] === 'boletines') {
+    const secreto = process.env.CRON_SECRET
+    if (secreto && req.headers.authorization !== `Bearer ${secreto}`) {
+      throw { codigo: 401, error: 'no_autorizado' }
+    }
+    const { avisarBoletines } = await import('./notificaciones.js')
+    return avisarBoletines()
+  }
 
   // ---------- todo lo demás requiere staff activo ----------
   const yo = await autenticar(req)
 
   if (p[0] === 'me') {
     return { email: yo.email, nombre: yo.nombre, rol: yo.rol, admin: puedeAdministrar(yo) }
+  }
+
+  // ---------- boletín mensual ----------
+  // `boletin?mes=YYYY-MM` trae el de todos los jugadores activos;
+  // `boletin/:jugadorId?mes=...`, el de uno solo. Nunca incluye evaluaciones.
+  if (p[0] === 'boletin' && metodo === 'GET') {
+    const { boletines } = await import('./boletin.js')
+    const [{ mes: mesEnCurso }] = await query(
+      `select to_char(now() at time zone 'America/Argentina/Tucuman', 'YYYY-MM') as mes`)
+    return boletines({
+      mes: url.searchParams.get('mes') || mesEnCurso,
+      jugadorId: p[1] || null,
+    })
   }
 
   // ---------- notificaciones push ----------
