@@ -8,6 +8,32 @@ export function edad(fechaNacimiento) {
   return e
 }
 
+// Cuántos días adelante mira la tarjeta de cumpleaños de la pantalla de inicio
+export const DIAS_CUMPLE = 15
+
+// Cumpleaños que caen de hoy en adelante dentro de la ventana de días, del más
+// próximo al más lejano. Cruza fin de mes y de año: a fin de diciembre ya
+// aparecen los de enero. Los nacidos un 29 de febrero se saludan el 1 de marzo
+// en los años no bisiestos (la fecha se corre sola al armarla).
+export function proximosCumples(jugadores, dias = DIAS_CUMPLE, hoy = new Date()) {
+  const base = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+  return jugadores
+    .filter((j) => j.fecha_nacimiento)
+    .map((j) => {
+      const [anio, mes, dia] = j.fecha_nacimiento.split('-').map(Number)
+      let fecha = new Date(base.getFullYear(), mes - 1, dia)
+      if (fecha < base) fecha = new Date(base.getFullYear() + 1, mes - 1, dia)
+      return {
+        jugador: j,
+        fecha,
+        faltan: Math.round((fecha - base) / 86400000),
+        cumple: fecha.getFullYear() - anio,
+      }
+    })
+    .filter((c) => c.faltan <= dias)
+    .sort((a, b) => a.faltan - b.faltan)
+}
+
 export function fechaCorta(fecha) {
   if (!fecha) return ''
   const [y, m, d] = fecha.split('-')

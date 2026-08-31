@@ -521,6 +521,15 @@ h3 { font-size: 1rem; }
 
 /* ---------- aviso de evaluaciones asignadas ---------- */
 /* ---------- seguimiento de lesionados (pantalla de inicio) ---------- */
+/* Cumpleaños próximos: el del día va destacado */
+.cumple-item {
+  flex-wrap: nowrap;
+  gap: 8px;
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+.cumple-hoy { font-weight: 700; color: var(--primario); }
+
 .seguimiento-lesiones { border-left: 4px solid var(--bad); }
 .lesionado-item {
   display: flex;

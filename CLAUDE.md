@@ -20,8 +20,17 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   de 60 días firmado con `JWT_SECRET`). El primer ingreso de un email invitado
   crea su contraseña. Sin registro abierto: solo emails cargados en `staff`.
 - **Deploy**: Vercel (auto-deploy en cada push a `main`). Variables de entorno
-  requeridas: `DATABASE_URL` (Neon) y `JWT_SECRET`.
+  requeridas: `DATABASE_URL` (Neon) y `JWT_SECRET`; opcional `CRON_SECRET`,
+  que exige que la tarea diaria venga de Vercel.
 - Diagnóstico de despliegue: `GET /api/health`.
+- **Avisos push**: notificaciones web estándar (`web-push`), sin servicios de
+  terceros. El service worker es `public/sw.js` (solo push, no cachea nada) y
+  cada celular se da de alta desde Staff → "Avisos en este celular". Las claves
+  VAPID se generan solas la primera vez y quedan en la tabla `ajustes`. La
+  tarea diaria de `vercel.json` (`crons`, 12:00 UTC = 9:00 de Tucumán) pega en
+  `cron/cumpleanos`, que saluda a los que cumplen ese día; `avisos_enviados`
+  evita repetir el saludo si la tarea corre de más. En iPhone los avisos solo
+  llegan si la app está agregada a la pantalla de inicio.
 - **Navegación**: la posición en la app vive en el hash de la URL
   (`#/partidos/<id>/<vista>`) con respaldo en localStorage (`src/navegacion.js`),
   para sobrevivir recargas y descartes de la PWA. La vista de partido se

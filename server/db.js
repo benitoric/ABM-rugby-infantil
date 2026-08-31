@@ -32,7 +32,7 @@ async function inicializar() {
   // fallar igual en Postgres por la carrera en el catálogo.
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
-    `select to_regclass('public.capitanias') is not null as aplicadas`)
+    `select to_regclass('public.avisos_enviados') is not null as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -229,8 +229,7 @@ export async function migrar(pool) {
     autor_email text,
     actualizado_en timestamptz not null default now()
   )`)
-  // Capitanes de cada bloque. Es la última migración, así que la existencia
-  // de la tabla es el testigo de que todo lo de arriba ya corrió.
+  // Capitanes de cada bloque
   await pool.query(`create table if not exists capitanias (
     id uuid primary key default gen_random_uuid(),
     jugador_id uuid not null references jugadores(id) on delete cascade,
@@ -240,6 +239,28 @@ export async function migrar(pool) {
     unique (bloque_id)
   )`)
   await importarCapitanes(pool)
+  // Notificaciones push: ajustes (claves VAPID), suscripciones de cada celular
+  // y registro de lo ya avisado.
+  await pool.query(`create table if not exists ajustes (
+    clave text primary key,
+    valor text not null
+  )`)
+  await pool.query(`create table if not exists push_suscripciones (
+    endpoint text primary key,
+    staff_email text not null references staff(email) on delete cascade,
+    p256dh text not null,
+    auth text not null,
+    creada_en timestamptz not null default now()
+  )`)
+  // Es la última migración, así que la existencia de esta tabla es el testigo
+  // de que todo lo de arriba ya corrió.
+  await pool.query(`create table if not exists avisos_enviados (
+    tipo text not null,
+    referencia text not null,
+    fecha date not null,
+    enviado_en timestamptz not null default now(),
+    primary key (tipo, referencia, fecha)
+  )`)
 }
 
 // Arranca el historial de capitanes con la planilla que se venía llevando

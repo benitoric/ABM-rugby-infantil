@@ -706,11 +706,69 @@ async function enrutar(metodo, p, b, req, url) {
     throw { codigo: 404, error: 'no_existe' }
   }
 
+  // ---------- tarea diaria (Vercel cron, sin sesión) ----------
+  // La dispara Vercel según el horario de vercel.json. Si está configurado
+  // CRON_SECRET, Vercel lo manda en el encabezado y acá se exige; sin él, el
+  // registro de avisos enviados evita que llamarla de más duplique saludos.
+  if (p[0] === 'cron' && p[1] === 'cumpleanos') {
+    const secreto = process.env.CRON_SECRET
+    if (secreto && req.headers.authorization !== `Bearer ${secreto}`) {
+      throw { codigo: 401, error: 'no_autorizado' }
+    }
+    const { avisarCumpleanos } = await import('./notificaciones.js')
+    return avisarCumpleanos()
+  }
+
   // ---------- todo lo demás requiere staff activo ----------
   const yo = await autenticar(req)
 
   if (p[0] === 'me') {
     return { email: yo.email, nombre: yo.nombre, rol: yo.rol, admin: puedeAdministrar(yo) }
+  }
+
+  // ---------- notificaciones push ----------
+  // Una suscripción por celular: el navegador da el endpoint y las claves para
+  // cifrarle los avisos. El alta y la baja las hace cada uno desde su teléfono.
+  if (p[0] === 'push') {
+    const { clavesVapid, enviar, suscripcionesDe } = await import('./push.js')
+    if (metodo === 'GET' && p[1] === 'clave') {
+      const { publica } = await clavesVapid()
+      return { clave: publica }
+    }
+    if (metodo === 'GET' && p[1] === 'suscripciones') {
+      const filas = await suscripcionesDe(yo.email)
+      return { endpoints: filas.map((f) => f.endpoint) }
+    }
+    if (metodo === 'POST' && p[1] === 'suscripciones') {
+      const { endpoint, keys } = b || {}
+      if (!endpoint || !keys?.p256dh || !keys?.auth) throw { codigo: 400, error: 'faltan_datos' }
+      await query(
+        `insert into push_suscripciones (endpoint, staff_email, p256dh, auth)
+         values ($1,$2,$3,$4)
+         on conflict (endpoint) do update
+           set staff_email = excluded.staff_email,
+               p256dh = excluded.p256dh,
+               auth = excluded.auth`,
+        [endpoint, yo.email, keys.p256dh, keys.auth])
+      return { ok: true }
+    }
+    // El endpoint viaja en la query: los DELETE no llevan cuerpo
+    if (metodo === 'DELETE' && p[1] === 'suscripciones') {
+      const endpoint = url.searchParams.get('endpoint')
+      if (!endpoint) throw { codigo: 400, error: 'faltan_datos' }
+      await query('delete from push_suscripciones where endpoint = $1', [endpoint])
+      return { ok: true }
+    }
+    // Aviso de prueba, para confirmar que el celular los recibe
+    if (metodo === 'POST' && p[1] === 'prueba') {
+      const enviados = await enviar(await suscripcionesDe(yo.email), {
+        titulo: '🏉 Rugby M12',
+        cuerpo: 'Listo: los avisos llegan bien a este celular.',
+        url: '#jugadores',
+      })
+      return { enviados }
+    }
+    throw { codigo: 404, error: 'no_existe' }
   }
 
   // ---------- jugadores ----------

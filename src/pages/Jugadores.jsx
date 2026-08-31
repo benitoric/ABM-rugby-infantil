@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import {
   estadoJugador, etiquetaPuestos, fechaCompacta, fechaCorta, nombreCompleto,
-  puestoPrincipal, puestosOrdenados, tipoJugador, APTITUDES, ESTADOS, PUESTOS,
+  proximosCumples, puestoPrincipal, puestosOrdenados, tipoJugador,
+  APTITUDES, DIAS_CUMPLE, ESTADOS, PUESTOS,
 } from '../helpers.js'
 import { promediosResumen, valoresConsolidados, GRUPOS } from '../evaluacion.js'
 import { base64ABlob } from '../archivos.js'
@@ -51,6 +52,13 @@ function Asistencia({ a }) {
       <div className="asis-detalle">part {pct(a.partidos)}</div>
     </div>
   )
+}
+
+// Cuánto falta para el cumpleaños, en criollo
+function cuandoCumple(faltan) {
+  if (faltan === 0) return '¡hoy! 🎉'
+  if (faltan === 1) return 'mañana'
+  return `en ${faltan} días`
 }
 
 // Cuánto falta para el alta estimada de una lesión abierta
@@ -227,10 +235,7 @@ export default function Jugadores({ yo }) {
   }
 
   const activos = jugadores.filter((j) => j.estado !== 'inactivo')
-  const mesActual = new Date().getMonth() + 1
-  const cumples = activos
-    .filter((j) => j.fecha_nacimiento && Number(j.fecha_nacimiento.split('-')[1]) === mesActual)
-    .sort((a, b) => Number(a.fecha_nacimiento.split('-')[2]) - Number(b.fecha_nacimiento.split('-')[2]))
+  const cumples = proximosCumples(activos)
   return (
     <div className="contenido">
       <div className="fila entre">
@@ -401,10 +406,15 @@ export default function Jugadores({ yo }) {
 
       {cumples.length > 0 && (
         <div className="tarjeta">
-          <h3>🎂 Cumpleaños de este mes</h3>
-          {cumples.map((j) => (
-            <div key={j.id} className="mini" style={{ marginTop: 4 }}>
-              {Number(j.fecha_nacimiento.split('-')[2])}/{mesActual} — {nombreCompleto(j)} (cumple {new Date().getFullYear() - Number(j.fecha_nacimiento.split('-')[0])})
+          <h3>🎂 Cumpleaños de los próximos {DIAS_CUMPLE} días</h3>
+          {cumples.map((c) => (
+            <div key={c.jugador.id} className="fila entre cumple-item">
+              <span className={c.faltan === 0 ? 'cumple-hoy' : ''}>
+                {nombreCompleto(c.jugador)} <span className="mini">(cumple {c.cumple})</span>
+              </span>
+              <span className="mini">
+                {c.fecha.getDate()}/{c.fecha.getMonth() + 1} · {cuandoCumple(c.faltan)}
+              </span>
             </div>
           ))}
         </div>
