@@ -1365,9 +1365,15 @@ async function enrutar(metodo, p, b, req, url) {
     }
     // Asistencia evento por evento de un año, para el gráfico del encabezado
     // de la sección Asistencia. Un punto por evento vigente, ya ocurrido y con
-    // asistencia tomada: los presentes sobre las plazas (los jugadores no
-    // dados de baja que ya estaban en el plantel ese día). Sin promediar por
-    // mes, para que se vean las oscilaciones de cada entrenamiento y partido.
+    // asistencia tomada. Sin promediar por mes, para que se vean las
+    // oscilaciones de cada entrenamiento y partido.
+    //
+    // El denominador es el plantel no dado de baja, el mismo que usa el resto
+    // de las estadísticas. Ojo con acotarlo a los jugadores dados de alta
+    // antes del evento (created_at): como el plantel se carga en la app en
+    // cualquier momento, los eventos anteriores a esa carga se quedaban casi
+    // sin denominador y daban porcentajes absurdos (un 1 de 1 = 100% en un
+    // entrenamiento al que fueron 31 de 46).
     if (metodo === 'GET' && p[1] === 'asistencia-eventos') {
       const rama = (tipo) => `
         select e.id, e.fecha::text as fecha, e.created_at as creado,
@@ -1375,9 +1381,9 @@ async function enrutar(metodo, p, b, req, url) {
           (select count(*)::int from ${TABLA_ASISTENCIA[tipo]} a
             join jugadores j on j.id = a.jugador_id
             where a.evento_id = e.id and a.estado = 'presente'
-              and j.estado <> 'inactivo' and j.created_at::date <= e.fecha) as presentes,
+              and j.estado <> 'inactivo') as presentes,
           (select count(*)::int from jugadores j
-            where j.estado <> 'inactivo' and j.created_at::date <= e.fecha) as plazas,
+            where j.estado <> 'inactivo') as plazas,
           (select string_agg(bl.rival, ' / ') from bloques bl
             where bl.evento_id = e.id and bl.rival is not null) as rival
         from eventos e
