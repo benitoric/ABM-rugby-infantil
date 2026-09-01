@@ -718,6 +718,22 @@ img.doc-vista { height: auto; }
 .grafico-tabla th, .grafico-tabla td { border-bottom: 1px solid var(--borde); padding: 4px 6px; text-align: right; }
 .grafico-tabla th:first-child, .grafico-tabla td:first-child { text-align: left; }
 .grafico-tabla th { color: var(--texto-suave); font-size: 0.7rem; }
+/* Los dos gráficos del mismo dato: en % y en cantidad de jugadores. En
+   pantalla ancha van uno al lado del otro; en el celular entra uno solo y el
+   selector de arriba elige cuál. */
+.graficos-par { display: flex; flex-direction: column; }
+.grafico-panel-titulo { font-weight: 700; margin-bottom: 2px; }
+.graficos-par.modo-pct .grafico-panel:last-child,
+.graficos-par.modo-cantidad .grafico-panel:first-child { display: none; }
+@media (min-width: 720px) {
+  .graficos-par { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+  /* Con lugar para los dos, el selector no tiene sentido */
+  .graficos-par .grafico-panel { display: block !important; }
+  .grafico-modo { display: none; }
+}
+.grafico-modo { flex: 0 0 auto; }
+.grafico-modo button { padding: 4px 10px; font-size: 0.75rem; }
+
 /* Promedio del período: referencia contra la que se lee la oscilación */
 .grafico-promedio { stroke: var(--texto-suave); stroke-width: 1; stroke-dasharray: 2 4; opacity: 0.55; }
 /* Chips que hacen de leyenda y de control del desglose del gráfico */
