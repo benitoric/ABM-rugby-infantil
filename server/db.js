@@ -32,13 +32,10 @@ async function inicializar() {
   // fallar igual en Postgres por la carrera en el catálogo.
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
-    `select exists (
-         select 1 from information_schema.columns
-         where table_schema = 'public' and table_name = 'eventos'
-           and column_name = 'plazas_registradas')
+    `select to_regclass('public.evento_plantel') is not null
        and not exists (
          select 1 from eventos e
-         where e.plazas_registradas is null
+         where not exists (select 1 from evento_plantel ep where ep.evento_id = e.id)
            and (exists (select 1 from asistencias a where a.evento_id = e.id)
                 or exists (select 1 from asistencias_partido a where a.evento_id = e.id)))
        as aplicadas`)
@@ -61,8 +58,6 @@ export async function migrar(pool) {
   await pool.query(`alter table eventos drop constraint if exists eventos_plazas_manual_check`)
   await pool.query(`alter table eventos add constraint eventos_plazas_manual_check
     check (plazas_manual is null or plazas_manual >= 1)`)
-  // Plantel del día congelado al tomar asistencia (ver db/schema.sql)
-  await pool.query('alter table eventos add column if not exists plazas_registradas int')
 
   await pool.query('alter table staff add column if not exists rol text')
   await pool.query('alter table staff add column if not exists apellido text')
@@ -279,11 +274,19 @@ export async function migrar(pool) {
   )`)
 
   // Va al final: consulta lesiones y asistencias_partido, que se crean arriba.
-  // Congela el plantel de los eventos que ya tenían asistencia tomada antes de
-  // que existiera la columna (ver sqlCongelarPlazas). Es la última migración,
-  // así que el testigo de que todo lo de arriba corrió es que no quede ningún
-  // evento con asistencia y sin plantel registrado.
-  for (const tabla of TABLAS_ASISTENCIA) await pool.query(sqlCongelarPlazas(tabla))
+  // Congela quiénes formaban el plantel en los eventos que ya tenían asistencia
+  // tomada (ver sqlCongelarPlantel). Es la última migración, así que el testigo
+  // de que todo lo de arriba corrió es que no quede ningún evento con
+  // asistencia y sin plantel congelado.
+  await pool.query(`create table if not exists evento_plantel (
+    evento_id uuid not null references eventos(id) on delete cascade,
+    jugador_id uuid not null references jugadores(id) on delete cascade,
+    primary key (evento_id, jugador_id)
+  )`)
+  for (const tabla of TABLAS_ASISTENCIA) await pool.query(sqlCongelarPlantel(tabla))
+  // Reemplazada por evento_plantel: guardaba un número ya con los lesionados
+  // descontados, así que una lesión cargada después no podía corregirlo.
+  await pool.query('alter table eventos drop column if exists plazas_registradas')
 }
 
 // Arranca el historial de capitanes con la planilla que se venía llevando
@@ -326,26 +329,22 @@ export async function query(texto, params = []) {
 
 export const TABLAS_ASISTENCIA = ['asistencias', 'asistencias_partido']
 
-// Congela el plantel de los eventos que ya tienen asistencia tomada y todavía
-// no lo tienen registrado. Sin esto su denominador se sigue recalculando en
-// cada consulta y se corre con cada baja del padrón. Toma el mismo criterio
-// que el cálculo al vuelo: cualquiera con marca en el evento (tener marca
-// prueba que estaba ese día, aunque después se lo haya dado de baja) más los
-// no dados de baja que ya estaban cargados y sin lesión vigente a esa fecha. Para los eventos anteriores a la carga del plantel
-// en la app el número se queda corto: esos se corrigen con plazas_manual.
-export function sqlCongelarPlazas(tabla) {
+// Congela quiénes formaban el plantel en los eventos que ya tienen asistencia
+// tomada y todavía no lo tienen congelado. Entran los que tienen marca en el
+// evento (tener marca prueba que estaban ese día, aunque después se los haya
+// dado de baja) y los no dados de baja que ya estaban cargados a esa fecha.
+// No se filtran los lesionados: eso se descuenta al leer, para que una lesión
+// cargada más tarde con fecha retroactiva corrija el porcentaje.
+export function sqlCongelarPlantel(tabla) {
   return `
-    update eventos e set plazas_registradas = (
-      select count(*)::int from jugadores j
-      where exists (select 1 from ${tabla} a
-              where a.evento_id = e.id and a.jugador_id = j.id)
-         or (j.estado <> 'inactivo'
-             and j.created_at::date <= e.fecha
-             and not exists (
-               select 1 from lesiones l
-               where l.jugador_id = j.id and l.fecha <= e.fecha
-                 and (l.fecha_retorno_estimada > e.fecha
-                      or (l.fecha_retorno_estimada is null and not l.recuperado)))))
-    where e.plazas_registradas is null
-      and exists (select 1 from ${tabla} a where a.evento_id = e.id)`
+    insert into evento_plantel (evento_id, jugador_id)
+    select e.id, j.id
+    from eventos e
+    join jugadores j on (
+      exists (select 1 from ${tabla} a
+        where a.evento_id = e.id and a.jugador_id = j.id)
+      or (j.estado <> 'inactivo' and j.created_at::date <= e.fecha))
+    where exists (select 1 from ${tabla} a where a.evento_id = e.id)
+      and not exists (select 1 from evento_plantel ep where ep.evento_id = e.id)
+    on conflict do nothing`
 }
