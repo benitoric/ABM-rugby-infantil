@@ -132,11 +132,6 @@ create table if not exists eventos (
   -- pero para los eventos anteriores a la carga del plantel en la app ese
   -- cálculo se queda corto. Con este valor se corrige el evento puntual.
   plazas_manual int check (plazas_manual >= 1),
-  -- Plantel del día, congelado la primera vez que se tomó asistencia: los
-  -- jugadores no dados de baja y sin lesión vigente a esa fecha. Queda fijo
-  -- para que el % del evento no se mueva cuando después entran o salen chicos
-  -- del plantel. Los eventos anteriores a esta columna lo calculan al vuelo.
-  plazas_registradas int check (plazas_registradas >= 0),
   created_at timestamptz not null default now()
 );
 
@@ -151,6 +146,18 @@ create table if not exists asistencias (
   condicion text check (condicion in ('golpeado','lesionado')),
   lesion_atendida boolean not null default false,
   unique (evento_id, jugador_id)
+);
+
+-- Quiénes formaban el plantel el día del evento: se congela la primera vez que
+-- se toma asistencia. Es el denominador del % de asistencia, y va como conjunto
+-- de jugadores y no como número para poder descontarle los lesionados en vivo:
+-- una lesión se carga días después pero pasó ese día, así que esa variable
+-- tiene que seguir moviéndose. Las altas y bajas posteriores, en cambio, no
+-- tocan el conjunto.
+create table if not exists evento_plantel (
+  evento_id uuid not null references eventos(id) on delete cascade,
+  jugador_id uuid not null references jugadores(id) on delete cascade,
+  primary key (evento_id, jugador_id)
 );
 
 create table if not exists asistencias_staff (

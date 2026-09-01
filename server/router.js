@@ -47,34 +47,35 @@ const COLS_LESION = `id, jugador_id, fecha::text as fecha, descripcion,
   fecha_retorno_estimada::text as fecha_retorno_estimada, recuperado`
 const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora,
   hora_fin::text as hora_fin, modalidad, rival, lugar, notas,
-  suspendido, motivo_suspension, nota_suspension, plazas_manual, plazas_registradas`
+  suspendido, motivo_suspension, nota_suspension, plazas_manual`
 
 // ¿El jugador estaba lesionado en la fecha del evento? Se reconstruye de la
 // tabla lesiones: cuenta desde la fecha de la lesión hasta la de retorno
 // estimada. Sin fecha de retorno, la lesión sigue abierta mientras no esté
 // marcada como recuperada (una recuperada sin fecha no se puede ubicar en el
 // tiempo, así que no descuenta a nadie).
-// Congela el plantel del día la primera vez que se toma asistencia de un
-// evento: los jugadores no dados de baja y sin lesión vigente a esa fecha.
-// Queda fijo para que el % de ese evento no se mueva después, cuando entren o
-// salgan chicos del plantel. Solo escribe si todavía no estaba registrado, así
-// que las marcas siguientes (y las correcciones de asistencia de otro día) no
-// lo pisan con un plantel que ya no es el de esa fecha.
-async function registrarPlazas(eventoId, tipo) {
+// Congela QUIÉNES formaban el plantel la primera vez que se toma asistencia de
+// un evento: los no dados de baja, más cualquiera con marca en el evento. Va
+// como conjunto y no como número para poder descontarle los lesionados al
+// leer, así una lesión cargada después con fecha retroactiva corrige el
+// porcentaje. Solo escribe si el evento todavía no tenía plantel, para que las
+// marcas siguientes no lo pisen con un plantel que ya no es el de esa fecha.
+async function congelarPlantel(eventoId, tipo) {
   await query(
-    `update eventos e set plazas_registradas = (
-       select count(*)::int from jugadores j
-       where exists (select 1 from ${TABLA_ASISTENCIA[tipo]} a
-               where a.evento_id = e.id and a.jugador_id = j.id)
-          or (j.estado <> 'inactivo' and not ${sqlLesionadoEnFecha('j', 'e')}))
-     where e.id = $1 and e.plazas_registradas is null`,
+    `insert into evento_plantel (evento_id, jugador_id)
+     select $1, j.id from jugadores j
+     where (exists (select 1 from ${TABLA_ASISTENCIA[tipo]} a
+              where a.evento_id = $1 and a.jugador_id = j.id)
+            or j.estado <> 'inactivo')
+       and not exists (select 1 from evento_plantel ep where ep.evento_id = $1)
+     on conflict do nothing`,
     [eventoId])
 }
 
-function sqlLesionadoEnFecha(aliasJugador, aliasEvento) {
+function sqlLesionadoEnFecha(exprJugadorId, aliasEvento) {
   return `exists (
     select 1 from lesiones l
-    where l.jugador_id = ${aliasJugador}.id
+    where l.jugador_id = ${exprJugadorId}
       and l.fecha <= ${aliasEvento}.fecha
       and (l.fecha_retorno_estimada > ${aliasEvento}.fecha
            or (l.fecha_retorno_estimada is null and not l.recuperado)))`
@@ -1414,7 +1415,16 @@ async function enrutar(metodo, p, b, req, url) {
           -- después no puede cambiar cuántos fueron a un entrenamiento.
           (select count(*)::int from ${TABLA_ASISTENCIA[tipo]} a
             where a.evento_id = e.id and a.estado = 'presente') as presentes,
-          e.plazas_manual, e.plazas_registradas,
+          e.plazas_manual,
+          -- El plantel congelado de ese día, descontando a los que estaban
+          -- lesionados en esa fecha. El descuento va en vivo a propósito: una
+          -- lesión se carga días después pero pasó ese día, así que cargarla
+          -- con fecha retroactiva tiene que corregir el porcentaje. Quiénes
+          -- estaban, en cambio, ya quedó fijo.
+          (select count(*)::int from evento_plantel ep
+            where ep.evento_id = e.id
+              and not ${sqlLesionadoEnFecha('ep.jugador_id', 'e')}) as plazas_congeladas,
+          exists (select 1 from evento_plantel ep where ep.evento_id = e.id) as tiene_plantel,
           (select count(*)::int from jugadores j
             -- Tener marca en ese evento prueba que estaba en el plantel ese
             -- día, sin importar cuándo se lo cargó en la app ni si después se
@@ -1423,7 +1433,7 @@ async function enrutar(metodo, p, b, req, url) {
                     where a.evento_id = e.id and a.jugador_id = j.id)
                or (j.estado <> 'inactivo'
                    and j.created_at::date <= e.fecha
-                   and not ${sqlLesionadoEnFecha('j', 'e')})) as plazas_calculadas,
+                   and not ${sqlLesionadoEnFecha('j.id', 'e')})) as plazas_calculadas,
           (select string_agg(bl.rival, ' / ') from bloques bl
             where bl.evento_id = e.id and bl.rival is not null) as rival
         from eventos e
@@ -1449,14 +1459,14 @@ async function enrutar(metodo, p, b, req, url) {
 
       // Orden de preferencia del denominador:
       //  1. el cargado a mano, que es la corrección explícita del staff;
-      //  2. el congelado al tomar asistencia, que es el plantel real de ese día;
-      //  3. el calculado al vuelo, para los eventos anteriores a que se
-      //     empezara a registrar (ahí el número se mueve con el plantel).
+      //  2. el plantel congelado de ese día menos los lesionados de esa fecha;
+      //  3. el calculado al vuelo, solo por si algún evento quedó sin plantel
+      //     congelado (ahí el número se mueve con las altas y bajas).
       // El máximo contra los presentes cubre al que fue estando lesionado: no
       // entra en el plantel congelado pero sí tiene marca, y sin esto el
       // porcentaje podría pasar de 100.
       for (const f of filas) {
-        const base = f.plazas_registradas ?? f.plazas_calculadas
+        const base = f.tiene_plantel ? f.plazas_congeladas : f.plazas_calculadas
         f.plazas = f.plazas_manual ?? Math.max(base, f.presentes)
       }
       // Sin plazas no hay porcentaje posible. Quedan en la lista con pct null
@@ -1487,7 +1497,7 @@ async function enrutar(metodo, p, b, req, url) {
           presentes: f.presentes,
           plazas: f.plazas,
           plazas_calculadas: f.plazas_calculadas,
-          plazas_registradas: f.plazas_registradas,
+          plazas_congeladas: f.tiene_plantel ? f.plazas_congeladas : null,
           plazas_manual: f.plazas_manual,
           pct: pct(f.presentes, f.plazas),
         })),
@@ -1684,7 +1694,7 @@ async function enrutar(metodo, p, b, req, url) {
              do update set estado = excluded.estado, condicion = excluded.condicion`,
             [p[1], m.jugador_id, m.estado, cond])
         }
-        await registrarPlazas(p[1], 'entrenamiento')
+        await congelarPlantel(p[1], 'entrenamiento')
         return { ok: true }
       }
     }
@@ -1807,7 +1817,7 @@ async function enrutar(metodo, p, b, req, url) {
              do update set estado = excluded.estado, condicion = excluded.condicion`,
             [p[1], m.jugador_id, m.estado, cond])
         }
-        await registrarPlazas(p[1], 'partido')
+        await congelarPlantel(p[1], 'partido')
         return { ok: true }
       }
     }
