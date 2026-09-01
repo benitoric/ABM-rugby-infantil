@@ -146,6 +146,7 @@ function estadoInicial(evento) {
       hora_fin: '',
       lugar: '',
       notas: '',
+      plazas_manual: '',
       bloques: [{ ...BLOQUE_VACIO }, { ...BLOQUE_VACIO }],
     }
   }
@@ -159,6 +160,7 @@ function estadoInicial(evento) {
     hora_fin: (evento.hora_fin || '').slice(0, 5),
     lugar: evento.lugar || '',
     notas: evento.notas || '',
+    plazas_manual: evento.plazas_manual == null ? '' : String(evento.plazas_manual),
     bloques: (evento.bloques || []).map((b) => ({
       id: b.id,
       cerrado: !!b.cerrado_en,
@@ -196,6 +198,7 @@ function FormEvento({ evento = null, sugerencias, onCerrar, onGuardado }) {
       hora_fin: esPartido ? null : (esRutina ? RUTINA.hora_fin : f.hora_fin || null),
       lugar: esPartido ? null : f.lugar?.trim() || null,
       notas: f.notas?.trim() || null,
+      plazas_manual: f.plazas_manual === '' ? null : Number(f.plazas_manual),
     }
   }
 
@@ -431,6 +434,26 @@ function FormEvento({ evento = null, sugerencias, onCerrar, onGuardado }) {
           <label>Notas</label>
           <textarea value={f.notas} onChange={(e) => editar({ notas: e.target.value })} />
         </div>
+
+        {editando && (
+          <div className="campo">
+            <label>Plantel de ese día (para el % de asistencia)</label>
+            <input
+              type="number"
+              min="1"
+              placeholder="Se calcula solo"
+              value={f.plazas_manual}
+              onChange={(e) => editar({ plazas_manual: e.target.value })}
+            />
+            <p className="mini">
+              Cuántos jugadores había en condiciones de venir. Sale solo de los
+              jugadores activos y sin lesión a esa fecha; completalo únicamente
+              si ese día el plantel todavía no estaba cargado entero en la app y
+              el porcentaje quedó distorsionado. Vacío vuelve al cálculo
+              automático.
+            </p>
+          </div>
+        )}
 
         {error && <p className="aviso" style={{ marginBottom: 10 }}>{error}</p>}
 

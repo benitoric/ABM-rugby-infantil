@@ -127,6 +127,11 @@ create table if not exists eventos (
   suspendido boolean not null default false,
   motivo_suspension text check (motivo_suspension in ('clima','feriado','otro')),
   nota_suspension text,
+  -- Plantel de ese día, cargado a mano. El porcentaje de asistencia se calcula
+  -- solo (jugadores no dados de baja, ya cargados y sin lesión a esa fecha),
+  -- pero para los eventos anteriores a la carga del plantel en la app ese
+  -- cálculo se queda corto. Con este valor se corrige el evento puntual.
+  plazas_manual int check (plazas_manual >= 1),
   created_at timestamptz not null default now()
 );
 
