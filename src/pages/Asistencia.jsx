@@ -9,6 +9,7 @@ import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 import TestsFisicos from './TestsFisicos.jsx'
 import TrabajoFisico from './TrabajoFisico.jsx'
 import EstadisticaFisica from './EstadisticaFisica.jsx'
+import GraficoAsistencia from './GraficoAsistencia.jsx'
 
 // Pestañas de un entrenamiento. El partido no las lleva: su trabajo del día
 // vive en la sección "Día de partido".
@@ -77,6 +78,8 @@ export default function Asistencia({ yo }) {
           </button>
         </div>
       </div>
+
+      <GraficoAsistencia />
 
       {cargando && <div className="vacio">Cargando…</div>}
       {!cargando && eventos.length === 0 && (
