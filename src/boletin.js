@@ -29,6 +29,13 @@ export function diaCorto(fecha) {
   return `${DIAS_SEMANA[new Date(a, m - 1, d).getDay()]} ${d}/${m}`
 }
 
+export function mesSiguiente(mes) {
+  const [a, m] = mes.split('-').map(Number)
+  const d = new Date(a, m, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+export const nombreCortoDelMes = (mes) => MESES[Number(mes.split('-')[1]) - 1]
+
 export const mesActual = () => new Date().toISOString().slice(0, 7)
 export function mesAnterior(mes = mesActual()) {
   const [a, m] = mes.split('-').map(Number)
@@ -248,6 +255,19 @@ function hoja(doc, b, { mes, division, generadoPor }) {
   const yT1 = agenda(doc, M, yTabla, media, b.dias.slice(0, mitad))
   const yT2 = agenda(doc, xDer, yTabla, media, b.dias.slice(mitad))
   y = Math.max(yT1, yT2) + 14
+
+  // --- para sumar el mes que viene ---
+  // Salen de la última evaluación, pero acá llega solo la frase: la hoja no
+  // dice notas ni áreas, y el tono es de invitación.
+  if (b.objetivos?.length && y < doc.alto - 134) {
+    y = titulo(doc, `Para sumar en ${nombreCortoDelMes(mesSiguiente(mes))}`, M, y, ancho)
+    for (const o of b.objetivos) {
+      doc.rect(M + 1, y + 1, 4, 4, DORADO)
+      const lineas = partirTexto(o.texto, ancho - 14, 9)
+      lineas.forEach((l, i) => doc.texto(l, M + 12, y + i * 11, { tam: 9, color: TINTA }))
+      y += lineas.length * 11 + 5
+    }
+  }
 
   // --- pie ---
   const pie = doc.alto - 74

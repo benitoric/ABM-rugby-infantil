@@ -38,6 +38,11 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   **nunca muestra evaluaciones ni tests físicos**: lo lee el propio chico. Los
   eventos que se perdió estando lesionado no le cuentan como falta. El día 1
   de cada mes la tarea `cron/boletines` avisa por push que ya están.
+  Los "objetivos del mes" (`src/objetivos.js`) son la única parte que mira la
+  última evaluación: se eligen las dos variables más bajas —sin el área social,
+  que no se imprime— y al boletín llega solo la frase de qué practicar, nunca
+  la nota, el área ni la fecha. Con todo alto va un desafío en vez de una
+  debilidad inventada, y con la evaluación de más de 90 días no sale nada.
 - **Navegación**: la posición en la app vive en el hash de la URL
   (`#/partidos/<id>/<vista>`) con respaldo en localStorage (`src/navegacion.js`),
   para sobrevivir recargas y descartes de la PWA. La vista de partido se

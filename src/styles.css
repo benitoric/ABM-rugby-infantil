@@ -1203,3 +1203,20 @@ details.tarjeta summary {
   .hoja-boletin .stat-grid { grid-template-columns: repeat(4, 1fr); }
   .boletin-dos { grid-template-columns: 1fr 1fr; }
 }
+/* Objetivos del mes que viene: invitación, no señalamiento */
+.boletin-objetivos { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.boletin-objetivos li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.boletin-objetivos li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 6px;
+  height: 6px;
+  background: var(--dorado);
+}

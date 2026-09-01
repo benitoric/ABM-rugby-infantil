@@ -3,8 +3,8 @@ import { api } from '../api.js'
 import { compartirArchivo } from '../pdf.js'
 import {
   contraElPromedio, diaCorto, generarBoletinPDF, mensajeDelMes, mesCorto,
-  nombreArchivoBoletin, nombreDelJugador, puestosDelJugador, textoLesion,
-  tituloDelMes, ultimosMeses,
+  mesSiguiente, nombreArchivoBoletin, nombreCortoDelMes, nombreDelJugador,
+  puestosDelJugador, textoLesion, tituloDelMes, ultimosMeses,
 } from '../boletin.js'
 
 // Boletín mensual de desempeño, escrito para el propio jugador. Solo
@@ -280,6 +280,15 @@ function Hoja({ b, mes, division }) {
           </div>
         ))}
       </div>
+
+      {b.objetivos?.length > 0 && (
+        <>
+          <h4 className="boletin-titulo">Para sumar en {nombreCortoDelMes(mesSiguiente(mes))}</h4>
+          <ul className="boletin-objetivos">
+            {b.objetivos.map((o) => <li key={o.clave}>{o.texto}</li>)}
+          </ul>
+        </>
+      )}
 
       <div className="boletin-pie">{mensajeDelMes(b, division)}</div>
     </div>
