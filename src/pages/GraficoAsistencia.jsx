@@ -1,17 +1,24 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
+import { fechaCorta } from '../helpers.js'
 
 // Series del gráfico, en el orden fijo de la paleta. Los colores son los
 // mismos que usa el gráfico de evolución de la ficha: validados con el script
 // de la guía de visualización (banda de luminosidad, croma, separación bajo
 // daltonismo y contraste >= 3:1 contra el blanco de la tarjeta).
 const SERIES = [
-  { clave: 'total', label: 'Total', color: '#2563eb' },
-  { clave: 'entrenamientos', label: 'Entrenamientos', color: '#a16207' },
-  { clave: 'partidos', label: 'Partidos', color: '#be185d' },
+  { clave: 'total', label: 'Todos', color: '#2563eb', incluye: () => true },
+  {
+    clave: 'entrenamientos',
+    label: 'Entrenamientos',
+    color: '#a16207',
+    incluye: (e) => e.tipo === 'entrenamiento',
+  },
+  { clave: 'partidos', label: 'Partidos', color: '#be185d', incluye: (e) => e.tipo === 'partido' },
 ]
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
 
 // Lienzo fijo: el SVG se estira al ancho disponible manteniendo proporción
 const W = 340
@@ -21,6 +28,16 @@ const IZQ = 32
 const DER = 34
 const ARRIBA = 10
 const ABAJO = 24
+// Con muchos eventos los puntos se amontonan: arriba de este tope se dibuja
+// solo la línea y el punto señalado.
+const TOPE_PUNTOS = 45
+// Separación mínima entre dos etiquetas de mes del eje horizontal
+const SEP_MES = 24
+
+function diaYFecha(fecha) {
+  const d = new Date(fecha + 'T00:00:00')
+  return `${DIAS[d.getDay()]} ${fechaCorta(fecha)}`
+}
 
 export default function GraficoAsistencia() {
   const [datos, setDatos] = useState(null)
@@ -32,50 +49,48 @@ export default function GraficoAsistencia() {
   useEffect(() => {
     let vigente = true
     setError(false)
-    api(`stats/asistencia-mensual${anio ? `?anio=${anio}` : ''}`)
+    api(`stats/asistencia-eventos${anio ? `?anio=${anio}` : ''}`)
       .then((d) => { if (vigente) setDatos(d) })
       .catch(() => { if (vigente) setError(true) })
     return () => { vigente = false }
   }, [anio])
 
   if (error || !datos) return null
-  // Sin ningún evento cargado el gráfico no diría nada
-  if (!datos.promedio.eventos) return null
+  const eventos = datos.eventos
+  // Con un solo evento no hay oscilación que mirar
+  if (eventos.length < 2) return null
 
-  const { meses } = datos
   const series = SERIES.filter((s) => visibles.includes(s.clave))
-  // Meses con algún dato: el eje arranca en el primero y termina en el último,
-  // así un año a medio andar no deja media tarjeta vacía.
-  const conDatos = meses.filter((m) => m.eventos > 0).map((m) => m.mes)
-  const desde = conDatos[0]
-  const hasta = conDatos[conDatos.length - 1]
-  const tramo = meses.filter((m) => m.mes >= desde && m.mes <= hasta)
-
-  const x = (i) => tramo.length === 1
-    ? (IZQ + W - DER) / 2
-    : IZQ + (i * (W - IZQ - DER)) / (tramo.length - 1)
+  const x = (i) => IZQ + (i * (W - IZQ - DER)) / (eventos.length - 1)
   const y = (v) => ARRIBA + ((100 - v) / 100) * (H - ARRIBA - ABAJO)
+  const puntosVisibles = eventos.length <= TOPE_PUNTOS
 
-  // Cada tramo continuo va en su propio path: un mes sin ese tipo de evento
-  // corta la línea en vez de inventar un valor.
-  function segmentos(clave) {
-    const res = []
-    let actual = []
-    tramo.forEach((m, i) => {
-      if (m[clave] == null) { if (actual.length) res.push(actual); actual = [] }
-      else actual.push([x(i), y(m[clave])])
-    })
-    if (actual.length) res.push(actual)
-    return res
-  }
+  // Los eventos de la serie, en su posición del eje (que es la de todos los
+  // eventos): así dos entrenamientos seguidos quedan unidos aunque entre
+  // medio haya habido un partido.
+  const deLaSerie = (s) => eventos
+    .map((e, i) => ({ e, i }))
+    .filter(({ e }) => s.incluye(e))
 
-  function alSenalar(e) {
-    if (tramo.length < 2) return
-    const caja = e.currentTarget.getBoundingClientRect()
-    const px = ((e.clientX - caja.left) / caja.width) * W
-    const paso = (W - IZQ - DER) / (tramo.length - 1)
+  // Primer evento de cada mes: marca el eje horizontal sin amontonar
+  const etiquetasMes = []
+  let ultimoMes = null
+  let ultimoX = -Infinity
+  eventos.forEach((e, i) => {
+    const mes = Number(e.fecha.slice(5, 7))
+    if (mes === ultimoMes) return
+    ultimoMes = mes
+    if (x(i) - ultimoX < SEP_MES) return
+    ultimoX = x(i)
+    etiquetasMes.push({ mes, x: x(i) })
+  })
+
+  function alSenalar(ev) {
+    const caja = ev.currentTarget.getBoundingClientRect()
+    const px = ((ev.clientX - caja.left) / caja.width) * W
+    const paso = (W - IZQ - DER) / (eventos.length - 1)
     const i = Math.round((px - IZQ) / paso)
-    setSel(Math.min(tramo.length - 1, Math.max(0, i)))
+    setSel(Math.min(eventos.length - 1, Math.max(0, i)))
   }
 
   function alternar(clave) {
@@ -86,24 +101,34 @@ export default function GraficoAsistencia() {
     })
   }
 
-  const activo = sel == null ? null : tramo[sel]
-  const ultimo = tramo.length - 1
+  const activo = sel == null ? null : eventos[sel]
+  const promedio = datos.promedio.total.pct
 
-  // Etiqueta directa del último valor de cada serie, separadas si coinciden
+  // Etiqueta del último valor de cada serie. Dos series que terminan en el
+  // mismo evento comparten posición, así que ahí se separan en vertical.
   const ALTO_ETIQUETA = 11
   const etiquetas = series
-    .map((s) => ({ ...s, valor: tramo[ultimo][s.clave] }))
-    .filter((e) => e.valor != null)
-    .map((e) => ({ ...e, y: y(e.valor) }))
-    .sort((a, b) => a.y - b.y)
-  etiquetas.forEach((e, i) => {
-    if (i > 0) e.y = Math.max(e.y, etiquetas[i - 1].y + ALTO_ETIQUETA)
-  })
+    .map((s) => {
+      const suyos = deLaSerie(s)
+      const ultimo = suyos[suyos.length - 1]
+      return ultimo && { clave: s.clave, x: x(ultimo.i), y: y(ultimo.e.pct), pct: ultimo.e.pct }
+    })
+    .filter(Boolean)
+  const ANCHO_ETIQUETA = 30
+  const puestas = []
+  for (const e of [...etiquetas].sort((a, b) => a.y - b.y)) {
+    for (const p of puestas) {
+      if (Math.abs(p.x - e.x) < ANCHO_ETIQUETA && e.y - p.y < ALTO_ETIQUETA) {
+        e.y = p.y + ALTO_ETIQUETA
+      }
+    }
+    puestas.push(e)
+  }
 
   return (
     <div className="tarjeta">
       <div className="fila entre">
-        <h3>Asistencia promedio del año</h3>
+        <h3>Asistencia evento por evento</h3>
         {datos.anios.length > 1 && (
           <select
             className="grafico-anio"
@@ -115,9 +140,9 @@ export default function GraficoAsistencia() {
         )}
       </div>
       <p className="mini" style={{ margin: '2px 0 8px' }}>
-        Promedio del año: <b>{datos.promedio.total}%</b> sobre {datos.promedio.eventos}{' '}
-        {datos.promedio.eventos === 1 ? 'evento' : 'eventos'} con asistencia tomada.
-        Tocá el gráfico para ver cada mes.
+        Un punto por evento, en orden. La línea de puntos es el promedio del
+        año: <b>{promedio}%</b> sobre {datos.promedio.total.eventos} eventos.
+        Tocá el gráfico para ver cada uno.
       </p>
 
       <div className="grafico-caja">
@@ -125,7 +150,7 @@ export default function GraficoAsistencia() {
           className="grafico"
           viewBox={`0 0 ${W} ${H}`}
           role="img"
-          aria-label={`Asistencia promedio mes a mes de ${datos.anio}`}
+          aria-label={`Asistencia de cada evento de ${datos.anio}, en orden`}
           onPointerMove={alSenalar}
           onPointerDown={alSenalar}
           onPointerLeave={() => setSel(null)}
@@ -137,61 +162,74 @@ export default function GraficoAsistencia() {
             </g>
           ))}
 
-          {tramo.map((m, i) => (
-            // Con muchos meses se etiqueta uno de cada dos para que no se pisen
-            (tramo.length <= 7 || i % 2 === 0 || i === ultimo) && (
-              <text key={m.mes} x={x(i)} y={H - 8} className="grafico-eje" textAnchor="middle">
-                {MESES[m.mes - 1]}
-              </text>
-            )
+          {/* Promedio del año: da la referencia contra la que se ve la oscilación */}
+          {promedio != null && (
+            <line
+              x1={IZQ}
+              x2={W - DER}
+              y1={y(promedio)}
+              y2={y(promedio)}
+              className="grafico-promedio"
+            />
+          )}
+
+          {etiquetasMes.map((m) => (
+            <text key={m.mes} x={m.x} y={H - 8} className="grafico-eje" textAnchor="middle">
+              {MESES[m.mes - 1]}
+            </text>
           ))}
 
           {sel != null && (
             <line x1={x(sel)} x2={x(sel)} y1={ARRIBA} y2={H - ABAJO} className="grafico-guia" />
           )}
 
-          {series.map((s) => (
-            <g key={s.clave}>
-              {segmentos(s.clave).map((seg, k) => (
+          {series.map((s) => {
+            const suyos = deLaSerie(s)
+            return (
+              <g key={s.clave}>
                 <polyline
-                  key={k}
-                  points={seg.map(([px, py]) => `${px},${py}`).join(' ')}
+                  points={suyos.map(({ e, i }) => `${x(i)},${y(e.pct)}`).join(' ')}
                   fill="none"
                   stroke={s.color}
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-              ))}
-              {tramo.map((m, i) => m[s.clave] == null ? null : (
-                <circle
-                  key={i}
-                  cx={x(i)}
-                  cy={y(m[s.clave])}
-                  r={sel === i ? 5 : 4}
-                  fill={s.color}
-                  stroke="#fff"
-                  strokeWidth="2"
-                />
-              ))}
-              {etiquetas.filter((e) => e.clave === s.clave).map((e) => (
-                <text key={e.clave} x={x(ultimo) + 7} y={e.y + 3} className="grafico-valor">
-                  {e.valor}%
-                </text>
-              ))}
-            </g>
-          ))}
+                {suyos.map(({ e, i }) => (
+                  (puntosVisibles || sel === i) && (
+                    <circle
+                      key={e.id}
+                      cx={x(i)}
+                      cy={y(e.pct)}
+                      r={sel === i ? 5 : 3}
+                      fill={s.color}
+                      stroke="#fff"
+                      strokeWidth="2"
+                    />
+                  )
+                ))}
+                {/* Etiqueta directa del último valor de cada serie */}
+                {etiquetas.filter((e) => e.clave === s.clave).map((e) => (
+                  <text key={e.clave} x={e.x + 7} y={e.y + 3} className="grafico-valor">
+                    {e.pct}%
+                  </text>
+                ))}
+              </g>
+            )
+          })}
         </svg>
 
         {activo && (
           <div className="grafico-tooltip" style={{ left: `${(x(sel) / W) * 100}%` }}>
-            <b>{MESES[activo.mes - 1]} {datos.anio}</b>
-            {series.map((s) => (
-              <div key={s.clave}>
-                <span className="grafico-punto" style={{ background: s.color }} />
-                {s.label}: {activo[s.clave] == null ? '—' : `${activo[s.clave]}%`}
-              </div>
-            ))}
+            <b>{diaYFecha(activo.fecha)}</b>
+            <div>
+              {activo.tipo === 'partido'
+                ? `Partido${activo.rival ? ` vs ${activo.rival}` : ''}`
+                : `Entrenamiento${activo.modalidad === 'extra' ? ' extra' : ''}`}
+            </div>
+            <div>
+              <b>{activo.pct}%</b> · {activo.presentes} de {activo.plazas}
+            </div>
           </div>
         )}
       </div>
@@ -200,6 +238,8 @@ export default function GraficoAsistencia() {
       <div className="fila" style={{ gap: 6, marginTop: 8 }}>
         {SERIES.map((s) => {
           const activa = visibles.includes(s.clave)
+          const prom = datos.promedio[s.clave]
+          if (!prom.eventos) return null
           return (
             <button
               key={s.clave}
@@ -208,8 +248,7 @@ export default function GraficoAsistencia() {
               onClick={() => alternar(s.clave)}
             >
               <span className="grafico-punto" style={{ background: s.color }} />
-              {s.label}
-              {datos.promedio[s.clave] != null && ` ${datos.promedio[s.clave]}%`}
+              {s.label} {prom.pct}%
             </button>
           )
         })}
@@ -220,19 +259,23 @@ export default function GraficoAsistencia() {
         <table className="grafico-tabla">
           <thead>
             <tr>
-              <th>Mes</th>
-              {SERIES.map((s) => <th key={s.clave}>{s.label}</th>)}
-              <th>Eventos</th>
+              <th>Fecha</th>
+              <th>Evento</th>
+              <th>Presentes</th>
+              <th>Asistencia</th>
             </tr>
           </thead>
           <tbody>
-            {tramo.map((m) => (
-              <tr key={m.mes}>
-                <td>{MESES[m.mes - 1]}</td>
-                {SERIES.map((s) => (
-                  <td key={s.clave}>{m[s.clave] == null ? '—' : `${m[s.clave]}%`}</td>
-                ))}
-                <td>{m.eventos}</td>
+            {[...eventos].reverse().map((e) => (
+              <tr key={e.id}>
+                <td>{diaYFecha(e.fecha)}</td>
+                <td>
+                  {e.tipo === 'partido'
+                    ? `Partido${e.rival ? ` vs ${e.rival}` : ''}`
+                    : `Entren.${e.modalidad === 'extra' ? ' extra' : ''}`}
+                </td>
+                <td>{e.presentes} de {e.plazas}</td>
+                <td>{e.pct}%</td>
               </tr>
             ))}
           </tbody>
