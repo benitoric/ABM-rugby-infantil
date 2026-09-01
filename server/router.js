@@ -1363,6 +1363,80 @@ async function enrutar(metodo, p, b, req, url) {
          order by count(*) desc, j.apellido, j.nombre`,
         [FALTAS_SEGUIDAS_AVISO])
     }
+    // Asistencia promedio mes a mes de un año, para el gráfico del encabezado
+    // de la sección Asistencia. Por cada evento vigente y con asistencia
+    // tomada se cuentan los presentes sobre las plazas (los jugadores no
+    // dados de baja que ya estaban en el plantel ese día). El porcentaje del
+    // mes es la suma de presentes sobre la suma de plazas, así un evento con
+    // más plantel pesa lo que corresponde.
+    if (metodo === 'GET' && p[1] === 'asistencia-mensual') {
+      const rama = (tipo) => `
+        select e.fecha, '${tipo}' as tipo,
+          (select count(*)::int from ${TABLA_ASISTENCIA[tipo]} a
+            where a.evento_id = e.id and a.estado = 'presente') as presentes,
+          (select count(*)::int from jugadores j
+            where j.estado <> 'inactivo' and j.created_at::date <= e.fecha) as plazas
+        from eventos e
+        where e.tipo = '${tipo}' and e.fecha <= current_date
+          and extract(year from e.fecha) = $1
+          and ${eventoVigente('e')}
+          and exists (select 1 from ${TABLA_ASISTENCIA[tipo]} a where a.evento_id = e.id)`
+
+      const anios = await query(
+        `select distinct extract(year from e.fecha)::int as anio
+         from eventos e
+         where e.fecha <= current_date and ${eventoVigente('e')}
+           and (exists (select 1 from asistencias a where a.evento_id = e.id)
+                or exists (select 1 from asistencias_partido a where a.evento_id = e.id))
+         order by anio desc`)
+      const anio = Number(url.searchParams.get('anio')) || anios[0]?.anio
+        || new Date().getFullYear()
+
+      const filas = await query(
+        `with datos as (${rama('entrenamiento')} union all ${rama('partido')})
+         select extract(month from fecha)::int as mes,
+           count(*) filter (where tipo = 'entrenamiento')::int as ent_eventos,
+           coalesce(sum(presentes) filter (where tipo = 'entrenamiento'), 0)::int as ent_presentes,
+           coalesce(sum(plazas) filter (where tipo = 'entrenamiento'), 0)::int as ent_plazas,
+           count(*) filter (where tipo = 'partido')::int as par_eventos,
+           coalesce(sum(presentes) filter (where tipo = 'partido'), 0)::int as par_presentes,
+           coalesce(sum(plazas) filter (where tipo = 'partido'), 0)::int as par_plazas,
+           count(*)::int as total_eventos,
+           coalesce(sum(presentes), 0)::int as total_presentes,
+           coalesce(sum(plazas), 0)::int as total_plazas
+         from datos group by mes order by mes`,
+        [anio])
+
+      // Sin eventos en el mes no hay dato: null y la línea se corta ahí, en
+      // vez de dibujar un 0% que se leería como "no fue nadie".
+      const pct = (pres, plazas) => (plazas ? Math.round((100 * pres) / plazas) : null)
+      const porMes = new Map(filas.map((f) => [f.mes, f]))
+      const meses = Array.from({ length: 12 }, (_, i) => {
+        const f = porMes.get(i + 1)
+        if (!f) return { mes: i + 1, entrenamientos: null, partidos: null, total: null, eventos: 0 }
+        return {
+          mes: i + 1,
+          entrenamientos: pct(f.ent_presentes, f.ent_plazas),
+          partidos: pct(f.par_presentes, f.par_plazas),
+          total: pct(f.total_presentes, f.total_plazas),
+          eventos: f.total_eventos,
+          entrenamientos_eventos: f.ent_eventos,
+          partidos_eventos: f.par_eventos,
+        }
+      })
+      const suma = (campo) => filas.reduce((a, f) => a + f[campo], 0)
+      return {
+        anio,
+        anios: anios.map((a) => a.anio),
+        meses,
+        promedio: {
+          entrenamientos: pct(suma('ent_presentes'), suma('ent_plazas')),
+          partidos: pct(suma('par_presentes'), suma('par_plazas')),
+          total: pct(suma('total_presentes'), suma('total_plazas')),
+          eventos: suma('total_eventos'),
+        },
+      }
+    }
     if (metodo === 'GET' && p[1] === 'asistencia') {
       // Ausente por defecto: el total es la cantidad de eventos ya ocurridos
       // con asistencia tomada, igual para todos los jugadores.
