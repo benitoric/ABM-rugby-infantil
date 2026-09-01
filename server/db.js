@@ -33,9 +33,15 @@ async function inicializar() {
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
     `select exists (
-       select 1 from information_schema.columns
-       where table_schema = 'public' and table_name = 'eventos'
-         and column_name = 'plazas_registradas') as aplicadas`)
+         select 1 from information_schema.columns
+         where table_schema = 'public' and table_name = 'eventos'
+           and column_name = 'plazas_registradas')
+       and not exists (
+         select 1 from eventos e
+         where e.plazas_registradas is null
+           and (exists (select 1 from asistencias a where a.evento_id = e.id)
+                or exists (select 1 from asistencias_partido a where a.evento_id = e.id)))
+       as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -55,8 +61,7 @@ export async function migrar(pool) {
   await pool.query(`alter table eventos drop constraint if exists eventos_plazas_manual_check`)
   await pool.query(`alter table eventos add constraint eventos_plazas_manual_check
     check (plazas_manual is null or plazas_manual >= 1)`)
-  // Plantel del día congelado al tomar asistencia (ver db/schema.sql). No se
-  // rellena hacia atrás: los eventos viejos lo siguen calculando al vuelo.
+  // Plantel del día congelado al tomar asistencia (ver db/schema.sql)
   await pool.query('alter table eventos add column if not exists plazas_registradas int')
 
   await pool.query('alter table staff add column if not exists rol text')
@@ -265,8 +270,6 @@ export async function migrar(pool) {
     auth text not null,
     creada_en timestamptz not null default now()
   )`)
-  // Es la última migración, así que la existencia de esta tabla es el testigo
-  // de que todo lo de arriba ya corrió.
   await pool.query(`create table if not exists avisos_enviados (
     tipo text not null,
     referencia text not null,
@@ -274,6 +277,13 @@ export async function migrar(pool) {
     enviado_en timestamptz not null default now(),
     primary key (tipo, referencia, fecha)
   )`)
+
+  // Va al final: consulta lesiones y asistencias_partido, que se crean arriba.
+  // Congela el plantel de los eventos que ya tenían asistencia tomada antes de
+  // que existiera la columna (ver sqlCongelarPlazas). Es la última migración,
+  // así que el testigo de que todo lo de arriba corrió es que no quede ningún
+  // evento con asistencia y sin plantel registrado.
+  for (const tabla of TABLAS_ASISTENCIA) await pool.query(sqlCongelarPlazas(tabla))
 }
 
 // Arranca el historial de capitanes con la planilla que se venía llevando
@@ -312,4 +322,30 @@ export async function query(texto, params = []) {
   if (!_query) _query = await inicializar()
   const res = await _query(texto, params)
   return res.rows
+}
+
+export const TABLAS_ASISTENCIA = ['asistencias', 'asistencias_partido']
+
+// Congela el plantel de los eventos que ya tienen asistencia tomada y todavía
+// no lo tienen registrado. Sin esto su denominador se sigue recalculando en
+// cada consulta y se corre con cada baja del padrón. Toma el mismo criterio
+// que el cálculo al vuelo: cualquiera con marca en el evento (tener marca
+// prueba que estaba ese día, aunque después se lo haya dado de baja) más los
+// no dados de baja que ya estaban cargados y sin lesión vigente a esa fecha. Para los eventos anteriores a la carga del plantel
+// en la app el número se queda corto: esos se corrigen con plazas_manual.
+export function sqlCongelarPlazas(tabla) {
+  return `
+    update eventos e set plazas_registradas = (
+      select count(*)::int from jugadores j
+      where exists (select 1 from ${tabla} a
+              where a.evento_id = e.id and a.jugador_id = j.id)
+         or (j.estado <> 'inactivo'
+             and j.created_at::date <= e.fecha
+             and not exists (
+               select 1 from lesiones l
+               where l.jugador_id = j.id and l.fecha <= e.fecha
+                 and (l.fecha_retorno_estimada > e.fecha
+                      or (l.fecha_retorno_estimada is null and not l.recuperado)))))
+    where e.plazas_registradas is null
+      and exists (select 1 from ${tabla} a where a.evento_id = e.id)`
 }
