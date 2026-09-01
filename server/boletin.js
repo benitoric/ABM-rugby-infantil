@@ -12,7 +12,28 @@
 // - Los eventos que el chico se perdió estando lesionado no le cuentan como
 //   falta: salen de su denominador y se informan aparte.
 // - Los jugadores inactivos quedan afuera del promedio y del ranking.
+//
+// La única excepción a lo de las evaluaciones son los objetivos del mes: se
+// eligen mirando la última evaluación, pero al boletín solo llega la frase de
+// qué practicar. Ni la nota, ni el área, ni la fecha de esa evaluación salen
+// de acá.
 import { query } from './db.js'
+import { AREAS_EVAL, bandaEtaria, valoresConsolidados } from '../src/evaluacion.js'
+import { textoDesafio, textoObjetivo } from '../src/objetivos.js'
+
+// Cuántas cosas para practicar salen en la hoja
+const OBJETIVOS_POR_BOLETIN = 2
+// Lo social no se imprime en algo que se lleva a la casa: eso se habla de
+// frente. Lo actitudinal sí, con el mismo tono suave que el resto.
+const AREAS_OBJETIVO = ['tecnica', 'tactica', 'fisica', 'actitudinal']
+// Una evaluación más vieja que esto ya no describe al chico de este mes
+const DIAS_EVALUACION_VIGENTE = 90
+// Hasta esta nota (escala 1 a 5) la variable entra como objetivo. Por encima,
+// no hay nada que marcarle: va un desafío sobre lo que ya hace bien.
+const NOTA_OBJETIVO = 3
+
+const AREA_DE_VARIABLE = Object.fromEntries(
+  AREAS_EVAL.flatMap((a) => a.variables.map((v) => [v.value, a.value])))
 
 // Meses que muestra el gráfico de evolución, contando el del boletín
 const MESES_EVOLUCION = 6
@@ -331,6 +352,8 @@ async function boletinDe({
      order by fecha`,
     rango)
 
+  const objetivos = await objetivosDe(jugador, hasta)
+
   const tarde = dias.filter((d) => d.tarde).map((d) => d.fecha)
   const faltoAvisando = dias.filter((d) => d.falto_avisando)
   const golpes = dias.filter((d) => d.condicion)
@@ -380,11 +403,70 @@ async function boletinDe({
     },
     lesiones,
     dias,
+    objetivos,
     distinciones: distincionesDe({
       hayRanking, puesto, resumen: r, partidosDelMes, progreso, mejorProgreso,
       capitanias: capitanias.mes, diasCapitan: dias.filter((d) => d.capitan),
     }),
   }
+}
+
+// Dos cosas para practicar el mes que viene, sacadas de lo más bajo de la
+// última evaluación. Devuelve solo las frases: la nota, el área y la fecha de
+// la evaluación se quedan acá adentro y nunca llegan al boletín.
+async function objetivosDe(jugador, hasta) {
+  const [ultima] = await query(
+    `select fecha::text as fecha, valores, valores_revisor
+     from evaluaciones
+     where jugador_id = $1 and fecha < $2::date
+       and fecha >= ($2::date - ($3 || ' days')::interval)
+     order by fecha desc, created_at desc
+     limit 1`,
+    [jugador.id, hasta, DIAS_EVALUACION_VIGENTE])
+  if (!ultima) return []
+
+  const banda = bandaEtaria(edadAlCierre(jugador.fecha_nacimiento, hasta))
+  const notas = valoresConsolidados(ultima)
+  const candidatas = Object.entries(notas)
+    .filter(([clave, nota]) =>
+      nota >= 1 && AREAS_OBJETIVO.includes(AREA_DE_VARIABLE[clave]) && textoObjetivo(clave, banda))
+    .sort((a, b) => a[1] - b[1])
+
+  const flojas = candidatas.filter(([, nota]) => nota <= NOTA_OBJETIVO)
+  if (!flojas.length) {
+    // Le va bien en todo: en vez de inventarle una debilidad, un desafío
+    // sobre el área donde está más fuerte.
+    const mejor = candidatas.at(-1)
+    const texto = mejor && textoDesafio(AREA_DE_VARIABLE[mejor[0]])
+    return texto ? [{ clave: 'desafio', texto }] : []
+  }
+
+  // Se evita que los dos objetivos caigan en la misma área: dan una foto más
+  // pareja de en qué trabajar.
+  const elegidas = []
+  for (const [clave] of flojas) {
+    if (elegidas.length >= OBJETIVOS_POR_BOLETIN) break
+    const area = AREA_DE_VARIABLE[clave]
+    if (elegidas.some((e) => AREA_DE_VARIABLE[e.clave] === area)) continue
+    elegidas.push({ clave, texto: textoObjetivo(clave, banda) })
+  }
+  for (const [clave] of flojas) {
+    if (elegidas.length >= OBJETIVOS_POR_BOLETIN) break
+    if (elegidas.some((e) => e.clave === clave)) continue
+    elegidas.push({ clave, texto: textoObjetivo(clave, banda) })
+  }
+  return elegidas
+}
+
+// Edad que tenía al cerrar el mes del boletín (no la de hoy)
+function edadAlCierre(fechaNacimiento, hasta) {
+  if (!fechaNacimiento) return null
+  const [a, m, d] = fechaNacimiento.split('-').map(Number)
+  const cierre = new Date(hasta)
+  let edad = cierre.getUTCFullYear() - a
+  const mes = cierre.getUTCMonth() + 1 - m
+  if (mes < 0 || (mes === 0 && cierre.getUTCDate() < d)) edad--
+  return edad
 }
 
 // Solo se listan las que ganó: el boletín nunca dice lo que no consiguió.
