@@ -47,13 +47,28 @@ const COLS_LESION = `id, jugador_id, fecha::text as fecha, descripcion,
   fecha_retorno_estimada::text as fecha_retorno_estimada, recuperado`
 const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora,
   hora_fin::text as hora_fin, modalidad, rival, lugar, notas,
-  suspendido, motivo_suspension, nota_suspension, plazas_manual`
+  suspendido, motivo_suspension, nota_suspension, plazas_manual, plazas_registradas`
 
 // ¿El jugador estaba lesionado en la fecha del evento? Se reconstruye de la
 // tabla lesiones: cuenta desde la fecha de la lesión hasta la de retorno
 // estimada. Sin fecha de retorno, la lesión sigue abierta mientras no esté
 // marcada como recuperada (una recuperada sin fecha no se puede ubicar en el
 // tiempo, así que no descuenta a nadie).
+// Congela el plantel del día la primera vez que se toma asistencia de un
+// evento: los jugadores no dados de baja y sin lesión vigente a esa fecha.
+// Queda fijo para que el % de ese evento no se mueva después, cuando entren o
+// salgan chicos del plantel. Solo escribe si todavía no estaba registrado, así
+// que las marcas siguientes (y las correcciones de asistencia de otro día) no
+// lo pisan con un plantel que ya no es el de esa fecha.
+async function registrarPlazas(eventoId) {
+  await query(
+    `update eventos e set plazas_registradas = (
+       select count(*)::int from jugadores j
+       where j.estado <> 'inactivo' and not ${sqlLesionadoEnFecha('j', 'e')})
+     where e.id = $1 and e.plazas_registradas is null`,
+    [eventoId])
+}
+
 function sqlLesionadoEnFecha(aliasJugador, aliasEvento) {
   return `exists (
     select 1 from lesiones l
@@ -1396,7 +1411,7 @@ async function enrutar(metodo, p, b, req, url) {
             join jugadores j on j.id = a.jugador_id
             where a.evento_id = e.id and a.estado = 'presente'
               and j.estado <> 'inactivo') as presentes,
-          e.plazas_manual,
+          e.plazas_manual, e.plazas_registradas,
           (select count(*)::int from jugadores j
             where j.estado <> 'inactivo'
               and (
@@ -1431,10 +1446,18 @@ async function enrutar(metodo, p, b, req, url) {
          order by fecha, creado`,
         [anio])
 
-      // El plantel cargado a mano manda sobre el calculado: es la corrección
-      // para los eventos anteriores a la carga del plantel en la app, donde el
-      // cálculo no tiene con qué saber cuántos chicos había.
-      for (const f of filas) f.plazas = f.plazas_manual ?? f.plazas_calculadas
+      // Orden de preferencia del denominador:
+      //  1. el cargado a mano, que es la corrección explícita del staff;
+      //  2. el congelado al tomar asistencia, que es el plantel real de ese día;
+      //  3. el calculado al vuelo, para los eventos anteriores a que se
+      //     empezara a registrar (ahí el número se mueve con el plantel).
+      // El máximo contra los presentes cubre al que fue estando lesionado: no
+      // entra en el plantel congelado pero sí tiene marca, y sin esto el
+      // porcentaje podría pasar de 100.
+      for (const f of filas) {
+        const base = f.plazas_registradas ?? f.plazas_calculadas
+        f.plazas = f.plazas_manual ?? Math.max(base, f.presentes)
+      }
       // Sin plazas no hay porcentaje posible. Quedan en la lista con pct null
       // y el gráfico les corta la línea.
       const pct = (pres, plazas) => (plazas ? Math.round((100 * pres) / plazas) : null)
@@ -1463,6 +1486,7 @@ async function enrutar(metodo, p, b, req, url) {
           presentes: f.presentes,
           plazas: f.plazas,
           plazas_calculadas: f.plazas_calculadas,
+          plazas_registradas: f.plazas_registradas,
           plazas_manual: f.plazas_manual,
           pct: pct(f.presentes, f.plazas),
         })),
@@ -1659,6 +1683,7 @@ async function enrutar(metodo, p, b, req, url) {
              do update set estado = excluded.estado, condicion = excluded.condicion`,
             [p[1], m.jugador_id, m.estado, cond])
         }
+        await registrarPlazas(p[1])
         return { ok: true }
       }
     }
@@ -1781,6 +1806,7 @@ async function enrutar(metodo, p, b, req, url) {
              do update set estado = excluded.estado, condicion = excluded.condicion`,
             [p[1], m.jugador_id, m.estado, cond])
         }
+        await registrarPlazas(p[1])
         return { ok: true }
       }
     }

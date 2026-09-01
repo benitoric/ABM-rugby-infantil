@@ -35,7 +35,7 @@ async function inicializar() {
     `select exists (
        select 1 from information_schema.columns
        where table_schema = 'public' and table_name = 'eventos'
-         and column_name = 'plazas_manual') as aplicadas`)
+         and column_name = 'plazas_registradas') as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -55,6 +55,9 @@ export async function migrar(pool) {
   await pool.query(`alter table eventos drop constraint if exists eventos_plazas_manual_check`)
   await pool.query(`alter table eventos add constraint eventos_plazas_manual_check
     check (plazas_manual is null or plazas_manual >= 1)`)
+  // Plantel del día congelado al tomar asistencia (ver db/schema.sql). No se
+  // rellena hacia atrás: los eventos viejos lo siguen calculando al vuelo.
+  await pool.query('alter table eventos add column if not exists plazas_registradas int')
 
   await pool.query('alter table staff add column if not exists rol text')
   await pool.query('alter table staff add column if not exists apellido text')

@@ -132,6 +132,11 @@ create table if not exists eventos (
   -- pero para los eventos anteriores a la carga del plantel en la app ese
   -- cálculo se queda corto. Con este valor se corrige el evento puntual.
   plazas_manual int check (plazas_manual >= 1),
+  -- Plantel del día, congelado la primera vez que se tomó asistencia: los
+  -- jugadores no dados de baja y sin lesión vigente a esa fecha. Queda fijo
+  -- para que el % del evento no se mueva cuando después entran o salen chicos
+  -- del plantel. Los eventos anteriores a esta columna lo calculan al vuelo.
+  plazas_registradas int check (plazas_registradas >= 0),
   created_at timestamptz not null default now()
 );
 
