@@ -1373,7 +1373,9 @@ async function enrutar(metodo, p, b, req, url) {
         select e.id, e.fecha::text as fecha, e.created_at as creado,
           '${tipo}' as tipo, e.modalidad,
           (select count(*)::int from ${TABLA_ASISTENCIA[tipo]} a
-            where a.evento_id = e.id and a.estado = 'presente') as presentes,
+            join jugadores j on j.id = a.jugador_id
+            where a.evento_id = e.id and a.estado = 'presente'
+              and j.estado <> 'inactivo' and j.created_at::date <= e.fecha) as presentes,
           (select count(*)::int from jugadores j
             where j.estado <> 'inactivo' and j.created_at::date <= e.fecha) as plazas,
           (select string_agg(bl.rival, ' / ') from bloques bl
@@ -1399,15 +1401,22 @@ async function enrutar(metodo, p, b, req, url) {
          order by fecha, creado`,
         [anio])
 
+      // Sin plazas no hay porcentaje posible: son los eventos anteriores al
+      // alta del primer jugador (asistencia vieja cargada después). Quedan en
+      // la lista con pct null y el gráfico les corta la línea.
       const pct = (pres, plazas) => (plazas ? Math.round((100 * pres) / plazas) : null)
       // Promedio del período: suma de presentes sobre suma de plazas, así un
-      // evento con más plantel pesa lo que corresponde.
-      const promedioDe = (lista) => ({
-        pct: pct(
-          lista.reduce((a, f) => a + f.presentes, 0),
-          lista.reduce((a, f) => a + f.plazas, 0)),
-        eventos: lista.length,
-      })
+      // evento con más plantel pesa lo que corresponde. Solo entran los que
+      // tienen porcentaje, para no mezclar peras con manzanas.
+      const promedioDe = (lista) => {
+        const conPlazas = lista.filter((f) => f.plazas > 0)
+        return {
+          pct: pct(
+            conPlazas.reduce((a, f) => a + f.presentes, 0),
+            conPlazas.reduce((a, f) => a + f.plazas, 0)),
+          eventos: conPlazas.length,
+        }
+      }
       const porTipo = (tipo) => filas.filter((f) => f.tipo === tipo)
       return {
         anio,

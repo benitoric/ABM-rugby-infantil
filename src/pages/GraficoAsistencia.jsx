@@ -57,8 +57,10 @@ export default function GraficoAsistencia() {
 
   if (error || !datos) return null
   const eventos = datos.eventos
-  // Con un solo evento no hay oscilación que mirar
-  if (eventos.length < 2) return null
+  // Con menos de dos eventos medibles no hay oscilación que mirar. Los que no
+  // tienen porcentaje igual ocupan su lugar en el eje: el orden cronológico
+  // se respeta aunque a ese evento no se le pueda calcular la asistencia.
+  if (eventos.filter((e) => e.pct != null).length < 2) return null
 
   const series = SERIES.filter((s) => visibles.includes(s.clave))
   const x = (i) => IZQ + (i * (W - IZQ - DER)) / (eventos.length - 1)
@@ -67,10 +69,28 @@ export default function GraficoAsistencia() {
 
   // Los eventos de la serie, en su posición del eje (que es la de todos los
   // eventos): así dos entrenamientos seguidos quedan unidos aunque entre
-  // medio haya habido un partido.
+  // medio haya habido un partido. Los que no tienen porcentaje (ningún
+  // jugador cargado a esa fecha) quedan afuera: no son un 0%.
   const deLaSerie = (s) => eventos
     .map((e, i) => ({ e, i }))
-    .filter(({ e }) => s.incluye(e))
+    .filter(({ e }) => s.incluye(e) && e.pct != null)
+
+  // Un hueco de eventos sin dato corta la línea en vez de cruzarla de lado a
+  // lado, que daría a entender una caída que nunca se midió.
+  function segmentos(suyos) {
+    const res = []
+    let actual = []
+    let anterior = null
+    for (const punto of suyos) {
+      const corte = anterior != null
+        && eventos.slice(anterior + 1, punto.i).some((e) => e.pct == null)
+      if (corte && actual.length) { res.push(actual); actual = [] }
+      actual.push(punto)
+      anterior = punto.i
+    }
+    if (actual.length) res.push(actual)
+    return res
+  }
 
   // Primer evento de cada mes: marca el eje horizontal sin amontonar
   const etiquetasMes = []
@@ -187,14 +207,17 @@ export default function GraficoAsistencia() {
             const suyos = deLaSerie(s)
             return (
               <g key={s.clave}>
-                <polyline
-                  points={suyos.map(({ e, i }) => `${x(i)},${y(e.pct)}`).join(' ')}
-                  fill="none"
-                  stroke={s.color}
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+                {segmentos(suyos).map((seg, k) => (
+                  <polyline
+                    key={k}
+                    points={seg.map(({ e, i }) => `${x(i)},${y(e.pct)}`).join(' ')}
+                    fill="none"
+                    stroke={s.color}
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                ))}
                 {suyos.map(({ e, i }) => (
                   (puntosVisibles || sel === i) && (
                     <circle
@@ -228,7 +251,9 @@ export default function GraficoAsistencia() {
                 : `Entrenamiento${activo.modalidad === 'extra' ? ' extra' : ''}`}
             </div>
             <div>
-              <b>{activo.pct}%</b> · {activo.presentes} de {activo.plazas}
+              {activo.pct == null
+                ? 'Sin plantel cargado a esa fecha'
+                : <><b>{activo.pct}%</b> · {activo.presentes} de {activo.plazas}</>}
             </div>
           </div>
         )}
@@ -274,8 +299,8 @@ export default function GraficoAsistencia() {
                     ? `Partido${e.rival ? ` vs ${e.rival}` : ''}`
                     : `Entren.${e.modalidad === 'extra' ? ' extra' : ''}`}
                 </td>
-                <td>{e.presentes} de {e.plazas}</td>
-                <td>{e.pct}%</td>
+                <td>{e.pct == null ? '—' : `${e.presentes} de ${e.plazas}`}</td>
+                <td>{e.pct == null ? '—' : `${e.pct}%`}</td>
               </tr>
             ))}
           </tbody>
