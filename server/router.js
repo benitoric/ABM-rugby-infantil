@@ -47,7 +47,21 @@ const COLS_LESION = `id, jugador_id, fecha::text as fecha, descripcion,
   fecha_retorno_estimada::text as fecha_retorno_estimada, recuperado`
 const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora,
   hora_fin::text as hora_fin, modalidad, rival, lugar, notas,
-  suspendido, motivo_suspension, nota_suspension`
+  suspendido, motivo_suspension, nota_suspension, plazas_manual`
+
+// ¿El jugador estaba lesionado en la fecha del evento? Se reconstruye de la
+// tabla lesiones: cuenta desde la fecha de la lesión hasta la de retorno
+// estimada. Sin fecha de retorno, la lesión sigue abierta mientras no esté
+// marcada como recuperada (una recuperada sin fecha no se puede ubicar en el
+// tiempo, así que no descuenta a nadie).
+function sqlLesionadoEnFecha(aliasJugador, aliasEvento) {
+  return `exists (
+    select 1 from lesiones l
+    where l.jugador_id = ${aliasJugador}.id
+      and l.fecha <= ${aliasEvento}.fecha
+      and (l.fecha_retorno_estimada > ${aliasEvento}.fecha
+           or (l.fecha_retorno_estimada is null and not l.recuperado)))`
+}
 const COLS_SEGUIMIENTO = `id, jugador_id, fecha::text as fecha, area, valoracion, comentario, autor_email`
 const COLS_EVALUACION = `id, jugador_id, fecha::text as fecha, valores, comentario, autor_email,
   revisor_email, valores_revisor, comentario_revisor, revisado_en::date::text as revisado_en`
@@ -1382,8 +1396,18 @@ async function enrutar(metodo, p, b, req, url) {
             join jugadores j on j.id = a.jugador_id
             where a.evento_id = e.id and a.estado = 'presente'
               and j.estado <> 'inactivo') as presentes,
+          e.plazas_manual,
           (select count(*)::int from jugadores j
-            where j.estado <> 'inactivo') as plazas,
+            where j.estado <> 'inactivo'
+              and (
+                -- Tener marca en ese evento prueba que estaba en el plantel
+                -- ese día, sin importar cuándo se lo cargó en la app. Así el
+                -- numerador nunca puede superar al denominador.
+                exists (select 1 from ${TABLA_ASISTENCIA[tipo]} a
+                  where a.evento_id = e.id and a.jugador_id = j.id)
+                or (j.created_at::date <= e.fecha
+                    and not ${sqlLesionadoEnFecha('j', 'e')})
+              )) as plazas_calculadas,
           (select string_agg(bl.rival, ' / ') from bloques bl
             where bl.evento_id = e.id and bl.rival is not null) as rival
         from eventos e
@@ -1407,9 +1431,12 @@ async function enrutar(metodo, p, b, req, url) {
          order by fecha, creado`,
         [anio])
 
-      // Sin plazas no hay porcentaje posible: son los eventos anteriores al
-      // alta del primer jugador (asistencia vieja cargada después). Quedan en
-      // la lista con pct null y el gráfico les corta la línea.
+      // El plantel cargado a mano manda sobre el calculado: es la corrección
+      // para los eventos anteriores a la carga del plantel en la app, donde el
+      // cálculo no tiene con qué saber cuántos chicos había.
+      for (const f of filas) f.plazas = f.plazas_manual ?? f.plazas_calculadas
+      // Sin plazas no hay porcentaje posible. Quedan en la lista con pct null
+      // y el gráfico les corta la línea.
       const pct = (pres, plazas) => (plazas ? Math.round((100 * pres) / plazas) : null)
       // Promedio del período: suma de presentes sobre suma de plazas, así un
       // evento con más plantel pesa lo que corresponde. Solo entran los que
@@ -1435,6 +1462,8 @@ async function enrutar(metodo, p, b, req, url) {
           rival: f.rival,
           presentes: f.presentes,
           plazas: f.plazas,
+          plazas_calculadas: f.plazas_calculadas,
+          plazas_manual: f.plazas_manual,
           pct: pct(f.presentes, f.plazas),
         })),
         promedio: {
@@ -1553,6 +1582,14 @@ async function enrutar(metodo, p, b, req, url) {
         const m = b.modalidad || null
         if (m && !['rutina', 'extra'].includes(m)) throw { codigo: 400, error: 'modalidad_invalida' }
         asignar('modalidad', m)
+      }
+      // Plantel de ese día cargado a mano; null vuelve al cálculo automático
+      if ('plazas_manual' in b) {
+        const n = b.plazas_manual == null || b.plazas_manual === '' ? null : Number(b.plazas_manual)
+        if (n !== null && !(Number.isInteger(n) && n >= 1)) {
+          throw { codigo: 400, error: 'plazas_invalidas' }
+        }
+        asignar('plazas_manual', n)
       }
       if ('suspendido' in b) {
         asignar('suspendido', !!b.suspendido)

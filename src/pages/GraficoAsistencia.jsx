@@ -64,7 +64,10 @@ export default function GraficoAsistencia() {
 
   const series = SERIES.filter((s) => visibles.includes(s.clave))
   const x = (i) => IZQ + (i * (W - IZQ - DER)) / (eventos.length - 1)
-  const y = (v) => ARRIBA + ((100 - v) / 100) * (H - ARRIBA - ABAJO)
+  // El clamp evita que un plantel cargado a mano por debajo de los presentes
+  // dibuje el punto fuera del área del gráfico
+  const y = (v) => ARRIBA
+    + ((100 - Math.min(100, Math.max(0, v))) / 100) * (H - ARRIBA - ABAJO)
   const puntosVisibles = eventos.length <= TOPE_PUNTOS
 
   // Los eventos de la serie, en su posición del eje (que es la de todos los
@@ -253,7 +256,8 @@ export default function GraficoAsistencia() {
             <div>
               {activo.pct == null
                 ? 'Sin plantel cargado a esa fecha'
-                : <><b>{activo.pct}%</b> · {activo.presentes} de {activo.plazas}</>}
+                : <><b>{activo.pct}%</b> · {activo.presentes} de {activo.plazas}
+                  {activo.plazas_manual != null && ' (plantel a mano)'}</>}
             </div>
           </div>
         )}
@@ -299,7 +303,11 @@ export default function GraficoAsistencia() {
                     ? `Partido${e.rival ? ` vs ${e.rival}` : ''}`
                     : `Entren.${e.modalidad === 'extra' ? ' extra' : ''}`}
                 </td>
-                <td>{e.pct == null ? '—' : `${e.presentes} de ${e.plazas}`}</td>
+                <td title={e.plazas_manual != null
+                  ? `Plantel cargado a mano (calculado: ${e.plazas_calculadas})` : undefined}>
+                  {e.pct == null ? '—' : `${e.presentes} de ${e.plazas}`}
+                  {e.plazas_manual != null && ' *'}
+                </td>
                 <td>{e.pct == null ? '—' : `${e.pct}%`}</td>
               </tr>
             ))}

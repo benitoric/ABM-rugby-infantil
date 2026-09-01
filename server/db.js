@@ -32,7 +32,10 @@ async function inicializar() {
   // fallar igual en Postgres por la carrera en el catálogo.
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
   const { rows: [testigo] } = await pool.query(
-    `select to_regclass('public.avisos_enviados') is not null as aplicadas`)
+    `select exists (
+       select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'eventos'
+         and column_name = 'plazas_manual') as aplicadas`)
   if (!testigo.aplicadas) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -46,6 +49,13 @@ async function inicializar() {
 
 // Exportada para poder probarla contra una base con el esquema viejo
 export async function migrar(pool) {
+  // Plantel de ese día cargado a mano, para corregir el % de asistencia de los
+  // eventos anteriores a la carga del plantel en la app (ver db/schema.sql)
+  await pool.query('alter table eventos add column if not exists plazas_manual int')
+  await pool.query(`alter table eventos drop constraint if exists eventos_plazas_manual_check`)
+  await pool.query(`alter table eventos add constraint eventos_plazas_manual_check
+    check (plazas_manual is null or plazas_manual >= 1)`)
+
   await pool.query('alter table staff add column if not exists rol text')
   await pool.query('alter table staff add column if not exists apellido text')
   await pool.query('alter table jugadores add column if not exists ficha_medica_vence date')
