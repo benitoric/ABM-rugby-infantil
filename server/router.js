@@ -60,11 +60,13 @@ const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora,
 // salgan chicos del plantel. Solo escribe si todavía no estaba registrado, así
 // que las marcas siguientes (y las correcciones de asistencia de otro día) no
 // lo pisan con un plantel que ya no es el de esa fecha.
-async function registrarPlazas(eventoId) {
+async function registrarPlazas(eventoId, tipo) {
   await query(
     `update eventos e set plazas_registradas = (
        select count(*)::int from jugadores j
-       where j.estado <> 'inactivo' and not ${sqlLesionadoEnFecha('j', 'e')})
+       where exists (select 1 from ${TABLA_ASISTENCIA[tipo]} a
+               where a.evento_id = e.id and a.jugador_id = j.id)
+          or (j.estado <> 'inactivo' and not ${sqlLesionadoEnFecha('j', 'e')}))
      where e.id = $1 and e.plazas_registradas is null`,
     [eventoId])
 }
@@ -1407,22 +1409,21 @@ async function enrutar(metodo, p, b, req, url) {
       const rama = (tipo) => `
         select e.id, e.fecha::text as fecha, e.created_at as creado,
           '${tipo}' as tipo, e.modalidad,
+          -- Los presentes son las marcas de ese día y nada más: no se filtran
+          -- por el estado actual del jugador. Dar de baja a alguien meses
+          -- después no puede cambiar cuántos fueron a un entrenamiento.
           (select count(*)::int from ${TABLA_ASISTENCIA[tipo]} a
-            join jugadores j on j.id = a.jugador_id
-            where a.evento_id = e.id and a.estado = 'presente'
-              and j.estado <> 'inactivo') as presentes,
+            where a.evento_id = e.id and a.estado = 'presente') as presentes,
           e.plazas_manual, e.plazas_registradas,
           (select count(*)::int from jugadores j
-            where j.estado <> 'inactivo'
-              and (
-                -- Tener marca en ese evento prueba que estaba en el plantel
-                -- ese día, sin importar cuándo se lo cargó en la app. Así el
-                -- numerador nunca puede superar al denominador.
-                exists (select 1 from ${TABLA_ASISTENCIA[tipo]} a
-                  where a.evento_id = e.id and a.jugador_id = j.id)
-                or (j.created_at::date <= e.fecha
-                    and not ${sqlLesionadoEnFecha('j', 'e')})
-              )) as plazas_calculadas,
+            -- Tener marca en ese evento prueba que estaba en el plantel ese
+            -- día, sin importar cuándo se lo cargó en la app ni si después se
+            -- lo dio de baja. Así el numerador nunca supera al denominador.
+            where exists (select 1 from ${TABLA_ASISTENCIA[tipo]} a
+                    where a.evento_id = e.id and a.jugador_id = j.id)
+               or (j.estado <> 'inactivo'
+                   and j.created_at::date <= e.fecha
+                   and not ${sqlLesionadoEnFecha('j', 'e')})) as plazas_calculadas,
           (select string_agg(bl.rival, ' / ') from bloques bl
             where bl.evento_id = e.id and bl.rival is not null) as rival
         from eventos e
@@ -1683,7 +1684,7 @@ async function enrutar(metodo, p, b, req, url) {
              do update set estado = excluded.estado, condicion = excluded.condicion`,
             [p[1], m.jugador_id, m.estado, cond])
         }
-        await registrarPlazas(p[1])
+        await registrarPlazas(p[1], 'entrenamiento')
         return { ok: true }
       }
     }
@@ -1806,7 +1807,7 @@ async function enrutar(metodo, p, b, req, url) {
              do update set estado = excluded.estado, condicion = excluded.condicion`,
             [p[1], m.jugador_id, m.estado, cond])
         }
-        await registrarPlazas(p[1])
+        await registrarPlazas(p[1], 'partido')
         return { ok: true }
       }
     }
