@@ -31,15 +31,13 @@ async function inicializar() {
   // arranques concurrentes: dos CREATE TABLE IF NOT EXISTS simultáneos pueden
   // fallar igual en Postgres por la carrera en el catálogo.
   // Al agregar una migración acá, actualizar el testigo de "aplicadas".
-  const { rows: [testigo] } = await pool.query(
-    `select to_regclass('public.evento_plantel') is not null
-       and not exists (
-         select 1 from eventos e
-         where not exists (select 1 from evento_plantel ep where ep.evento_id = e.id)
-           and (exists (select 1 from asistencias a where a.evento_id = e.id)
-                or exists (select 1 from asistencias_partido a where a.evento_id = e.id)))
-       as aplicadas`)
-  if (!testigo.aplicadas) {
+  //
+  // El testigo va en dos consultas y no en una sola con AND: Postgres resuelve
+  // los nombres de tabla al planificar, así que una consulta que nombre una
+  // tabla que todavía no existe falla entera aunque el AND se cortara antes.
+  // Con una sola consulta, la app quedaba caída hasta que alguien creara la
+  // tabla a mano, que es justo lo que la migración tenía que hacer.
+  if (!await migracionesAplicadas(pool)) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
       await migrar(pool)
@@ -48,6 +46,24 @@ async function inicializar() {
     }
   }
   return (texto, params) => pool.query(texto, params)
+}
+
+// ¿Está aplicada la última migración? Primero se comprueba que exista la tabla
+// más nueva, y recién entonces se la puede consultar: nombrarla antes de que
+// exista haría fallar la consulta al planificarla. Exportada para poder
+// probarla contra bases en distintos estados.
+export async function migracionesAplicadas(pool) {
+  const { rows: [t] } = await pool.query(
+    `select to_regclass('public.evento_plantel') is not null as existe`)
+  if (!t.existe) return false
+  const { rows: [t2] } = await pool.query(
+    `select not exists (
+       select 1 from eventos e
+       where not exists (select 1 from evento_plantel ep where ep.evento_id = e.id)
+         and (exists (select 1 from asistencias a where a.evento_id = e.id)
+              or exists (select 1 from asistencias_partido a where a.evento_id = e.id)))
+     as aplicadas`)
+  return t2.aplicadas
 }
 
 // Exportada para poder probarla contra una base con el esquema viejo
