@@ -51,6 +51,7 @@ const COLS_LESION = `id, jugador_id, fecha::text as fecha, descripcion,
   fecha_retorno_estimada::text as fecha_retorno_estimada, recuperado`
 const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora,
   hora_fin::text as hora_fin, modalidad, rival, lugar, notas,
+  created_at::text as created_at,
   suspendido, motivo_suspension, nota_suspension, plazas_manual`
 
 // ¿El jugador estaba lesionado en la fecha del evento? Se reconstruye de la
