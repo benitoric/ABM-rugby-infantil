@@ -584,6 +584,19 @@ async function exigirBloqueAbierto(bloqueId) {
   if (bl.cerrado_en) throw { codigo: 409, error: 'bloque_cerrado' }
 }
 
+// Cargar el equipo de un tiempo exige tener cerrado el anterior: así lo que
+// se anota es siempre sobre un tiempo ya confirmado, y no se arma media
+// jornada de memoria. Vaciar un tiempo o sacar a alguien sí se permite: es
+// lo que pasa cuando un chico se golpea y hay que bajarlo de los siguientes.
+async function exigirAnteriorCerrado(tiempoId) {
+  const [t] = await query(
+    `select count(*) filter (
+       where a.numero = t.numero - 1 and a.cerrado_en is null)::int as anterior_abierto
+     from tiempos t join tiempos a on a.bloque_id = t.bloque_id
+     where t.id = $1 group by t.numero`, [tiempoId])
+  if (t?.anterior_abierto > 0) throw { codigo: 409, error: 'tiempo_anterior_abierto' }
+}
+
 async function exigirTiempoAbierto(tiempoId) {
   const [t] = await query(
     `select t.cerrado_en as tc, bl.cerrado_en as bc
@@ -2185,6 +2198,8 @@ async function enrutar(metodo, p, b, req, url) {
       // Reemplaza de una vez el equipo completo de un tiempo
       await exigirTiempoAbierto(b.tiempo_id)
       const equipo = Array.isArray(b.equipo) ? b.equipo : []
+      // Vaciarlo siempre se puede; cargarlo, solo con el anterior cerrado
+      if (equipo.length) await exigirAnteriorCerrado(b.tiempo_id)
       for (const e of equipo) {
         if (e.puesto != null && !PUESTOS_VALIDOS.includes(Number(e.puesto))) {
           throw { codigo: 400, error: 'puesto_invalido' }
@@ -2282,6 +2297,7 @@ async function enrutar(metodo, p, b, req, url) {
     if (metodo === 'POST' && p[1] === 'cancha') {
       await exigirTiempoAbierto(b.tiempo_id)
       if (b.dentro) {
+        await exigirAnteriorCerrado(b.tiempo_id)
         const puesto = b.puesto == null ? null : Number(b.puesto)
         if (puesto !== null && !PUESTOS_VALIDOS.includes(puesto)) {
           throw { codigo: 400, error: 'puesto_invalido' }
