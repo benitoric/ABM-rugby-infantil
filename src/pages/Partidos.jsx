@@ -137,21 +137,24 @@ export default function Partidos() {
 
       <GraficoAsistencia />
 
-      <div className="campo no-imprimir">
-        <label>Partido</label>
-        <select value={partidoId} onChange={(e) => irA('partidos', e.target.value)}>
-          {partidos.map((p) => (
-            <option key={p.id} value={p.id}>
-              {fechaCorta(p.fecha)} · {etiquetaPartido(p)}
-            </option>
-          ))}
-        </select>
+      {/* El alta va junto al selector: se ve desde cualquier solapa */}
+      <div className="fila no-imprimir" style={{ alignItems: 'flex-end' }}>
+        <div className="campo crece" style={{ marginBottom: 0 }}>
+          <label>Partido</label>
+          <select value={partidoId} onChange={(e) => irA('partidos', e.target.value)}>
+            {partidos.map((p) => (
+              <option key={p.id} value={p.id}>
+                {fechaCorta(p.fecha)} · {etiquetaPartido(p)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button className="btn" onClick={() => setCreando(true)}>+ Nuevo partido</button>
       </div>
       {partido && (
         <ArmadoPartido
           key={partido.id}
           partido={partido}
-          onNuevo={() => setCreando(true)}
           onActualizado={(ev) => cargar(ev.id)}
           onBorrado={() => cargar()}
         />
@@ -198,7 +201,7 @@ function historialCapitanes(filas) {
   return m
 }
 
-function ArmadoPartido({ partido, onNuevo, onActualizado, onBorrado }) {
+function ArmadoPartido({ partido, onActualizado, onBorrado }) {
   const [bloques, setBloques] = useState([])
   const [jugadores, setJugadores] = useState([])
   // confirmacion: lo que avisaron en la semana (sección Asistencia).
@@ -934,7 +937,6 @@ function ArmadoPartido({ partido, onNuevo, onActualizado, onBorrado }) {
           sugerencias={sugerencias}
           onConfirmar={marcarConfirmacion}
           onConfirmarStaff={marcarConfirmacionStaff}
-          onNuevo={onNuevo}
           onActualizado={onActualizado}
           onBorrado={onBorrado}
         />
@@ -1331,7 +1333,7 @@ function Frescura({ fecha, refrescando, onRefrescar }) {
 // la asistencia real se toma después, en la cancha.
 function Convocatoria({
   partido, jugadores, confirmacion, staff, confirmacionStaff, sugerencias,
-  onConfirmar, onConfirmarStaff, onNuevo, onActualizado, onBorrado,
+  onConfirmar, onConfirmarStaff, onActualizado, onBorrado,
 }) {
   const [editando, setEditando] = useState(false)
   const [evento, setEvento] = useState(partido)
@@ -1383,10 +1385,7 @@ function Convocatoria({
         onCambio={(ev) => { setEvento(ev); onActualizado(ev) }}
       />
 
-      <div className="fila entre">
-        <h3>Convocatoria</h3>
-        <button className="btn sec chico" onClick={onNuevo}>+ Nuevo partido</button>
-      </div>
+      <h3>Convocatoria</h3>
       <p className="mini">
         Marcá quién avisó que va. Los lesionados no se convocan, y la asistencia
         real se toma el día del partido en "Tomar asistencia".
