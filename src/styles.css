@@ -988,6 +988,22 @@ details.tarjeta summary {
 }
 .fila-test-dato input.invalido { border-color: var(--bad); background: #fff4f4; }
 
+/* Planificación técnica: el nombre del aspecto es el que marca y desmarca */
+.aspecto-nombre {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  text-align: left;
+  font-weight: 600;
+  color: var(--texto);
+}
+.aspecto-tilde { font-size: 1.05rem; color: var(--primario); }
+
 /* Semáforo: los tres colores con los que el PF valora la medición */
 .semaforo { display: flex; gap: 2px; flex: 0 0 auto; }
 .semaforo-luz {

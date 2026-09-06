@@ -311,6 +311,30 @@ create table if not exists trabajo_fisico (
   actualizado_en timestamptz not null default now()
 );
 
+-- Aspectos técnicos que el staff sumó al catálogo fijo de src/planTecnico.js.
+-- Quedan disponibles para todos los entrenamientos siguientes.
+create table if not exists aspectos_tecnicos (
+  clave text primary key,
+  label text not null,
+  grupo text not null check (grupo in ('colectiva','individual')),
+  creado_por text,
+  created_at timestamptz not null default now()
+);
+
+-- Planificación técnica de cada entrenamiento: qué se trabaja ese día. Una
+-- fila por entrenamiento, con los aspectos marcados en jsonb:
+-- { aspecto: { minutos: int|null } }. Los minutos son opcionales; sin ellos
+-- se reparte la hora de técnica entre los aspectos marcados.
+create table if not exists plan_tecnico (
+  evento_id uuid primary key references eventos(id) on delete cascade,
+  aspectos jsonb not null default '{}',
+  -- Va en true cuando no quedó ningún aspecto marcado: deja constancia de que
+  -- ese día no hubo planificación, distinto de no haber abierto la pestaña.
+  sin_planificacion boolean not null default true,
+  autor_email text,
+  actualizado_en timestamptz not null default now()
+);
+
 -- Ajustes internos de la app. Hoy guarda el par de claves VAPID del push, que
 -- se genera solo la primera vez que alguien activa los avisos: así no hay que
 -- cargar nada a mano en las variables de entorno.

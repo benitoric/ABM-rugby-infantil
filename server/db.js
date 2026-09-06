@@ -54,7 +54,8 @@ async function inicializar() {
 // probarla contra bases en distintos estados.
 export async function migracionesAplicadas(pool) {
   const { rows: [t] } = await pool.query(
-    `select to_regclass('public.evento_plantel') is not null as existe`)
+    `select to_regclass('public.evento_plantel') is not null
+        and to_regclass('public.plan_tecnico') is not null as existe`)
   if (!t.existe) return false
   const { rows: [t2] } = await pool.query(
     `select not exists (
@@ -255,6 +256,22 @@ export async function migrar(pool) {
     variables jsonb not null default '{}',
     carga text check (carga in ('baja','media','alta')),
     observaciones text,
+    autor_email text,
+    actualizado_en timestamptz not null default now()
+  )`)
+  // Planificación técnica del entrenamiento: qué aspectos se trabajan ese día
+  // y cuántos minutos lleva cada uno.
+  await pool.query(`create table if not exists aspectos_tecnicos (
+    clave text primary key,
+    label text not null,
+    grupo text not null check (grupo in ('colectiva','individual')),
+    creado_por text,
+    created_at timestamptz not null default now()
+  )`)
+  await pool.query(`create table if not exists plan_tecnico (
+    evento_id uuid primary key references eventos(id) on delete cascade,
+    aspectos jsonb not null default '{}',
+    sin_planificacion boolean not null default true,
     autor_email text,
     actualizado_en timestamptz not null default now()
   )`)
