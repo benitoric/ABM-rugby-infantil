@@ -491,6 +491,48 @@ function ArmadoPartido({ partido }) {
     })
   }
 
+  // Valoración del partido de ese bloque y golpeados que tuvieron que salir,
+  // tal como se responden en el diálogo de cierre
+  async function guardarCierre(bloqueId, { valoracion, golpeados = [], desde }) {
+    const bl = bloques.find((x) => x.id === bloqueId)
+    if (valoracion && valoracion !== bl?.valoracion) {
+      const nuevo = await api(`partido/bloque/${bloqueId}`, {
+        method: 'PUT', body: { valoracion },
+      })
+      setBloques((bs) => bs.map((x) => (x.id === nuevo.id ? nuevo : x)))
+    }
+    const delBloque = jugadores.filter((j) => asignacion[j.id] === bloqueId)
+    const marcas = []
+    for (const j of delBloque) {
+      const marcado = golpeados.includes(j.id)
+      // Se respeta lo ya cargado: a un lesionado marcado antes no se lo
+      // rebaja a golpeado, y a los que no se tocaron no se los pisa.
+      if (marcado && !condicion[j.id]) {
+        marcas.push({ jugador_id: j.id, estado: 'presente', condicion: 'golpeado', condicion_desde: desde })
+      } else if (!marcado && condicion[j.id]) {
+        marcas.push({ jugador_id: j.id, estado: 'presente', condicion: null })
+      }
+    }
+    if (!marcas.length) return
+    setCondicion((m) => {
+      const copia = { ...m }
+      for (const x of marcas) {
+        if (x.condicion) copia[x.jugador_id] = x.condicion
+        else delete copia[x.jugador_id]
+      }
+      return copia
+    })
+    setCondicionDesde((m) => {
+      const copia = { ...m }
+      for (const x of marcas) {
+        if (x.condicion) copia[x.jugador_id] = desde
+        else delete copia[x.jugador_id]
+      }
+      return copia
+    })
+    await api(`eventos/${partido.id}/asistencias-partido`, { method: 'PUT', body: { marcas } })
+  }
+
   async function marcarPresenciaStaff(email, presente) {
     const nuevo = presenciaStaff[email] === presente ? null : presente
     setPresenciaStaff((m) => {
@@ -645,8 +687,11 @@ function ArmadoPartido({ partido }) {
     setTiempos((ts) => ts.map((x) => (x.id === t.id ? t : x)))
   }
 
-  async function cerrarBloque(bloqueId, cerrado) {
+  async function cerrarBloque(bloqueId, cerrado, datos = null) {
     try {
+      // Lo que se pide en el diálogo de cierre se guarda ANTES de cerrar: con
+      // el bloque cerrado el servidor ya no acepta cambios.
+      if (datos) await guardarCierre(bloqueId, datos)
       const bl = await api('partido/bloque-cerrar', {
         method: 'POST',
         body: { bloque_id: bloqueId, cerrado },
@@ -2611,11 +2656,14 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
           jugadores={jugadores}
           condicion={condicion}
           asistenciaSinTomar={asistenciaSinTomar}
-          onCerrar={async () => {
+          onCerrar={async (datos) => {
             setCerrandoBloque(false)
             setSel(null)
             setPuestoSel(null)
-            await onCerrarBloque(bloque.id, true)
+            // El último tiempo del bloque + 1: la marca queda registrada sin
+            // contradecir el tiempo que el chico sí jugó (ver condicion_desde)
+            const desde = Math.max(0, ...tiempos.map((t) => t.numero)) + 1
+            await onCerrarBloque(bloque.id, true, { ...datos, desde })
           }}
           onCancelar={() => setCerrandoBloque(false)}
         />
@@ -2673,6 +2721,19 @@ function CerrarTiempo({ tiempo, vacantes, balance = [], onCerrar, onCancelar }) 
 // Diálogo de cierre del bloque, con la checklist de lo que quedó pendiente.
 // Avisa pero no bloquea: a veces el caos de la jornada manda.
 function CerrarBloque({ bloque, tiempos, enCancha, jugadores, condicion, asistenciaSinTomar, onCerrar, onCancelar }) {
+  // Antes de congelar el bloque se piden las dos cosas que suelen quedar sin
+  // anotar en la cancha: cómo jugó el equipo ese partido y si alguno salió
+  // golpeado. Se guardan con el bloque todavía abierto, porque una vez
+  // cerrado el servidor no acepta más cambios.
+  const [valoracion, setValoracion] = useState(bloque.valoracion || null)
+  const yaMarcados = jugadores.filter((j) => condicion[j.id])
+  const [huboGolpeados, setHuboGolpeados] = useState(yaMarcados.length ? true : null)
+  const [golpeados, setGolpeados] = useState(yaMarcados.map((j) => j.id))
+
+  // Candidatos: los que efectivamente pisaron la cancha en este bloque
+  const jugaron = jugadores.filter((j) =>
+    tiempos.some((t) => enCancha[t.id]?.[j.id] && !enCancha[t.id][j.id].prestado))
+
   const pendientes = []
   if (asistenciaSinTomar) pendientes.push('La asistencia del día no está tomada.')
   const sinCerrar = tiempos.filter((t) => !t.cerrado_en)
@@ -2683,12 +2744,12 @@ function CerrarBloque({ bloque, tiempos, enCancha, jugadores, condicion, asisten
   if (vacios.length && vacios.length < tiempos.length) {
     pendientes.push(`Tiempos sin equipo cargado: ${vacios.map((t) => `T${t.numero}`).join(', ')}.`)
   }
-  if (!bloque.valoracion) pendientes.push('Falta la valoración del bloque (estrellas).')
   if (!bloque.cronica) pendientes.push('Falta la crónica del partido.')
-  const tocados = jugadores.filter((j) => condicion[j.id])
-  if (tocados.length) {
-    pendientes.push(`Golpeados/lesionados marcados: ${tocados.map((j) => j.apellido).join(', ')}.`)
-  }
+
+  const faltaResponder = huboGolpeados === null ||
+    (huboGolpeados && !golpeados.length)
+  const rival = bloque.rival ? ` vs ${bloque.rival}` : ''
+
   return (
     <div className="modal-fondo" onClick={onCancelar}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -2702,12 +2763,85 @@ function CerrarBloque({ bloque, tiempos, enCancha, jugadores, condicion, asisten
             {pendientes.map((t, i) => <div key={i}>⚠️ {t}</div>)}
           </div>
         )}
-        {pendientes.length === 0 && (
-          <p className="mini" style={{ color: 'var(--ok)' }}>✓ Todo en orden para cerrar.</p>
+
+        {/* 1. Cómo jugó el equipo en ESTE partido (cada bloque juega el suyo) */}
+        <div className="tarjeta" style={{ marginTop: 10 }}>
+          <div className="fila entre">
+            <div>
+              <b style={{ fontSize: '0.95rem' }}>¿Cómo jugó el equipo{rival}?</b>
+              <div className="mini">Sin puntaje: es rugby infantil 😉</div>
+            </div>
+            <Estrellas valor={valoracion} onCambiar={setValoracion} />
+          </div>
+          {/* Lo de cada tiempo se cargó al cerrarlo; va como referencia */}
+          {tiempos.some((t) => t.valoracion) && (
+            <p className="mini" style={{ margin: '6px 0 0' }}>
+              Por tiempo: {tiempos.filter((t) => t.valoracion)
+                .map((t) => `T${t.numero} ${'★'.repeat(t.valoracion)}`).join(' · ')}
+            </p>
+          )}
+        </div>
+
+        {/* 2. ¿Alguno salió golpeado? */}
+        <div className="tarjeta" style={{ marginTop: 8 }}>
+          <div className="fila entre">
+            <b style={{ fontSize: '0.95rem' }}>¿Alguno salió golpeado?</b>
+            <div className="seg" style={{ width: 'auto' }}>
+              <button
+                className={huboGolpeados === false ? 'activo' : ''}
+                onClick={() => { setHuboGolpeados(false); setGolpeados([]) }}
+              >
+                No
+              </button>
+              <button
+                className={huboGolpeados === true ? 'activo' : ''}
+                onClick={() => setHuboGolpeados(true)}
+              >
+                Sí
+              </button>
+            </div>
+          </div>
+          {huboGolpeados && (
+            <>
+              <p className="mini" style={{ margin: '6px 0' }}>
+                Marcá quiénes. Los que queden marcados como lesionados salen
+                además en el recordatorio de seguimiento de Jugadores.
+              </p>
+              {jugaron.length === 0 && (
+                <p className="mini">Ningún jugador figura en cancha en este bloque.</p>
+              )}
+              <div className="fila" style={{ gap: 6, flexWrap: 'wrap' }}>
+                {jugaron.map((j) => (
+                  <button
+                    key={j.id}
+                    className={`bloque-btn ${golpeados.includes(j.id) ? 'sel' : ''}`}
+                    style={{ minWidth: 0, padding: '0 10px' }}
+                    onClick={() => setGolpeados((g) =>
+                      g.includes(j.id) ? g.filter((x) => x !== j.id) : [...g, j.id])}
+                  >
+                    {j.apellido}{condicion[j.id] === 'lesionado' ? ' 🚑' : ''}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {faltaResponder && (
+          <p className="mini" style={{ marginTop: 8 }}>
+            {huboGolpeados === null
+              ? 'Respondé si alguno salió golpeado para poder cerrar.'
+              : 'Elegí al menos un jugador.'}
+          </p>
         )}
+
         <div className="fila" style={{ gap: 8, marginTop: 12 }}>
-          <button className="btn crece" onClick={onCerrar}>
-            {pendientes.length ? 'Cerrar igual' : 'Cerrar bloque'}
+          <button
+            className="btn crece"
+            disabled={faltaResponder}
+            onClick={() => onCerrar({ valoracion, golpeados })}
+          >
+            {pendientes.length || !valoracion ? 'Cerrar igual' : 'Cerrar bloque'}
           </button>
           <button className="btn sec" onClick={onCancelar}>Cancelar</button>
         </div>
