@@ -1788,7 +1788,8 @@ async function enrutar(metodo, p, b, req, url) {
     if (p[2] === 'asistencias-partido' && p[1]) {
       if (metodo === 'GET') {
         return query(
-          'select jugador_id, estado, tarde, condicion from asistencias_partido where evento_id = $1', [p[1]])
+          `select jugador_id, estado, tarde, condicion, condicion_desde
+           from asistencias_partido where evento_id = $1`, [p[1]])
       }
       if (metodo === 'PUT') {
         // b.marcas: [{jugador_id, estado|null, condicion?}] — estado null borra
@@ -1823,12 +1824,16 @@ async function enrutar(metodo, p, b, req, url) {
           if (cond && !['golpeado', 'lesionado'].includes(cond)) {
             throw { codigo: 400, error: 'condicion_invalida' }
           }
+          // El golpe corre desde el tiempo en el que se lo marcó: los
+          // anteriores ya se jugaron y quedan como están
+          const desde = cond ? (Number(m.condicion_desde) || null) : null
           await query(
-            `insert into asistencias_partido (evento_id, jugador_id, estado, condicion)
-             values ($1,$2,$3,$4)
+            `insert into asistencias_partido (evento_id, jugador_id, estado, condicion, condicion_desde)
+             values ($1,$2,$3,$4,$5)
              on conflict (evento_id, jugador_id)
-             do update set estado = excluded.estado, condicion = excluded.condicion`,
-            [p[1], m.jugador_id, m.estado, cond])
+             do update set estado = excluded.estado, condicion = excluded.condicion,
+               condicion_desde = excluded.condicion_desde`,
+            [p[1], m.jugador_id, m.estado, cond, desde])
         }
         await congelarPlantel(p[1], 'partido')
         return { ok: true }
@@ -1885,8 +1890,8 @@ async function enrutar(metodo, p, b, req, url) {
       const confirmacionesStaff = await query(
         'select staff_email, estado from asistencias_staff where evento_id = $1', [eventoId])
       const asistenciasDia = await query(
-        'select jugador_id, estado, tarde, condicion from asistencias_partido where evento_id = $1',
-        [eventoId])
+        `select jugador_id, estado, tarde, condicion, condicion_desde
+         from asistencias_partido where evento_id = $1`, [eventoId])
       const capitanes = await query(
         'select bloque_id, jugador_id from capitanias where bloque_id = any($1)', [ids])
       return {
@@ -2139,14 +2144,19 @@ async function enrutar(metodo, p, b, req, url) {
       // sin marca cuenta como faltó). Los golpeados y lesionados quedan
       // afuera hasta que se los desmarque.
       const delBloque = await query(
-        `select j.id, j.posicion, j.puestos, j.aptitudes, ap.estado, ap.tarde, ap.condicion
+        `select j.id, j.posicion, j.puestos, j.aptitudes, ap.estado, ap.tarde,
+                ap.condicion, ap.condicion_desde
          from bloque_jugadores bj
          join jugadores j on j.id = bj.jugador_id
          join bloques bl on bl.id = bj.bloque_id
          left join asistencias_partido ap
            on ap.evento_id = bl.evento_id and ap.jugador_id = j.id
          where bj.bloque_id = $1`, [b.bloque_id])
-      const jugadores = delBloque.filter((j) => j.estado === 'presente' && !j.condicion)
+      // El golpe rige desde el tiempo en el que se lo marcó en adelante (las
+      // marcas viejas, sin ese dato, valen para todo el partido)
+      const fueraDeJuego = (j) => !!j.condicion &&
+        (j.condicion_desde == null || desde >= j.condicion_desde)
+      const jugadores = delBloque.filter((j) => j.estado === 'presente' && !fueraDeJuego(j))
       if (!jugadores.length) throw { codigo: 400, error: 'faltan_jugadores' }
       const tiempos = await query(
         'select id, numero from tiempos where bloque_id = $1 order by numero', [b.bloque_id])

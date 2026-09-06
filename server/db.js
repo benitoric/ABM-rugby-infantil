@@ -53,6 +53,11 @@ async function inicializar() {
 // exista haría fallar la consulta al planificarla. Exportada para poder
 // probarla contra bases en distintos estados.
 export async function migracionesAplicadas(pool) {
+  const { rows: [col] } = await pool.query(
+    `select exists (select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'asistencias_partido'
+         and column_name = 'condicion_desde') as existe`)
+  if (!col.existe) return false
   const { rows: [t] } = await pool.query(
     `select to_regclass('public.evento_plantel') is not null as existe`)
   if (!t.existe) return false
@@ -303,6 +308,9 @@ export async function migrar(pool) {
   // Reemplazada por evento_plantel: guardaba un número ya con los lesionados
   // descontados, así que una lesión cargada después no podía corregirlo.
   await pool.query('alter table eventos drop column if exists plazas_registradas')
+  // Desde qué tiempo rige el golpe o la lesión marcada en pleno partido: los
+  // tiempos anteriores ya se jugaron y no los toca. Null en las marcas viejas.
+  await pool.query('alter table asistencias_partido add column if not exists condicion_desde smallint')
 }
 
 // Arranca el historial de capitanes con la planilla que se venía llevando

@@ -215,6 +215,10 @@ create table if not exists asistencias_partido (
   -- transitorio (se desmarca y vuelve); 'lesionado' además queda pendiente de
   -- seguimiento en la sección Jugadores. Null = en condiciones de jugar.
   condicion text check (condicion in ('golpeado','lesionado')),
+  -- Número del tiempo en el que se lo marcó: el golpe corre de ahí en
+  -- adelante. Los tiempos anteriores ya se jugaron y quedan como estaban.
+  -- Null en las marcas viejas (valen para todo el partido, como antes).
+  condicion_desde smallint,
   -- El staff ya revisó esa lesión (la cargó en la ficha o resolvió que no hace
   -- falta): saca el recordatorio de Jugadores sin borrar lo que pasó en el
   -- partido, que queda como registro.
