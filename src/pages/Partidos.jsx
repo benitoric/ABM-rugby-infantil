@@ -10,7 +10,6 @@ import {
 import { promediosResumen, valoresConsolidados } from '../evaluacion.js'
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 import { FormEvento, PanelSuspension } from './Evento.jsx'
-import GraficoAsistencia from './GraficoAsistencia.jsx'
 
 const MAX_TIEMPOS = 6
 
@@ -99,7 +98,6 @@ export default function Partidos() {
           <h2>Partidos</h2>
           <button className="btn" onClick={() => setCreando(true)}>+ Nuevo partido</button>
         </div>
-        <GraficoAsistencia />
         <div className="vacio">
           Todavía no hay partidos. Creá uno para armar la convocatoria.
         </div>
@@ -134,8 +132,6 @@ export default function Partidos() {
           ))}
         </div>
       )}
-
-      <GraficoAsistencia />
 
       {/* El alta va junto al selector: se ve desde cualquier solapa */}
       <div className="fila no-imprimir" style={{ alignItems: 'flex-end' }}>
