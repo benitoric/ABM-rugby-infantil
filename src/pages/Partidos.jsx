@@ -2069,7 +2069,11 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
   const tiempo = tiempos.find((t) => t.id === tiempoSel) || tiempos[0]
   const tiempoCerrado = !!tiempo?.cerrado_en
   const anterior = tiempo && tiempos.find((t) => t.numero === tiempo.numero - 1)
-  const soloLectura = bloqueCerrado || tiempoCerrado
+  // Para armar un tiempo hace falta tener cerrado el anterior: si no, lo que
+  // se carga sale de la memoria de lo que recién pasó. Hasta cerrarlo, el
+  // tiempo se ve pero no se toca (el servidor rechaza igual las cargas).
+  const anteriorAbierto = !!(anterior && !anterior.cerrado_en)
+  const soloLectura = bloqueCerrado || tiempoCerrado || anteriorAbierto
   const mapa = (tiempo && enCancha[tiempo.id]) || {}
 
   // cuántos tiempos jugó cada jugador en este bloque (prestado también cuenta)
@@ -2362,6 +2366,16 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
         </p>
       )}
 
+      {anteriorAbierto && !bloqueCerrado && !tiempoCerrado && (
+        <p className="aviso">
+          ⚠️ Para armar el T{tiempo.numero} primero valorá y cerrá el T{anterior.numero}:
+          así lo que se jugó queda confirmado antes de seguir.{' '}
+          <button className="btn chico" onClick={() => onSelTiempo(anterior.id)}>
+            Ir al T{anterior.numero}
+          </button>
+        </p>
+      )}
+
       {!soloLectura && (
         <div className="tarjeta fila entre">
           <label className="mini fila crece" style={{ gap: 6, alignItems: 'center' }}>
@@ -2371,22 +2385,9 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
             </select>
           </label>
           <div className="fila" style={{ gap: 6 }}>
-            {anterior && !anterior.cerrado_en ? (
-              <button
-                className="btn chico"
-                style={{ opacity: 0.55 }}
-                onClick={() => {
-                  alert(`Para armar el T${tiempo.numero} primero valorá y cerrá el T${anterior.numero}: así lo jugado queda confirmado.`)
-                  onSelTiempo(anterior.id)
-                }}
-              >
-                ✨ Sugerir T{tiempo?.numero}
-              </button>
-            ) : (
-              <button className="btn chico" disabled={sugiriendo} onClick={sugerirEquipos}>
-                {sugiriendo ? 'Armando…' : `✨ Sugerir T${tiempo?.numero}`}
-              </button>
-            )}
+            <button className="btn chico" disabled={sugiriendo} onClick={sugerirEquipos}>
+              {sugiriendo ? 'Armando…' : `✨ Sugerir T${tiempo?.numero}`}
+            </button>
             <button className="btn sec chico" onClick={limpiarTiempo}>🧹 Limpiar</button>
             <button className="btn sec chico" onClick={() => setCerrandoTiempo(tiempo)}>
               ✔ Cerrar T{tiempo?.numero}
@@ -2395,7 +2396,9 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
         </div>
       )}
 
-      {avisos.length > 0 && (
+      {/* Con el tiempo anterior sin cerrar no se puede cargar nada todavía:
+          los avisos de equipo incompleto solo agregan ruido */}
+      {avisos.length > 0 && !anteriorAbierto && (
         <div className="aviso">
           {avisos.map((a, i) => <div key={i}>⚠️ {a}</div>)}
         </div>
