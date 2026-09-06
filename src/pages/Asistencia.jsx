@@ -8,15 +8,17 @@ import {
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
 import TestsFisicos from './TestsFisicos.jsx'
 import TrabajoFisico from './TrabajoFisico.jsx'
+import PlanTecnico from './PlanTecnico.jsx'
 import EstadisticaFisica from './EstadisticaFisica.jsx'
 import GraficoAsistencia from './GraficoAsistencia.jsx'
 
 // Pestañas de un entrenamiento. El partido no las lleva: su trabajo del día
 // vive en la sección "Día de partido".
-// Las etiquetas van cortas para que las tres entren sin recortarse en un
+// Las etiquetas van cortas para que las cuatro entren sin recortarse en un
 // celular angosto; el título de cada pestaña se completa adentro.
 const VISTAS_ENTRENAMIENTO = [
-  { id: 'asistencia', label: '📋 Asistencia' },
+  { id: 'asistencia', label: '📋 Asist.' },
+  { id: 'tecnica', label: '🏉 Técnica' },
   { id: 'fisico', label: '🏃 Físico' },
   { id: 'tests', label: '⏱ Tests' },
 ]
@@ -746,6 +748,7 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
         </nav>
       )}
 
+      {esEntrenamiento && vista === 'tecnica' && <PlanTecnico evento={evento} />}
       {esEntrenamiento && vista === 'fisico' && <TrabajoFisico evento={evento} />}
       {esEntrenamiento && vista === 'tests' && <TestsFisicos evento={evento} />}
 

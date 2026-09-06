@@ -9,6 +9,10 @@ import { CLAVES_SEMAFORO, CLAVES_TEST } from '../src/tests.js'
 import {
   limpiarVariables, CLAVES_FISICAS, CLAVES_INTENSIDAD, MAX_MINUTOS,
 } from '../src/trabajoFisico.js'
+import {
+  claveAspecto, limpiarAspectos, sinPlanificacion, CLAVES_FIJAS, CLAVES_GRUPO,
+  MAX_MINUTOS as MAX_MINUTOS_TECNICA,
+} from '../src/planTecnico.js'
 
 const COLS_JUGADOR = `id, nombre, apellido, fecha_nacimiento::text as fecha_nacimiento,
   dni, posicion, puestos, puesto_principal, aptitudes, estado, tutor_nombre, tutor_telefono, ficha_medica_vigente,
@@ -179,6 +183,30 @@ function intensidadValida(i) {
   if (!i) return null
   if (!CLAVES_INTENSIDAD.includes(i)) throw { codigo: 400, error: 'intensidad_invalida' }
   return i
+}
+
+// Aspectos técnicos del catálogo: los fijos del código más los que sumó el
+// staff. Se piden así para validar el plan y para armar la pantalla.
+async function aspectosPropios() {
+  return query(
+    'select clave, label, grupo from aspectos_tecnicos order by grupo, label')
+}
+
+// Los aspectos del plan tal como se guardan. Igual que el trabajo físico,
+// rechaza lo que no entra en el catálogo o en el rango en vez de tragárselo.
+async function aspectosPlanValidos(crudo) {
+  const propios = await aspectosPropios()
+  const validas = [...CLAVES_FIJAS, ...propios.map((a) => a.clave)]
+  for (const [k, v] of Object.entries(crudo || {})) {
+    if (!validas.includes(k)) throw { codigo: 400, error: 'aspecto_invalido' }
+    if (v?.minutos != null && v.minutos !== '') {
+      const n = Number(v.minutos)
+      if (!Number.isInteger(n) || n <= 0 || n > MAX_MINUTOS_TECNICA) {
+        throw { codigo: 400, error: 'minutos_invalidos' }
+      }
+    }
+  }
+  return limpiarAspectos(crudo, validas)
 }
 
 // Las variables del trabajo físico tal como se guardan. Rechaza lo que no
@@ -1540,6 +1568,40 @@ async function enrutar(metodo, p, b, req, url) {
     }
   }
 
+  // ---------- catálogo propio de aspectos técnicos ----------
+  // Los fijos viven en src/planTecnico.js; acá se suman los que agrega el
+  // staff, que quedan disponibles para todos los entrenamientos.
+  if (p[0] === 'aspectos-tecnicos') {
+    if (metodo === 'GET' && !p[1]) return aspectosPropios()
+    if (metodo === 'POST' && !p[1]) {
+      const label = String(b?.label || '').trim().replace(/\s+/g, ' ')
+      if (!label) throw { codigo: 400, error: 'faltan_datos' }
+      if (!CLAVES_GRUPO.includes(b?.grupo)) throw { codigo: 400, error: 'grupo_invalido' }
+      const clave = claveAspecto(label)
+      if (!clave) throw { codigo: 400, error: 'faltan_datos' }
+      const filas = await query(
+        `insert into aspectos_tecnicos (clave, label, grupo, creado_por)
+         values ($1,$2,$3,$4)
+         on conflict (clave) do nothing
+         returning clave, label, grupo`,
+        [clave, label.slice(0, 60), b.grupo, yo.email])
+      // Si ya estaba (mismo nombre cargado por otro), se devuelve el que hay
+      if (filas.length) return filas[0]
+      const [existente] = await query(
+        'select clave, label, grupo from aspectos_tecnicos where clave = $1', [clave])
+      return existente
+    }
+    // Se borra solo si ningún entrenamiento lo usa: si no, los planes viejos
+    // quedarían mostrando una clave suelta.
+    if (metodo === 'DELETE' && p[1]) {
+      const [{ n }] = await query(
+        `select count(*)::int as n from plan_tecnico where aspectos ? $1`, [p[1]])
+      if (n > 0) throw { codigo: 409, error: 'aspecto_en_uso' }
+      await query('delete from aspectos_tecnicos where clave = $1', [p[1]])
+      return { ok: true }
+    }
+  }
+
   // ---------- sugerencias para autocompletar ----------
   // Salen de lo ya cargado en eventos y bloques (no hay catálogo aparte): cada
   // rival o lugar que se guarda queda disponible la próxima vez. Se ordenan por
@@ -1709,6 +1771,41 @@ async function enrutar(metodo, p, b, req, url) {
         }
         await congelarPlantel(p[1], 'entrenamiento')
         return { ok: true }
+      }
+    }
+    // Planificación técnica del día: qué aspectos se trabajan y con cuántos
+    // minutos. Una sola fila por entrenamiento, se guarda entera de una.
+    if (p[2] === 'plan-tecnico' && p[1]) {
+      if (metodo === 'GET') {
+        const [fila] = await query(
+          `select evento_id, aspectos, sin_planificacion, autor_email,
+                  actualizado_en::text as actualizado_en
+           from plan_tecnico where evento_id = $1`, [p[1]])
+        // El catálogo propio viaja con el plan: la pantalla lo arma con una
+        // sola llamada, sumándole los aspectos fijos del código.
+        return {
+          ...(fila || {
+            evento_id: p[1], aspectos: {}, sin_planificacion: true, autor_email: null,
+          }),
+          propios: await aspectosPropios(),
+        }
+      }
+      if (metodo === 'PUT') {
+        const [evento] = await query('select tipo from eventos where id = $1', [p[1]])
+        if (!evento) throw { codigo: 404, error: 'no_existe' }
+        if (evento.tipo !== 'entrenamiento') throw { codigo: 400, error: 'solo_entrenamientos' }
+        const aspectos = await aspectosPlanValidos(b?.aspectos)
+        const filas = await query(
+          `insert into plan_tecnico (evento_id, aspectos, sin_planificacion, autor_email, actualizado_en)
+           values ($1,$2,$3,$4, now())
+           on conflict (evento_id) do update
+             set aspectos = excluded.aspectos,
+                 sin_planificacion = excluded.sin_planificacion,
+                 autor_email = excluded.autor_email, actualizado_en = now()
+           returning evento_id, aspectos, sin_planificacion, autor_email,
+                     actualizado_en::text as actualizado_en`,
+          [p[1], JSON.stringify(aspectos), sinPlanificacion(aspectos), yo.email])
+        return { ...filas[0], propios: await aspectosPropios() }
       }
     }
     // Planilla del PF: el trabajo físico de la primera media hora. Es una

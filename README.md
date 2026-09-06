@@ -20,7 +20,12 @@ pantalla de inicio" del teléfono y queda como una app más).
    entrenamiento se puede marcar a un jugador como **golpeado** o
    **lesionado**; el lesionado queda como recordatorio en Jugadores para
    cargarle la lesión en la ficha (en los partidos eso se marca en la cancha,
-   desde "Día de partido").
+   desde "Día de partido"). Cada entrenamiento tiene además su
+   **planificación técnica**: qué aspectos se trabajan ese día (técnica
+   colectiva e individual, con la posibilidad de sumar otros al catálogo) y
+   cuántos minutos lleva cada uno; los que no se cargan a mano se reparten la
+   hora de técnica, y sin ningún aspecto marcado el día queda registrado como
+   "sin planificación".
 4. **Bloques del día de partido**: asignación de los presentes a los bloques
    que presenta el club (normalmente 2, pero al crear el partido se puede
    elegir de 1 a 6). Los campos de rival y lugar de juego autocompletan con
