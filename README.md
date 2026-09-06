@@ -10,26 +10,27 @@ pantalla de inicio" del teléfono y queda como una app más).
    posición, estado (activo / lesionado / inactivo) y ficha médica.
 2. **Ficha de seguimiento evolutivo**: entradas por fecha y área (técnica, física,
    táctica, actitudinal, social) con valoración de 1 a 5 estrellas y comentarios.
-3. **Asistencia**: eventos de tipo entrenamiento o partido, con toma rápida
-   (presente / ausente, ausente por defecto) y porcentajes por jugador. Los
-   entrenamientos se marcan como **de rutina** (lunes y miércoles de 19:30 a
-   21:00) o **extra**, y cualquier evento se puede **suspender** indicando el
-   motivo (clima, feriado u otro) y una nota libre. En los partidos la
-   suspensión es por bloque: puede caerse uno y jugarse el otro. Lo suspendido
-   no cuenta para los porcentajes de asistencia. Al tomar asistencia a un
-   entrenamiento se puede marcar a un jugador como **golpeado** o
+3. **Entrenamientos**: toma rápida de asistencia (presente / ausente, ausente
+   por defecto) y porcentajes por jugador. Cada entrenamiento se marca como
+   **de rutina** (lunes y miércoles de 19:30 a 21:00) o **extra**, y se puede
+   **suspender** indicando el motivo (clima, feriado u otro) y una nota libre;
+   lo suspendido no cuenta para los porcentajes. Al tomar asistencia se puede
+   marcar a un jugador como **golpeado** o
    **lesionado**; el lesionado queda como recordatorio en Jugadores para
    cargarle la lesión en la ficha (en los partidos eso se marca en la cancha,
-   desde "Día de partido"). Cada entrenamiento tiene además su
+   desde Partidos). Cada entrenamiento tiene además su
    **planificación técnica**: qué aspectos se trabajan ese día (técnica
    colectiva e individual, con la posibilidad de sumar otros al catálogo) y
    cuántos minutos lleva cada uno; los que no se cargan a mano se reparten la
    hora de técnica, y sin ningún aspecto marcado el día queda registrado como
    "sin planificación".
-4. **Bloques del día de partido**: asignación de los presentes a los bloques
-   que presenta el club (normalmente 2, pero al crear el partido se puede
-   elegir de 1 a 6). Los campos de rival y lugar de juego autocompletan con
-   lo ya cargado: se escriben unas letras y aparecen las coincidencias. Cada
+4. **Partidos**: cada partido se crea y se convoca desde su pestaña
+   **Convocatoria** (quién avisa que va), y de ahí sigue el resto del día:
+   asignación de los convocados a los bloques que presenta el club (normalmente
+   2, pero al crear el partido se puede elegir de 1 a 6). La suspensión de un
+   partido es por bloque: puede caerse uno y jugarse el otro. Los campos de
+   rival y lugar de juego autocompletan con lo ya cargado: se escriben unas
+   letras y aparecen las coincidencias. Cada
    bloque guarda además el grado de dificultad del rival (bueno / regular /
    malo).
 5. **Equipos por tiempo**: cada bloque juega 4 a 6 tiempos; se arma el equipo de

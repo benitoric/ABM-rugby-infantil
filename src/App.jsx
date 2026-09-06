@@ -3,15 +3,15 @@ import { api, getToken, setToken, onSesionExpirada } from './api.js'
 import { irA, leerHash, suscribir } from './navegacion.js'
 import Login from './pages/Login.jsx'
 import Jugadores from './pages/Jugadores.jsx'
-import Asistencia from './pages/Asistencia.jsx'
+import Entrenamientos from './pages/Entrenamientos.jsx'
 import Partidos from './pages/Partidos.jsx'
 import Staff from './pages/Staff.jsx'
 import { VERSION } from './version.js'
 
 const TABS = [
   { id: 'jugadores', label: 'Jugadores', ico: '👥' },
-  { id: 'asistencia', label: 'Asistencia', ico: '📋' },
-  { id: 'partidos', label: 'Día de partido', ico: '🏉' },
+  { id: 'entrenamientos', label: 'Entrenamientos', ico: '📋' },
+  { id: 'partidos', label: 'Partidos', ico: '🏉' },
   { id: 'staff', label: 'Staff', ico: '🧑‍🏫' },
 ]
 
@@ -19,6 +19,9 @@ const TABS = [
 // recargas y descartes de la PWA, y el botón "atrás" vuelve a la vista anterior
 const tabDeHash = () => {
   const [t] = leerHash()
+  // #/asistencia es el nombre viejo de la pestaña: los hashes guardados en el
+  // celular de cada uno siguen abriendo Entrenamientos
+  if (t === 'asistencia') return 'entrenamientos'
   return TABS.some((x) => x.id === t) ? t : 'jugadores'
 }
 
@@ -70,7 +73,7 @@ export default function App() {
       </nav>
 
       {tab === 'jugadores' && <Jugadores yo={staff} />}
-      {tab === 'asistencia' && <Asistencia yo={staff} />}
+      {tab === 'entrenamientos' && <Entrenamientos yo={staff} />}
       {tab === 'partidos' && <Partidos />}
       {tab === 'staff' && <Staff yo={staff} />}
     </div>

@@ -3,11 +3,14 @@ import { api, escrituraEnVuelo, marcaEscrituras } from '../api.js'
 import { irA, leerHash, reponer, suscribir } from '../navegacion.js'
 import {
   abrevAptitudes, abrevPuestos, APTITUDES, DIFICULTADES, etiquetaDificultad, etiquetaMotivo,
-  etiquetaPartido, etiquetaPuestos, fechaCorta, FORMACION, nombreCompleto, nombreStaff,
-  puedeJugarDe, puestoFormacion, puestoPrincipal, tipoJugador, PUESTOS,
+  etiquetaPartido, etiquetaPuestos, fechaCorta, FORMACION, lineaBloque, nombreCompleto,
+  nombreStaff, puedeJugarDe, puestoFormacion, puestoPrincipal, suspensionEvento, tipoJugador,
+  PUESTOS,
 } from '../helpers.js'
 import { promediosResumen, valoresConsolidados } from '../evaluacion.js'
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
+import { FormEvento, PanelSuspension } from './Evento.jsx'
+import GraficoAsistencia from './GraficoAsistencia.jsx'
 
 const MAX_TIEMPOS = 6
 
@@ -29,31 +32,39 @@ function posicionGuardada() {
   try { return (localStorage.getItem(CLAVE_PARTIDO) || '').split('/') } catch { return [] }
 }
 
+// El último partido cargado, que es donde arranca el selector: el de created_at
+// más nuevo, no el de fecha más próxima (se puede cargar un partido viejo).
+function ultimoCreado(ps) {
+  return [...ps].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0]
+}
+
 export default function Partidos() {
   const [partidos, setPartidos] = useState([])
   const [partidoId, setPartidoId] = useState('')
   const [cargando, setCargando] = useState(true)
+  const [creando, setCreando] = useState(false)
+  const [sugerencias, recargarSugerencias] = useSugerencias()
+
+  // Trae la lista de partidos y devuelve cuál mostrar. Sin nada que mande
+  // (hash o partido recién creado) se para en el último creado.
+  async function cargar(preferido) {
+    const eventos = await api('eventos')
+    const ps = eventos.filter((e) => e.tipo === 'partido')
+    setPartidos(ps)
+    if (!ps.length) { setPartidoId(''); setCargando(false); return null }
+    // El del hash manda (recarga o link directo); si no, el último creado
+    const [, hashId, hashVista] = leerHash()
+    const elegido =
+      (ps.some((x) => x.id === preferido) && preferido) ||
+      (ps.some((x) => x.id === hashId) && hashId) ||
+      ultimoCreado(ps).id
+    reponer('partidos', elegido, elegido === hashId ? hashVista : null)
+    setPartidoId(elegido)
+    setCargando(false)
+    return ps.find((x) => x.id === elegido)
+  }
 
   useEffect(() => {
-    async function cargar() {
-      const eventos = await api('eventos')
-      const ps = eventos.filter((e) => e.tipo === 'partido')
-      setPartidos(ps)
-      if (ps.length) {
-        // El partido a mostrar: el del hash (recarga o link directo), si no
-        // el último visitado (vuelta desde otra pestaña), si no el más nuevo
-        const [, hashId, hashVista] = leerHash()
-        const [guardadoId, guardadaVista] = posicionGuardada()
-        const elegido =
-          (ps.some((x) => x.id === hashId) && hashId) ||
-          (ps.some((x) => x.id === guardadoId) && guardadoId) ||
-          ps[0].id
-        const vista = elegido === hashId ? hashVista : (elegido === guardadoId ? guardadaVista : null)
-        reponer('partidos', elegido, vista)
-        setPartidoId(elegido)
-      }
-      setCargando(false)
-    }
     cargar().catch(() => setCargando(false))
   }, [])
 
@@ -64,16 +75,35 @@ export default function Partidos() {
     if (partidos.some((x) => x.id === id)) setPartidoId(id)
   }), [partidos])
 
+  // Alta de un partido: queda seleccionado el recién creado
+  const formNuevo = creando && (
+    <FormEvento
+      tipo="partido"
+      sugerencias={sugerencias}
+      onCerrar={() => setCreando(false)}
+      onGuardado={async (ev) => {
+        setCreando(false)
+        recargarSugerencias()
+        await cargar(ev.id)
+        irA('partidos', ev.id)
+      }}
+    />
+  )
+
   if (cargando) return <div className="vacio">Cargando…</div>
 
   if (!partidos.length) {
     return (
       <div className="contenido">
-        <h2>Día de partido</h2>
-        <div className="vacio">
-          No hay partidos creados. Primero creá un evento de tipo "Partido" en la
-          pestaña Asistencia.
+        <div className="fila entre">
+          <h2>Partidos</h2>
+          <button className="btn" onClick={() => setCreando(true)}>+ Nuevo partido</button>
         </div>
+        <GraficoAsistencia />
+        <div className="vacio">
+          Todavía no hay partidos. Creá uno para armar la convocatoria.
+        </div>
+        {formNuevo}
       </div>
     )
   }
@@ -105,6 +135,8 @@ export default function Partidos() {
         </div>
       )}
 
+      <GraficoAsistencia />
+
       <div className="campo no-imprimir">
         <label>Partido</label>
         <select value={partidoId} onChange={(e) => irA('partidos', e.target.value)}>
@@ -115,7 +147,16 @@ export default function Partidos() {
           ))}
         </select>
       </div>
-      {partido && <ArmadoPartido key={partido.id} partido={partido} />}
+      {partido && (
+        <ArmadoPartido
+          key={partido.id}
+          partido={partido}
+          onNuevo={() => setCreando(true)}
+          onActualizado={(ev) => cargar(ev.id)}
+          onBorrado={() => cargar()}
+        />
+      )}
+      {formNuevo}
       <RotacionAnual />
     </div>
   )
@@ -157,7 +198,7 @@ function historialCapitanes(filas) {
   return m
 }
 
-function ArmadoPartido({ partido }) {
+function ArmadoPartido({ partido, onNuevo, onActualizado, onBorrado }) {
   const [bloques, setBloques] = useState([])
   const [jugadores, setJugadores] = useState([])
   // confirmacion: lo que avisaron en la semana (sección Asistencia).
@@ -207,16 +248,16 @@ function ArmadoPartido({ partido }) {
 
   // La vista activa (armar / asistencia / bloque / planilla) vive en el hash:
   // sobrevive recargas y descartes de la PWA, y "atrás" vuelve a la anterior
-  const [vistaHash, setVistaHash] = useState(() => leerHash()[2] || 'bloques')
-  useEffect(() => suscribir(() => setVistaHash(leerHash()[2] || 'bloques')), [])
-  const setVista = (v) => irA('partidos', partido.id, v === 'bloques' ? null : v)
+  const [vistaHash, setVistaHash] = useState(() => leerHash()[2] || 'convocatoria')
+  useEffect(() => suscribir(() => setVistaHash(leerHash()[2] || 'convocatoria')), [])
+  const setVista = (v) => irA('partidos', partido.id, v === 'convocatoria' ? null : v)
   // Un id que no es de este partido (hash viejo) cae a la vista inicial
-  const vista = ['bloques', 'presentes', 'planilla'].includes(vistaHash) ||
-    bloques.some((b) => b.id === vistaHash) ? vistaHash : 'bloques'
+  const vista = ['convocatoria', 'bloques', 'presentes', 'planilla'].includes(vistaHash) ||
+    bloques.some((b) => b.id === vistaHash) ? vistaHash : 'convocatoria'
 
   // Última posición, para retomarla al volver desde otra pestaña
   useEffect(() => {
-    guardarPosicion(partido.id, vistaHash === 'bloques' ? null : vistaHash)
+    guardarPosicion(partido.id, vistaHash === 'convocatoria' ? null : vistaHash)
   }, [partido.id, vistaHash])
 
   // Vuelca al estado una foto del servidor (carga inicial o refresco). Lo que
@@ -382,6 +423,49 @@ function ArmadoPartido({ partido }) {
       body: { bloque_id: bloqueId, jugador_id: nuevo },
     })
     if (r?.capitanias) setCapitanias(historialCapitanes(r.capitanias))
+  }
+
+  // Convocatoria de la semana (tabla asistencias): quién avisó que va y quién
+  // que no. Es distinta de la asistencia del día, que se toma en la cancha.
+  // Sin marca queda "sin confirmar", que es un estado en sí.
+  async function marcarConfirmacion(jugadorId, estado) {
+    const previo = confirmacion[jugadorId] || null
+    const aplicar = (valor) => setConfirmacion((m) => {
+      const c = { ...m }
+      if (valor) c[jugadorId] = valor
+      else delete c[jugadorId]
+      return c
+    })
+    aplicar(estado)
+    try {
+      await api(`eventos/${partido.id}/asistencias`, {
+        method: 'PUT',
+        body: { marcas: [{ jugador_id: jugadorId, estado: estado || null }] },
+      })
+    } catch {
+      aplicar(previo)
+      alert('No se pudo guardar la convocatoria. Probá de nuevo.')
+    }
+  }
+
+  async function marcarConfirmacionStaff(email, estado) {
+    const previo = confirmacionStaff[email] || null
+    const aplicar = (valor) => setConfirmacionStaff((m) => {
+      const c = { ...m }
+      if (valor) c[email] = valor
+      else delete c[email]
+      return c
+    })
+    aplicar(estado)
+    try {
+      await api(`eventos/${partido.id}/asistencias-staff`, {
+        method: 'PUT',
+        body: { marcas: [{ staff_email: email, estado: estado || null }] },
+      })
+    } catch {
+      aplicar(previo)
+      alert('No se pudo guardar la convocatoria del staff. Probá de nuevo.')
+    }
   }
 
   // Control de asistencia del día del partido (asistencias_partido), tomado
@@ -770,9 +854,13 @@ function ArmadoPartido({ partido }) {
 
   return (
     <>
-      {/* Las solapas siguen la secuencia del proceso: armar bloques en la
-          semana, tomar asistencia en la cancha, armar los equipos, imprimir */}
+      {/* Las solapas siguen la secuencia del proceso: convocar en la semana,
+          armar bloques, tomar asistencia en la cancha, armar los equipos,
+          imprimir */}
       <div className="seg no-imprimir">
+        <button className={vista === 'convocatoria' ? 'activo' : ''} onClick={() => setVista('convocatoria')}>
+          📣 Convocatoria ({Object.values(confirmacion).filter((e) => e === 'presente').length})
+        </button>
         <button className={vista === 'bloques' ? 'activo' : ''} onClick={() => setVista('bloques')}>
           Armar bloques
         </button>
@@ -790,6 +878,22 @@ function ArmadoPartido({ partido }) {
       </div>
 
       <Frescura fecha={actualizado} refrescando={refrescando} onRefrescar={() => refrescar(true)} />
+
+      {vista === 'convocatoria' && (
+        <Convocatoria
+          partido={partido}
+          jugadores={jugadores}
+          confirmacion={confirmacion}
+          staff={staff}
+          confirmacionStaff={confirmacionStaff}
+          sugerencias={sugerencias}
+          onConfirmar={marcarConfirmacion}
+          onConfirmarStaff={marcarConfirmacionStaff}
+          onNuevo={onNuevo}
+          onActualizado={onActualizado}
+          onBorrado={onBorrado}
+        />
+      )}
 
       {vista === 'presentes' && (
         <ControlAsistencia
@@ -1173,6 +1277,148 @@ function Frescura({ fecha, refrescando, onRefrescar }) {
         {refrescando ? 'Actualizando…' : 'Actualizar'}
       </button>
     </div>
+  )
+}
+
+// Convocatoria: la primera parada del partido. Acá se carga el partido (o se
+// corrige), y se marca quién avisó que va. Es la confirmación de la semana:
+// la asistencia real se toma después, en la cancha.
+function Convocatoria({
+  partido, jugadores, confirmacion, staff, confirmacionStaff, sugerencias,
+  onConfirmar, onConfirmarStaff, onNuevo, onActualizado, onBorrado,
+}) {
+  const [editando, setEditando] = useState(false)
+  const [evento, setEvento] = useState(partido)
+  useEffect(() => setEvento(partido), [partido])
+
+  // Solo se convoca a los que pueden jugar: los lesionados quedan afuera
+  const convocables = jugadores.filter((j) => j.estado !== 'lesionado')
+  const lesionados = jugadores.filter((j) => j.estado === 'lesionado')
+  const van = convocables.filter((j) => confirmacion[j.id] === 'presente')
+  const noVan = convocables.filter((j) => confirmacion[j.id] === 'ausente')
+  const sinResponder = convocables.length - van.length - noVan.length
+  const susp = suspensionEvento(evento)
+
+  async function borrar() {
+    if (!confirm(
+      `¿Borrar el partido del ${fechaCorta(evento.fecha)}?\n\n` +
+      'Se borra también su convocatoria, los bloques y los tiempos cargados.'
+    )) return
+    await api(`eventos/${evento.id}`, { method: 'DELETE' })
+    onBorrado()
+  }
+
+  return (
+    <>
+      <div className="tarjeta">
+        <div className="fila entre">
+          <div className="crece">
+            <h3>{etiquetaPartido(evento)}</h3>
+            <div className="suave">{fechaCorta(evento.fecha)}</div>
+            {(evento.bloques || []).map((bl) => (
+              <div key={bl.numero} className="mini">{lineaBloque(bl)}</div>
+            ))}
+            {evento.notas && <p className="mini" style={{ marginTop: 6 }}>📝 {evento.notas}</p>}
+          </div>
+          <div className="fila">
+            <button className="btn sec chico" onClick={() => setEditando(true)}>Editar</button>
+            <button className="btn peligro chico" onClick={borrar}>Borrar</button>
+          </div>
+        </div>
+        {susp.estado && (
+          <p className="aviso" style={{ marginTop: 8 }}>
+            ⛔ {susp.texto}.{susp.estado === 'parcial' ? ' El otro bloque se juega normalmente.' : ''}
+          </p>
+        )}
+      </div>
+
+      <PanelSuspension
+        evento={evento}
+        onCambio={(ev) => { setEvento(ev); onActualizado(ev) }}
+      />
+
+      <div className="fila entre">
+        <h3>Convocatoria</h3>
+        <button className="btn sec chico" onClick={onNuevo}>+ Nuevo partido</button>
+      </div>
+      <p className="mini">
+        Marcá quién avisó que va. Los lesionados no se convocan, y la asistencia
+        real se toma el día del partido en "Tomar asistencia".
+      </p>
+      <div className="fila" style={{ gap: 12 }}>
+        <span className="mini"><b style={{ color: 'var(--ok)' }}>Van: {van.length}</b></span>
+        <span className="mini"><b style={{ color: 'var(--bad)' }}>No van: {noVan.length}</b></span>
+        <span className="mini"><b style={{ color: 'var(--warn)' }}>Sin responder: {sinResponder}</b></span>
+      </div>
+
+      {convocables.map((j) => {
+        const estado = confirmacion[j.id] || null
+        return (
+          <div key={j.id} className="jugador-item compacto">
+            <div className="crece">
+              <div style={{ fontWeight: 600 }}>{nombreCompleto(j)}</div>
+              <div className="mini">{abrevPuestos(j) || tipoJugador(j) || 'sin puesto'}</div>
+            </div>
+            <div className="seg" style={{ flex: '0 0 auto' }}>
+              {[['presente', 'Va'], ['ausente', 'No va']].map(([valor, label]) => (
+                <button
+                  key={valor}
+                  className={estado === valor ? 'activo' : ''}
+                  // tocar la opción marcada la saca: vuelve a "sin responder"
+                  onClick={() => onConfirmar(j.id, estado === valor ? null : valor)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+
+      {lesionados.length > 0 && (
+        <p className="mini">
+          🤕 Lesionados, fuera de la convocatoria: {lesionados.map((j) => j.apellido).join(', ')}
+        </p>
+      )}
+
+      {staff.length > 0 && (
+        <>
+          <h3 style={{ marginTop: 12 }}>Staff</h3>
+          <p className="mini">Quién avisó que va al partido.</p>
+          {staff.map((s) => {
+            const estado = confirmacionStaff[s.email] || null
+            return (
+              <div key={s.email} className="jugador-item compacto">
+                <div className="crece">
+                  <div style={{ fontWeight: 600 }}>{nombreStaff(s)}</div>
+                  {s.rol && <div className="mini">{s.rol}</div>}
+                </div>
+                <div className="seg" style={{ flex: '0 0 auto' }}>
+                  {[['presente', 'Va'], ['ausente', 'No va']].map(([valor, label]) => (
+                    <button
+                      key={valor}
+                      className={estado === valor ? 'activo' : ''}
+                      onClick={() => onConfirmarStaff(s.email, estado === valor ? null : valor)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </>
+      )}
+
+      {editando && (
+        <FormEvento
+          evento={evento}
+          sugerencias={sugerencias}
+          onCerrar={() => setEditando(false)}
+          onGuardado={(ev) => { setEvento(ev); setEditando(false); onActualizado(ev) }}
+        />
+      )}
+    </>
   )
 }
 
