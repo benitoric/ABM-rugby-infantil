@@ -381,7 +381,7 @@ function filasDeJuego(b) {
   return [
     ['Partidos jugados', String(j.partidos_jugados)],
     ['Tiempos en cancha', j.tiempos_posibles ? `${j.tiempos_jugados} de ${j.tiempos_posibles}` : String(j.tiempos_jugados)],
-    ['Camisetas que usaste', camisetas],
+    ['Puestos de los que jugaste', camisetas],
     ['Jugaste prestado al rival', j.prestado === 0 ? 'ninguna vez'
       : j.prestado === 1 ? '1 vez' : `${j.prestado} veces`],
     ['Veces capitán en el año', String(j.capitanias_anio)],

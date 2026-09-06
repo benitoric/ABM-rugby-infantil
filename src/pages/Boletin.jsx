@@ -243,7 +243,7 @@ function Hoja({ b, mes, division }) {
             ['Tiempos en cancha', b.juego.tiempos_posibles
               ? `${b.juego.tiempos_jugados} de ${b.juego.tiempos_posibles}`
               : b.juego.tiempos_jugados],
-            ['Camisetas que usaste', b.juego.camisetas.length
+            ['Puestos de los que jugaste', b.juego.camisetas.length
               ? b.juego.camisetas.map((c) => `${c.puesto} (${c.tiempos})`).join(' · ') : '—'],
             ['Prestado al rival', b.juego.prestado === 0 ? 'ninguna vez'
               : b.juego.prestado === 1 ? '1 vez' : `${b.juego.prestado} veces`],
