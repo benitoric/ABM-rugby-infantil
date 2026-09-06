@@ -969,6 +969,7 @@ function ArmadoPartido({ partido, onNuevo, onActualizado, onBorrado }) {
           asistencia={asistencia}
           confirmacion={confirmacion}
           condicion={condicion}
+          condicionDesde={condicionDesde}
           tiempos={tiempos}
           enCancha={enCancha}
           staff={staff}
@@ -2041,7 +2042,9 @@ function BalanceBloques({ bloques, jugadores, asignacion, califs }) {
   )
 }
 
-function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, confirmacion = {}, condicion = {}, tiempos, enCancha, staff = [], asignacionStaff = {} }) {
+function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, confirmacion = {}, condicion = {}, condicionDesde = {}, tiempos, enCancha, staff = [], asignacionStaff = {} }) {
+  // ★★★☆☆ para las valoraciones de 1 a 5
+  const estrellas = (v) => (v ? '★'.repeat(v) + '☆'.repeat(5 - v) : '—')
   return (
     <div className="planilla">
       <div className="fila entre no-imprimir">
@@ -2101,7 +2104,11 @@ function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, co
                     <tbody>
                       {delBloque.map((j) => (
                         <tr key={j.id}>
-                          <td>{nombreCompleto(j)}</td>
+                          <td>
+                            {nombreCompleto(j)}
+                            {condicion[j.id] === 'lesionado' ? ' 🚑' : ''}
+                            {condicion[j.id] === 'golpeado' ? ' 🤕' : ''}
+                          </td>
                           {tiemposBloque.map((t) => {
                             const e = (enCancha[t.id] || {})[j.id]
                             return <td key={t.id}>{e ? (e.prestado ? 'P' : (e.puesto || '✔')) : ''}</td>
@@ -2121,7 +2128,8 @@ function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, co
                     </tbody>
                   </table>
                   <p className="mini">
-                    Número = camiseta · ✔ = en cancha sin puesto · P = prestado al rival.
+                    Número = camiseta · ✔ = en cancha sin puesto · P = prestado al
+                    rival · 🤕 golpeado · 🚑 lesionado.
                   </p>
                   </div>
                   <div className="planilla-seccion">
@@ -2154,6 +2162,13 @@ function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, co
                               .filter((j) => (enCancha[t.id] || {})[j.id]?.prestado)
                               .map((j) => j.apellido).join(', ')}
                           </td>
+                        ))}
+                      </tr>
+                      {/* Cómo se jugó cada tiempo, cargado al cerrarlo */}
+                      <tr>
+                        <td><b>Desempeño</b></td>
+                        {tiemposBloque.map((t) => (
+                          <td key={t.id}>{estrellas(t.valoracion)}</td>
                         ))}
                       </tr>
                     </tbody>
@@ -2208,6 +2223,7 @@ function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, co
                         <tr>
                           <th>Jugador</th>
                           <th>Qué pasó</th>
+                          <th>Desde</th>
                           <th>Tiempos jugados</th>
                         </tr>
                       </thead>
@@ -2219,6 +2235,14 @@ function Planilla({ partido, bloques, jugadores, asignacion, asistencia = {}, co
                               {condicion[j.id] === 'lesionado'
                                 ? '🚑 Lesionado · requiere seguimiento'
                                 : '🤕 Golpeado · salió del juego'}
+                            </td>
+                            <td>
+                              {/* Marcado después del último tiempo: salió al
+                                  terminar (se cargó al cerrar el bloque) */}
+                              {!condicionDesde[j.id] ? '—'
+                                : condicionDesde[j.id] > tiemposBloque.length
+                                  ? 'al terminar'
+                                  : `T${condicionDesde[j.id]}`}
                             </td>
                             <td>{jugados(j.id)}</td>
                           </tr>
