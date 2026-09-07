@@ -718,6 +718,51 @@ img.doc-vista { height: auto; }
 .grafico-tabla th, .grafico-tabla td { border-bottom: 1px solid var(--borde); padding: 4px 6px; text-align: right; }
 .grafico-tabla th:first-child, .grafico-tabla td:first-child { text-align: left; }
 .grafico-tabla th { color: var(--texto-suave); font-size: 0.7rem; }
+
+/* Barras de "qué se viene entrenando": una por aspecto técnico, con el nombre
+   y cuánto hace de la última vez arriba, y los minutos del año a la derecha.
+   Nombre completo sin recortar: son frases ("posicionamiento formaciones
+   fijas") y en el celular tienen que poder leerse enteras. */
+.tecnica-grupo .eval-area-titulo span:first-child {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tecnica-barra {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: 'etiqueta ultima' 'pista cifra';
+  align-items: center;
+  gap: 2px 8px;
+  padding: 6px 0 4px;
+  border-bottom: 1px solid var(--borde);
+}
+.tecnica-barra .etiqueta { grid-area: etiqueta; font-size: 0.8rem; }
+.tecnica-barra .ultima {
+  grid-area: ultima;
+  font-size: 0.68rem;
+  color: var(--texto-suave);
+  white-space: nowrap;
+}
+.tecnica-barra .ultima.atrasado { color: var(--warn); font-weight: 700; }
+/* Mismo aviso en la planificación del día: el aspecto que hace rato no se toca */
+.aspecto-nombre .mini.atrasado { color: var(--warn); font-weight: 700; }
+.tecnica-barra .pista {
+  grid-area: pista;
+  display: block;
+  height: 10px;
+  background: #eef1f6;
+  border-radius: 999px;
+}
+.tecnica-barra .relleno { display: block; height: 100%; border-radius: 999px; }
+.tecnica-barra .cifra {
+  grid-area: cifra;
+  min-width: 40px;
+  text-align: right;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.tecnica-faltan { margin-top: 6px; }
 /* Los dos gráficos del mismo dato: en % y en cantidad de jugadores. En
    pantalla ancha van uno al lado del otro; en el celular entra uno solo y el
    selector de arriba elige cuál. */

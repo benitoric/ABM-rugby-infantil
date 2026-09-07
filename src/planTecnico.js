@@ -55,6 +55,28 @@ export const MINUTOS_TECNICA = 60
 // Tope defensivo: un entrenamiento entero dura 90 minutos
 export const MAX_MINUTOS = 180
 
+// Arriba de estos días sin trabajarlo, el aspecto se muestra marcado: son unas
+// tres semanas de entrenamientos de rutina (lunes y miércoles).
+export const DIAS_ATRASO = 21
+
+// Días desde la última vez que se trabajó un aspecto (null si nunca)
+export function diasSinTrabajar(ultima) {
+  if (!ultima) return null
+  const hoy = new Date()
+  return Math.round((hoy.setHours(0, 0, 0, 0) - new Date(`${ultima}T00:00:00`).getTime()) / 86400000)
+}
+
+// Cuánto hace de la última vez, dicho como lo diría un entrenador
+export function haceCuanto(dias) {
+  if (dias == null) return ''
+  if (dias <= 0) return 'hoy'
+  if (dias === 1) return 'ayer'
+  if (dias < 14) return `hace ${dias} días`
+  const semanas = Math.round(dias / 7)
+  if (semanas < 9) return `hace ${semanas} semanas`
+  return `hace ${Math.round(dias / 30)} meses`
+}
+
 // Clave de un aspecto propio a partir de su nombre: sin acentos, en minúscula
 // y con guiones bajos. El prefijo evita que choque con el catálogo fijo si
 // alguien vuelve a cargar uno que ya existe con otro nombre.

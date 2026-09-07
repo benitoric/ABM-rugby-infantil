@@ -23,7 +23,12 @@ pantalla de inicio" del teléfono y queda como una app más).
    colectiva e individual, con la posibilidad de sumar otros al catálogo) y
    cuántos minutos lleva cada uno; los que no se cargan a mano se reparten la
    hora de técnica, y sin ningún aspecto marcado el día queda registrado como
-   "sin planificación".
+   "sin planificación". Al planificar, cada aspecto muestra al lado su historia
+   del año (cuánto hace de la última vez, cuántas veces y cuántos minutos
+   acumula), con un aviso en los que hace más de tres semanas que no se tocan;
+   la pantalla de Entrenamientos resume lo mismo en un gráfico de barras,
+   **Qué se viene entrenando**, con los minutos de cada aspecto y la lista de
+   los que todavía no se trabajaron.
 4. **Partidos**: cada partido se crea y se convoca desde su pestaña
    **Convocatoria** (quién avisa que va), y de ahí sigue el resto del día:
    asignación de los convocados a los bloques que presenta el club (normalmente
