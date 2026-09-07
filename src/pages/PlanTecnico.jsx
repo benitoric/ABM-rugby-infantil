@@ -1,13 +1,35 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
+import { fechaCompacta } from '../helpers.js'
 import {
-  minutosTotales, repartirMinutos, GRUPOS_TECNICOS, MAX_MINUTOS, MINUTOS_TECNICA,
+  diasSinTrabajar, haceCuanto, minutosTotales, repartirMinutos, DIAS_ATRASO,
+  GRUPOS_TECNICOS, MAX_MINUTOS, MINUTOS_TECNICA,
 } from '../planTecnico.js'
+
+// Lo que se viene haciendo con ese aspecto en el año, en un renglón: cuándo
+// fue la última vez, cuántas veces y cuántos minutos lleva. Los que hace más
+// de tres semanas que no se tocan van marcados, que es lo que hay que ver al
+// armar el entrenamiento de hoy.
+function HistoriaAspecto({ historia }) {
+  if (!historia) return null
+  if (!historia.veces) return <div className="mini">sin trabajar en {historia.anio}</div>
+  const dias = diasSinTrabajar(historia.ultima)
+  const atrasado = dias > DIAS_ATRASO
+  return (
+    <div
+      className={`mini${atrasado ? ' atrasado' : ''}`}
+      title={`Última vez: ${fechaCompacta(historia.ultima)}`}
+    >
+      {atrasado && '⚠ '}{haceCuanto(dias)} · {historia.veces}{' '}
+      {historia.veces === 1 ? 'vez' : 'veces'} · {historia.minutos} min en {historia.anio}
+    </div>
+  )
+}
 
 // Una fila del plan: se toca el nombre para marcar o desmarcar el aspecto, y
 // los minutos son opcionales. Sin minutos propios muestra en gris los que le
 // tocan del reparto de la hora, así se ve el plan armado sin escribir nada.
-function FilaAspecto({ aspecto, dato, reparto, onCambiar }) {
+function FilaAspecto({ aspecto, dato, reparto, historia, onCambiar }) {
   const marcado = !!dato
   const [texto, setTexto] = useState(() => (dato?.minutos ? String(dato.minutos) : ''))
   const [error, setError] = useState(false)
@@ -41,7 +63,10 @@ function FilaAspecto({ aspecto, dato, reparto, onCambiar }) {
         onClick={() => onCambiar(marcado ? null : { minutos: null })}
       >
         <span className="aspecto-tilde">{marcado ? '☑' : '☐'}</span>
-        {aspecto.label}
+        <span>
+          {aspecto.label}
+          <HistoriaAspecto historia={historia} />
+        </span>
       </button>
       {marcado && (
         <div className="fila-test-dato">
@@ -141,9 +166,20 @@ export default function PlanTecnico({ evento }) {
   const [intento, setIntento] = useState(0)
   const [guardando, setGuardando] = useState(false)
 
+  // Historia del año por aspecto: cuántas veces, cuántos minutos y cuándo fue
+  // la última vez. Viaja junto al plan para que la fila lo muestre al lado.
+  const [historia, setHistoria] = useState(null)
+
   useEffect(() => {
     async function cargar() {
-      setPlan(await api(`eventos/${evento.id}/plan-tecnico`))
+      const anio = Number((evento.fecha || '').slice(0, 4)) || new Date().getFullYear()
+      const [p, h] = await Promise.all([
+        api(`eventos/${evento.id}/plan-tecnico`),
+        // sin contar este mismo entrenamiento: la historia es la de antes de hoy
+        api(`stats/plan-tecnico?anio=${anio}&excepto=${evento.id}`),
+      ])
+      setPlan(p)
+      setHistoria(h)
       setCargando(false)
     }
     setErrorCarga(null)
@@ -199,6 +235,10 @@ export default function PlanTecnico({ evento }) {
   }
 
   const aspectos = plan.aspectos || {}
+  const porAspecto = {}
+  for (const a of historia?.aspectos || []) {
+    porAspecto[a.clave] = { ...a, anio: historia.anio }
+  }
   const reparto = repartirMinutos(aspectos)
   const marcados = Object.keys(aspectos).length
   const total = minutosTotales(aspectos)
@@ -253,6 +293,7 @@ export default function PlanTecnico({ evento }) {
                 aspecto={a}
                 dato={aspectos[clave]}
                 reparto={reparto[clave]}
+                historia={porAspecto[clave]}
                 onCambiar={(dato) => cambiarAspecto(clave, dato)}
               />
             )

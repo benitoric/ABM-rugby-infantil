@@ -11,6 +11,7 @@ import TrabajoFisico from './TrabajoFisico.jsx'
 import PlanTecnico from './PlanTecnico.jsx'
 import EstadisticaFisica from './EstadisticaFisica.jsx'
 import GraficoAsistencia from './GraficoAsistencia.jsx'
+import GraficoTecnica from './GraficoTecnica.jsx'
 
 // Pestañas de un entrenamiento. El partido no las lleva: su día vive entero
 // en la sección Partidos.
@@ -79,6 +80,7 @@ export default function Entrenamientos({ yo }) {
       </div>
 
       <GraficoAsistencia />
+      <GraficoTecnica />
 
       {cargando && <div className="vacio">Cargando…</div>}
       {!cargando && eventos.length === 0 && (

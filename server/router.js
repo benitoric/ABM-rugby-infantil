@@ -10,8 +10,8 @@ import {
   limpiarVariables, CLAVES_FISICAS, CLAVES_INTENSIDAD, MAX_MINUTOS,
 } from '../src/trabajoFisico.js'
 import {
-  claveAspecto, limpiarAspectos, sinPlanificacion, CLAVES_FIJAS, CLAVES_GRUPO,
-  MAX_MINUTOS as MAX_MINUTOS_TECNICA,
+  claveAspecto, limpiarAspectos, repartirMinutos, sinPlanificacion, ASPECTOS_FIJOS,
+  CLAVES_FIJAS, CLAVES_GRUPO, GRUPOS_TECNICOS, MAX_MINUTOS as MAX_MINUTOS_TECNICA,
 } from '../src/planTecnico.js'
 
 const COLS_JUGADOR = `id, nombre, apellido, fecha_nacimiento::text as fecha_nacimiento,
@@ -1436,6 +1436,63 @@ async function enrutar(metodo, p, b, req, url) {
          having count(*) >= $1
          order by count(*) desc, j.apellido, j.nombre`,
         [FALTAS_SEGUIDAS_AVISO])
+    }
+    // Qué se viene entrenando en el año: por cada aspecto del catálogo, cuántas
+    // veces se trabajó, cuántos minutos acumula y cuándo fue la última vez.
+    // Cuentan los entrenamientos ya ocurridos y no suspendidos: lo planificado
+    // para la semana que viene todavía no se entrenó.
+    // Los minutos salen del mismo reparto que muestra la pantalla (los que no
+    // se cargan a mano se llevan su parte de la hora de técnica), así que la
+    // cuenta se hace acá y no en SQL.
+    if (metodo === 'GET' && p[1] === 'plan-tecnico') {
+      const anio = Number(url.searchParams.get('anio')) || new Date().getFullYear()
+      // Al planificar un entrenamiento se pide la historia sin contarlo a él:
+      // si no, tildar un aspecto lo dejaría al toque como "trabajado hoy" y la
+      // pantalla no diría hace cuánto que no se toca de verdad.
+      const excepto = url.searchParams.get('excepto') || null
+      const sesiones = await query(
+        `select e.fecha::text as fecha, pt.aspectos
+         from plan_tecnico pt
+         join eventos e on e.id = pt.evento_id
+         where e.tipo = 'entrenamiento' and e.fecha <= current_date
+           and ${eventoVigente('e')}
+           and extract(year from e.fecha) = $1
+           and ($2::uuid is null or e.id <> $2)
+         order by e.fecha`, [anio, excepto])
+      const totales = {}
+      for (const s of sesiones) {
+        for (const [clave, r] of Object.entries(repartirMinutos(s.aspectos))) {
+          const t = totales[clave] || (totales[clave] = { veces: 0, minutos: 0, ultima: null })
+          t.veces++
+          t.minutos += r.minutos
+          if (!t.ultima || s.fecha > t.ultima) t.ultima = s.fecha
+        }
+      }
+      // El catálogo completo, con los que todavía no se trabajaron en cero:
+      // ver qué falta es la mitad de para qué sirve esto.
+      const propios = await aspectosPropios()
+      const catalogo = [
+        ...CLAVES_FIJAS.map((k) => ({
+          clave: k, label: ASPECTOS_FIJOS[k].label, grupo: ASPECTOS_FIJOS[k].grupo,
+        })),
+        ...propios,
+      ]
+      // Años con planificación cargada, para el selector del gráfico. El año
+      // pedido va siempre, aunque todavía no tenga nada planificado.
+      const anios = await query(
+        `select distinct extract(year from e.fecha)::int as anio
+         from plan_tecnico pt join eventos e on e.id = pt.evento_id
+         where e.tipo = 'entrenamiento' and e.fecha <= current_date`)
+      return {
+        anio,
+        anios: [...new Set([anio, ...anios.map((a) => a.anio)])].sort((a, b) => b - a),
+        excepto,
+        sesiones: sesiones.length,
+        grupos: GRUPOS_TECNICOS.map((g) => ({ value: g.value, label: g.label })),
+        aspectos: catalogo.map((a) => ({
+          ...a, veces: 0, minutos: 0, ultima: null, ...totales[a.clave],
+        })),
+      }
     }
     // Asistencia evento por evento de un año, para el gráfico del encabezado
     // de la sección Asistencia. Un punto por evento vigente, ya ocurrido y con
