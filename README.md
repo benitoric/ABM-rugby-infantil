@@ -16,9 +16,12 @@ pantalla de inicio" del teléfono y queda como una app más).
    **suspender** indicando el motivo (clima, feriado u otro) y una nota libre;
    lo suspendido no cuenta para los porcentajes. Al tomar asistencia se puede
    marcar a un jugador como **golpeado** o
-   **lesionado**; el lesionado queda como recordatorio en Jugadores para
-   cargarle la lesión en la ficha (en los partidos eso se marca en la cancha,
-   desde Partidos). Cada entrenamiento tiene además su
+   **lesionado**: los dos quedan como recordatorio en Jugadores para hacerles
+   el seguimiento (al lesionado hay que cargarle la lesión en la ficha; el
+   aviso del golpe se va solo a las dos semanas), y los dos se descuentan del
+   resumen "Presentes por puesto" —siguen contando como presentes en la
+   asistencia, pero ya no están para entrenar— (en los partidos eso se marca
+   en la cancha, desde Partidos). Cada entrenamiento tiene además su
    **planificación técnica**: qué aspectos se trabajan ese día (técnica
    colectiva e individual, con la posibilidad de sumar otros al catálogo) y
    cuántos minutos lleva cada uno; los que no se cargan a mano se reparten la
