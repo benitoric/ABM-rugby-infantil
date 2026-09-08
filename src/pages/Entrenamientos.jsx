@@ -135,10 +135,25 @@ export default function Entrenamientos({ yo }) {
 // Reporte en vivo de los presentes: cuántos forwards y cuántos backs hay, y
 // dentro de cada línea cuántos de cada puesto principal. Se actualiza con
 // cada marca, para ver mientras se toma asistencia con qué se cuenta hoy.
-function ReportePuestos({ jugadores, marcas }) {
+//
+// El que se golpeó o se lesionó ese día ya no está para entrenar, así que se
+// descuenta de los puestos y se avisa aparte; en la asistencia sigue contando
+// como presente, porque vino.
+function ReportePuestos({ jugadores, marcas, condicion = {} }) {
   const presentes = jugadores.filter((j) => marcas[j.id] === 'presente')
-  const { lineas, sinDefinir, total } = resumenPorPuesto(presentes)
+  const fuera = presentes.filter((j) => condicion[j.id])
+  const { lineas, sinDefinir, total } = resumenPorPuesto(
+    presentes.filter((j) => !condicion[j.id]))
   const nombres = (lista) => lista.map(nombreCompleto).join('\n')
+  const cuantos = (cond, emoji, uno, varios) => {
+    const n = fuera.filter((j) => condicion[j.id] === cond).length
+    return n ? `${emoji} ${n} ${n === 1 ? uno : varios}` : null
+  }
+  const aviso = [
+    cuantos('golpeado', '🤕', 'golpeado', 'golpeados'),
+    cuantos('lesionado', '🚑', 'lesionado', 'lesionados'),
+  ].filter(Boolean).join(' y ')
+  const uno = fuera.length === 1
 
   return (
     <div className="tarjeta reporte-puestos">
@@ -146,6 +161,13 @@ function ReportePuestos({ jugadores, marcas }) {
         <h3>Presentes por puesto</h3>
         <span className="mini">{total} de {jugadores.length}</span>
       </div>
+      {fuera.length > 0 && (
+        <p className="mini reporte-fuera" title={nombres(fuera)}>
+          {aviso}, {uno ? 'descontado' : 'descontados'} de los puestos
+          (en la asistencia {uno ? 'sigue presente' : 'siguen presentes'}):{' '}
+          {fuera.map((j) => j.apellido).join(', ')}.
+        </p>
+      )}
       <div className="grid2">
         {lineas.map((l) => (
           <div key={l.clave}>
@@ -439,7 +461,7 @@ function TomarAsistencia({ evento: eventoInicial, onVolver }) {
           </button>
 
           {!cargando && !errorCarga && jugadores.length > 0 && (
-            <ReportePuestos jugadores={jugadores} marcas={marcas} />
+            <ReportePuestos jugadores={jugadores} marcas={marcas} condicion={condicion} />
           )}
 
           {cargando && <div className="vacio">Cargando…</div>}

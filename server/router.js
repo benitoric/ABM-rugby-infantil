@@ -652,6 +652,12 @@ async function historialCapitanias() {
 // pantalla de inicio: con 3, el aviso salta ya en la tercera falta.
 const FALTAS_SEGUIDAS_AVISO = 3
 
+// Cuántos días queda a la vista el aviso de un golpe. La lesión se sigue hasta
+// que se la carga en la ficha; el golpe es pasajero, así que después de dos
+// semanas (un par de entrenamientos y un partido) deja de ser noticia y sale
+// solo del recordatorio.
+const DIAS_AVISO_GOLPE = 14
+
 function eventoVigente(alias) {
   return `(not ${alias}.suspendido and (
     not exists (select 1 from bloques bl where bl.evento_id = ${alias}.id)
@@ -1337,38 +1343,48 @@ async function enrutar(metodo, p, b, req, url) {
          group by j.id, j.nombre, j.apellido
          order by tiempos, j.apellido, j.nombre`, [anio])
     }
-    // Lesionados en un partido o en un entrenamiento que todavía no tienen la
-    // lesión cargada en su ficha: alimentan el recordatorio de seguimiento en
-    // Jugadores. El partido guarda la condición en asistencias_partido (la que
-    // toma el staff en la cancha) y el entrenamiento en asistencias.
+    // Golpeados y lesionados en un partido o en un entrenamiento que todavía
+    // no tienen la lesión cargada en su ficha: alimentan el recordatorio de
+    // seguimiento en Jugadores. El partido guarda la condición en
+    // asistencias_partido (la que toma el staff en la cancha) y el
+    // entrenamiento en asistencias.
+    //
+    // La lesión queda a la vista hasta que se la carga o hasta que alguien la
+    // marca revisada; el golpe, que es pasajero, sale solo a los pocos días.
     if (metodo === 'GET' && p[1] === 'lesiones-pendientes') {
+      // Condiciones que siguen pendientes: la lesión siempre, el golpe
+      // mientras esté fresco. Con la lesión ya cargada después del evento no
+      // hace falta recordar nada, sea golpe o lesión.
+      const pendiente = (alias) => `
+        ${alias}.condicion in ('golpeado', 'lesionado')
+        and (${alias}.condicion = 'lesionado'
+             or e.fecha >= current_date - $1::int)
+        and not ${alias}.lesion_atendida
+        and not exists (
+          select 1 from lesiones l
+          where l.jugador_id = ${alias}.jugador_id and l.fecha >= e.fecha)`
       return query(
         `select * from (
-           select j.id as jugador_id, j.nombre, j.apellido,
+           select j.id as jugador_id, j.nombre, j.apellido, ap.condicion,
              e.fecha::text as fecha, e.id as evento_id, e.tipo,
              (select string_agg(bl.rival, ' / ') from bloques bl
               where bl.evento_id = e.id and bl.rival is not null) as rival
            from asistencias_partido ap
            join jugadores j on j.id = ap.jugador_id
            join eventos e on e.id = ap.evento_id
-           where ap.condicion = 'lesionado' and j.estado <> 'inactivo'
-             and not ap.lesion_atendida
-             and not exists (
-               select 1 from lesiones l
-               where l.jugador_id = ap.jugador_id and l.fecha >= e.fecha)
+           where j.estado <> 'inactivo' and ${pendiente('ap')}
            union all
-           select j.id as jugador_id, j.nombre, j.apellido,
+           select j.id as jugador_id, j.nombre, j.apellido, a.condicion,
              e.fecha::text as fecha, e.id as evento_id, e.tipo, null::text as rival
            from asistencias a
            join jugadores j on j.id = a.jugador_id
            join eventos e on e.id = a.evento_id
-           where a.condicion = 'lesionado' and e.tipo = 'entrenamiento'
-             and j.estado <> 'inactivo' and not a.lesion_atendida
-             and not exists (
-               select 1 from lesiones l
-               where l.jugador_id = a.jugador_id and l.fecha >= e.fecha)
+           where e.tipo = 'entrenamiento' and j.estado <> 'inactivo'
+             and ${pendiente('a')}
          ) t
-         order by fecha desc, apellido, nombre`)
+         -- Primero las lesiones, que son las que hay que cargar en la ficha
+         order by (condicion = 'lesionado') desc, fecha desc, apellido, nombre`,
+        [DIAS_AVISO_GOLPE])
     }
     // "Ya lo revisé": saca al jugador del recordatorio sin tocar lo que quedó
     // registrado del partido. Sirve cuando la lesión ya estaba cargada de

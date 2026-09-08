@@ -72,6 +72,16 @@ function estadoAlta(l) {
   return { clase: 'activo', texto: `faltan ${d} días` }
 }
 
+// Título del recordatorio según lo que haya para revisar: golpes, lesiones o
+// las dos cosas mezcladas.
+function tituloPendientes(lista) {
+  const golpes = lista.filter((l) => l.condicion === 'golpeado').length
+  const lesiones = lista.length - golpes
+  if (!golpes) return `🚑 ${lesiones === 1 ? 'Un jugador se lesionó' : `${lesiones} jugadores se lesionaron`}`
+  if (!lesiones) return `🤕 ${golpes === 1 ? 'Un jugador se golpeó' : `${golpes} jugadores se golpearon`}`
+  return `🚑 ${lista.length} golpes y lesiones para revisar`
+}
+
 export default function Jugadores({ yo }) {
   const [jugadores, setJugadores] = useState([])
   const [filtro, setFiltro] = useState('activo')
@@ -83,7 +93,8 @@ export default function Jugadores({ yo }) {
   const [orden, setOrden] = useState({ campo: 'nombre', asc: true })
   const [foto, setFoto] = useState(null)
   const [asign, setAsign] = useState(null)
-  // Lesionados durante un partido sin la lesión cargada todavía en su ficha
+  // Golpeados y lesionados en un evento que todavía no se revisaron: la lesión
+  // hasta que se la carga en la ficha, el golpe por unos días
   const [lesionesPendientes, setLesionesPendientes] = useState([])
   const [lesionados, setLesionados] = useState([])
   // Activos que vienen faltando a varios entrenamientos seguidos
@@ -163,8 +174,9 @@ export default function Jugadores({ yo }) {
     }))
   }
 
-  // Saca al jugador del recordatorio de lesiones sin tocar el registro del
-  // evento: para cuando la lesión ya estaba cargada o no requiere seguimiento.
+  // Saca al jugador del recordatorio de golpes y lesiones sin tocar el
+  // registro del evento: para cuando la lesión ya estaba cargada, el golpe
+  // quedó en nada o no hace falta seguirlo.
   async function marcarRevisada(l) {
     if (!confirm(
       `¿Sacar a ${l.apellido}, ${l.nombre} del recordatorio?\n\n` +
@@ -290,20 +302,20 @@ export default function Jugadores({ yo }) {
 
       {lesionesPendientes.length > 0 && (
         <div className="tarjeta aviso-lesion">
-          <h3>
-            🚑 {lesionesPendientes.length === 1
-              ? 'Un jugador se lesionó'
-              : `${lesionesPendientes.length} jugadores se lesionaron`}
-          </h3>
+          <h3>{tituloPendientes(lesionesPendientes)}</h3>
           <p className="mini" style={{ margin: '4px 0 8px' }}>
-            Tocá cada nombre para cargar la lesión en su ficha y hacerle el
-            seguimiento. Sale solo al registrarla; si ya estaba cargada o no
-            hace falta seguirla, usá "Ya lo revisé".
+            Tocá cada nombre para abrir su ficha: al 🚑 lesionado hay que
+            cargarle la lesión para hacerle el seguimiento, y del 🤕 golpeado
+            conviene ver cómo sigue (si quedó tocado, se le carga la lesión
+            igual). La lesión sale sola al registrarla y el golpe se va solo a
+            las dos semanas; si ya lo viste, usá "Ya lo revisé".
           </p>
           {lesionesPendientes.map((l) => (
             <div key={`${l.jugador_id}-${l.evento_id}`} className="fila" style={{ flexWrap: 'nowrap', gap: 6 }}>
               <button className="asignado-item crece" onClick={() => setFichaDe(l.jugador_id)}>
-                <span className="crece">{l.apellido}, {l.nombre}</span>
+                <span className="crece">
+                  {l.condicion === 'golpeado' ? '🤕' : '🚑'} {l.apellido}, {l.nombre}
+                </span>
                 <span className="mini">
                   {fechaCompacta(l.fecha)}
                   {l.tipo === 'entrenamiento' ? ' · entrenamiento' : ''}
@@ -312,7 +324,7 @@ export default function Jugadores({ yo }) {
               </button>
               <button
                 className="btn sec chico"
-                title="Sacarlo del recordatorio sin borrar lo del partido"
+                title="Sacarlo del recordatorio sin borrar lo del evento"
                 onClick={() => marcarRevisada(l)}
               >
                 ✓ Ya lo revisé
