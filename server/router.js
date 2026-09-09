@@ -1665,6 +1665,34 @@ async function enrutar(metodo, p, b, req, url) {
         'select clave, label, grupo from aspectos_tecnicos where clave = $1', [clave])
       return existente
     }
+    // Cambiarle el nombre (y de paso el grupo) a un aspecto del club. La clave
+    // no se toca a propósito: es la que quedó guardada en el plan de cada
+    // entrenamiento, así que renombrar conserva toda la historia del aspecto
+    // (las veces que se trabajó y los minutos siguen siendo los mismos).
+    if (metodo === 'PUT' && p[1]) {
+      const label = String(b?.label || '').trim().replace(/\s+/g, ' ')
+      if (!label || !claveAspecto(label)) throw { codigo: 400, error: 'faltan_datos' }
+      if ('grupo' in (b || {}) && !CLAVES_GRUPO.includes(b.grupo)) {
+        throw { codigo: 400, error: 'grupo_invalido' }
+      }
+      const [actual] = await query(
+        'select clave from aspectos_tecnicos where clave = $1', [p[1]])
+      if (!actual) throw { codigo: 404, error: 'no_existe' }
+      // Que no queden dos aspectos con el mismo nombre: se comparan
+      // normalizados, así "Partido condicionado" y "partido  condicionado"
+      // son el mismo. Tampoco puede pisar a uno del catálogo fijo.
+      const nueva = claveAspecto(label)
+      const otros = await query(
+        'select label from aspectos_tecnicos where clave <> $1', [p[1]])
+      const repetido = CLAVES_FIJAS.some((k) => claveAspecto(ASPECTOS_FIJOS[k].label) === nueva)
+        || otros.some((a) => claveAspecto(a.label) === nueva)
+      if (repetido) throw { codigo: 409, error: 'aspecto_duplicado' }
+      const filas = await query(
+        `update aspectos_tecnicos set label = $1, grupo = coalesce($2, grupo)
+         where clave = $3 returning clave, label, grupo`,
+        [label.slice(0, 60), b?.grupo || null, p[1]])
+      return filas[0]
+    }
     // Se borra solo si ningún entrenamiento lo usa: si no, los planes viejos
     // quedarían mostrando una clave suelta.
     if (metodo === 'DELETE' && p[1]) {
