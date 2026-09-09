@@ -23,8 +23,9 @@ pantalla de inicio" del teléfono y queda como una app más).
    asistencia, pero ya no están para entrenar— (en los partidos eso se marca
    en la cancha, desde Partidos). Cada entrenamiento tiene además su
    **planificación técnica**: qué aspectos se trabajan ese día (técnica
-   colectiva e individual, con la posibilidad de sumar otros al catálogo) y
-   cuántos minutos lleva cada uno; los que no se cargan a mano se reparten la
+   colectiva e individual, con la posibilidad de sumar otros al catálogo y de
+   corregirles el nombre después, con el lápiz de su fila, sin perder lo ya
+   trabajado) y cuántos minutos lleva cada uno; los que no se cargan a mano se reparten la
    hora de técnica, y sin ningún aspecto marcado el día queda registrado como
    "sin planificación". Al planificar, cada aspecto muestra al lado su historia
    del año (cuánto hace de la última vez, cuántas veces y cuántos minutos

@@ -29,7 +29,7 @@ function HistoriaAspecto({ historia }) {
 // Una fila del plan: se toca el nombre para marcar o desmarcar el aspecto, y
 // los minutos son opcionales. Sin minutos propios muestra en gris los que le
 // tocan del reparto de la hora, así se ve el plan armado sin escribir nada.
-function FilaAspecto({ aspecto, dato, reparto, historia, onCambiar }) {
+function FilaAspecto({ aspecto, dato, reparto, historia, onCambiar, onRenombrar }) {
   const marcado = !!dato
   const [texto, setTexto] = useState(() => (dato?.minutos ? String(dato.minutos) : ''))
   const [error, setError] = useState(false)
@@ -85,25 +85,29 @@ function FilaAspecto({ aspecto, dato, reparto, historia, onCambiar }) {
           <span className="mini">min{reparto && !reparto.propios ? ' (repartidos)' : ''}</span>
         </div>
       )}
+      {/* Solo los aspectos que sumó el club se pueden renombrar: los del
+          catálogo fijo son los mismos para todos. */}
+      {onRenombrar && (
+        <button
+          type="button"
+          className="btn sec chico"
+          title={`Cambiarle el nombre a ${aspecto.label}`}
+          aria-label={`Cambiarle el nombre a ${aspecto.label}`}
+          onClick={onRenombrar}
+        >
+          ✏️
+        </button>
+      )}
     </div>
   )
 }
 
-// Alta de un aspecto que no está en el catálogo. Queda guardado para los
-// entrenamientos siguientes y se marca solo en el de hoy.
-function AgregarAspecto({ onAgregado }) {
-  const [abierto, setAbierto] = useState(false)
-  const [label, setLabel] = useState('')
-  const [grupo, setGrupo] = useState(GRUPOS_TECNICOS[0].value)
+// Nombre y grupo de un aspecto propio del club: el mismo formulario sirve para
+// darlo de alta y para corregirle el nombre más adelante.
+function FormAspecto({ inicial, boton, ayuda, onGuardar, onCancelar }) {
+  const [label, setLabel] = useState(inicial?.label || '')
+  const [grupo, setGrupo] = useState(inicial?.grupo || GRUPOS_TECNICOS[0].value)
   const [guardando, setGuardando] = useState(false)
-
-  if (!abierto) {
-    return (
-      <button className="btn sec chico" style={{ marginTop: 10 }} onClick={() => setAbierto(true)}>
-        + Agregar aspecto
-      </button>
-    )
-  }
 
   return (
     <form
@@ -115,11 +119,11 @@ function AgregarAspecto({ onAgregado }) {
         if (!nombre) return
         setGuardando(true)
         try {
-          await onAgregado(nombre, grupo)
-          setLabel('')
-          setAbierto(false)
-        } catch {
-          alert('No se pudo agregar el aspecto. Probá de nuevo.')
+          await onGuardar(nombre, grupo)
+        } catch (err) {
+          alert(err?.error === 'aspecto_duplicado'
+            ? 'Ya hay otro aspecto con ese nombre.'
+            : 'No se pudo guardar. Probá de nuevo.')
         }
         setGuardando(false)
       }}
@@ -144,16 +148,40 @@ function AgregarAspecto({ onAgregado }) {
           ))}
         </div>
       </div>
-      <p className="mini" style={{ marginBottom: 8 }}>
-        Queda en la lista para los próximos entrenamientos y se marca en el de hoy.
-      </p>
+      <p className="mini" style={{ marginBottom: 8 }}>{ayuda}</p>
       <div className="fila">
-        <button className="btn chico" disabled={guardando}>Agregar</button>
-        <button type="button" className="btn sec chico" onClick={() => setAbierto(false)}>
+        <button className="btn chico" disabled={guardando}>{boton}</button>
+        <button type="button" className="btn sec chico" onClick={onCancelar}>
           Cancelar
         </button>
       </div>
     </form>
+  )
+}
+
+// Alta de un aspecto que no está en el catálogo. Queda guardado para los
+// entrenamientos siguientes y se marca solo en el de hoy.
+function AgregarAspecto({ onAgregado }) {
+  const [abierto, setAbierto] = useState(false)
+
+  if (!abierto) {
+    return (
+      <button className="btn sec chico" style={{ marginTop: 10 }} onClick={() => setAbierto(true)}>
+        + Agregar aspecto
+      </button>
+    )
+  }
+
+  return (
+    <FormAspecto
+      boton="Agregar"
+      ayuda="Queda en la lista para los próximos entrenamientos y se marca en el de hoy."
+      onGuardar={async (label, grupo) => {
+        await onAgregado(label, grupo)
+        setAbierto(false)
+      }}
+      onCancelar={() => setAbierto(false)}
+    />
   )
 }
 
@@ -169,6 +197,8 @@ export default function PlanTecnico({ evento }) {
   // Historia del año por aspecto: cuántas veces, cuántos minutos y cuándo fue
   // la última vez. Viaja junto al plan para que la fila lo muestre al lado.
   const [historia, setHistoria] = useState(null)
+  // Clave del aspecto propio que se está renombrando, si hay alguno
+  const [editando, setEditando] = useState(null)
 
   useEffect(() => {
     async function cargar() {
@@ -211,6 +241,15 @@ export default function PlanTecnico({ evento }) {
     if (dato) aspectos[clave] = { minutos: dato.minutos || null }
     else delete aspectos[clave]
     guardar(aspectos)
+  }
+
+  // Corregirle el nombre a un aspecto del club. La clave no cambia, así que
+  // el aspecto se sigue llamando distinto pero conserva toda su historia: lo
+  // planificado en los entrenamientos anteriores queda como está.
+  async function renombrarAspecto(clave, label, grupo) {
+    const nuevo = await api(`aspectos-tecnicos/${clave}`, { method: 'PUT', body: { label, grupo } })
+    setPlan((p) => ({ ...p, propios: p.propios.map((a) => (a.clave === clave ? nuevo : a)) }))
+    setEditando(null)
   }
 
   async function agregarAspecto(label, grupo) {
@@ -287,6 +326,20 @@ export default function PlanTecnico({ evento }) {
           </div>
           {g.aspectos.map((a) => {
             const clave = a.value ?? a.clave
+            // Los del catálogo fijo traen `value`; los que sumó el club, no
+            const propio = !a.value
+            if (propio && editando === clave) {
+              return (
+                <FormAspecto
+                  key={clave}
+                  inicial={a}
+                  boton="Guardar nombre"
+                  ayuda="Cambia cómo se llama de acá en adelante, también en los entrenamientos ya cargados. Lo que se trabajó no se pierde."
+                  onGuardar={(label, grupo) => renombrarAspecto(clave, label, grupo)}
+                  onCancelar={() => setEditando(null)}
+                />
+              )
+            }
             return (
               <FilaAspecto
                 key={clave}
@@ -295,6 +348,7 @@ export default function PlanTecnico({ evento }) {
                 reparto={reparto[clave]}
                 historia={porAspecto[clave]}
                 onCambiar={(dato) => cambiarAspecto(clave, dato)}
+                onRenombrar={propio ? () => setEditando(clave) : null}
               />
             )
           })}
