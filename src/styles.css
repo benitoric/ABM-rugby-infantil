@@ -1295,3 +1295,17 @@ details.tarjeta summary {
   height: 6px;
   background: var(--dorado);
 }
+
+/* Vista previa de los bloques: subtítulo de cada puesto dentro de la línea */
+.previa-sublinea {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-weight: 600;
+  color: var(--texto-suave);
+  margin-top: 4px;
+}
+.previa-sublinea.vertebral {
+  color: var(--primario);
+  font-weight: 800;
+  border-bottom: 1px solid var(--primario);
+}

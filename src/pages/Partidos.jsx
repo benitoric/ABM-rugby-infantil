@@ -13,6 +13,10 @@ import { FormEvento, PanelSuspension } from './Evento.jsx'
 
 const MAX_TIEMPOS = 6
 
+// La columna vertebral del equipo: los puestos que ordenan el juego y que hay
+// que mirar primero al comparar los bloques
+const ESPINA = ['hooker', 'octavo', 'medio_scrum', 'apertura', 'fullback']
+
 // Cada cuánto se refresca solo el estado del partido mientras la vista está
 // abierta y visible (además del refresco inmediato al volver a la app)
 const INTERVALO_REFRESCO = 15000
@@ -1643,6 +1647,40 @@ function VistaPreviaBloques({ bloques, jugadores, asignacion, propuesta, juegoDe
     { clave: 'back', label: 'Backs' },
     { clave: 'sin', label: 'Sin puesto definido' },
   ]
+  // Dentro de cada línea, los jugadores van agrupados por su puesto principal
+  const gruposDe = (clave) => {
+    const propios = PUESTOS.filter((p) => p.tipo === clave)
+      .map((p) => ({ clave: p.value, label: p.plural, vertebral: ESPINA.includes(p.value) }))
+    // Los que juegan en varios puestos y todavía no eligieron el principal
+    return [...propios, { clave: null, label: 'Sin principal elegido' }]
+  }
+  const ordenar = (lista) => [...lista].sort((x, y) =>
+    (juegoDe(y) ?? 0) - (juegoDe(x) ?? 0) || x.apellido.localeCompare(y.apellido))
+
+  // Resumen de la línea entera: los jugadores se listan abajo, agrupados por
+  // puesto, así que acá solo va el total
+  const resumenColumna = (lista, bl) => (
+    <div key={bl.id} className="previa-col">
+      <div className="mini" style={{ textAlign: 'center' }}>
+        {lista.length}{promedio(lista) != null ? ` · ★${promedio(lista).toFixed(1)}` : ''}
+      </div>
+    </div>
+  )
+
+  const columna = (lista, bl) => (
+    <div key={bl.id} className="previa-col">
+      {lista.map((j) => (
+        <div key={j.id} className="previa-jug">
+          <span className="crece" style={{ minWidth: 0 }}>
+            {j.apellido}
+            {abrevPuestos(j) && <span className="mini"> {abrevPuestos(j)}</span>}
+          </span>
+          <b>{juegoDe(j) != null ? juegoDe(j).toFixed(1) : '—'}</b>
+        </div>
+      ))}
+      {!lista.length && <div className="mini" style={{ textAlign: 'center' }}>—</div>}
+    </div>
+  )
 
   return (
     <div className="modal-fondo" onClick={cerrarSiEsElFondo}>
@@ -1672,32 +1710,29 @@ function VistaPreviaBloques({ bloques, jugadores, asignacion, propuesta, juegoDe
           })}
 
           {LINEAS.map((linea) => {
-            const porBloque = bloques.map((bl) => jugadores
-              .filter((j) => asignacion[j.id] === bl.id && tipoDe(j) === linea.clave)
-              .sort((x, y) => (juegoDe(y) ?? 0) - (juegoDe(x) ?? 0) ||
-                x.apellido.localeCompare(y.apellido)))
-            if (!porBloque.some((l) => l.length)) return null
+            const deLaLinea = bloques.map((bl) => jugadores
+              .filter((j) => asignacion[j.id] === bl.id && tipoDe(j) === linea.clave))
+            if (!deLaLinea.some((l) => l.length)) return null
+            // La línea "sin puesto definido" no se subdivide: justamente no lo tienen
+            const grupos = linea.clave === 'sin' ? [] : gruposDe(linea.clave)
             return (
               <Fragment key={linea.clave}>
                 <div className="mini puesto-grupo previa-linea">{linea.label}</div>
-                {porBloque.map((lista, i) => {
-                  const promLinea = promedio(lista)
+                {deLaLinea.map((lista, i) => (grupos.length
+                  ? resumenColumna(lista, bloques[i])
+                  : columna(ordenar(lista), bloques[i])))}
+                {grupos.map((g) => {
+                  const porBloque = deLaLinea.map((lista) =>
+                    ordenar(lista.filter((j) => puestoPrincipal(j) === g.clave)))
+                  if (!porBloque.some((l) => l.length)) return null
                   return (
-                    <div key={bloques[i].id} className="previa-col">
-                      <div className="mini" style={{ textAlign: 'center' }}>
-                        {lista.length}{promLinea != null ? ` · ★${promLinea.toFixed(1)}` : ''}
+                    <Fragment key={g.clave || 'sin-principal'}>
+                      <div className={`mini previa-sublinea${g.vertebral ? ' vertebral' : ''}`}>
+                        {g.vertebral ? '🔹 ' : ''}{g.label}
+                        {' '}({porBloque.map((l) => l.length).join(' · ')})
                       </div>
-                      {lista.map((j) => (
-                        <div key={j.id} className="previa-jug">
-                          <span className="crece" style={{ minWidth: 0 }}>
-                            {j.apellido}
-                            {abrevPuestos(j) && <span className="mini"> {abrevPuestos(j)}</span>}
-                          </span>
-                          <b>{juegoDe(j) != null ? juegoDe(j).toFixed(1) : '—'}</b>
-                        </div>
-                      ))}
-                      {!lista.length && <div className="mini" style={{ textAlign: 'center' }}>—</div>}
-                    </div>
+                      {porBloque.map((lista, i) => columna(lista, bloques[i]))}
+                    </Fragment>
                   )
                 })}
               </Fragment>
@@ -1705,8 +1740,10 @@ function VistaPreviaBloques({ bloques, jugadores, asignacion, propuesta, juegoDe
           })}
         </div>
         <p className="mini" style={{ marginTop: 8 }}>
-          Cada línea enfrentada entre bloques, ordenada por promedio de juego.
-          El número de la derecha es ese promedio.
+          Cada línea enfrentada entre bloques, agrupada por puesto principal y
+          ordenada por promedio de juego. El número de la derecha es ese
+          promedio. 🔹 marca la columna vertebral del equipo: hookers, octavos,
+          medios scrum, aperturas y fullbacks.
         </p>
       </div>
     </div>
