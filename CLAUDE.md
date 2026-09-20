@@ -23,6 +23,17 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   requeridas: `DATABASE_URL` (Neon) y `JWT_SECRET`; opcional `CRON_SECRET`,
   que exige que la tarea diaria venga de Vercel.
 - Diagnóstico de despliegue: `GET /api/health`.
+- **Asistencia**: los dos criterios que deciden si un evento le cuenta a un
+  jugador viven en `server/asistencia-sql.js` y los usan tanto el router como
+  el boletín (cuando estaban duplicados se fueron separando). Un evento entra
+  en su denominador solo si ya estaba en el plantel de ese día
+  (`evento_plantel`, congelado al tomar la asistencia) y no estaba lesionado.
+  La ventana de la lesión va de `fecha` a `recuperado_en` —el día del alta, que
+  se registra al marcarla recuperada—; sin eso cae en el retorno estimado. El
+  que estuvo presente cuenta siempre, aunque fuera lesionado o recién llegado.
+  Mismo criterio para el porcentaje del listado y la ficha, el boletín y el
+  aviso de faltas seguidas. El denominador del gráfico por evento es otra cosa:
+  ahí es el plantel entero del día (ver `stats/asistencia-eventos`).
 - **Avisos push**: notificaciones web estándar (`web-push`), sin servicios de
   terceros. El service worker es `public/sw.js` (solo push, no cachea nada) y
   cada celular se da de alta desde Staff → "Avisos en este celular". Las claves

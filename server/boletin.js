@@ -11,6 +11,8 @@
 // - Sin marca de presente, cuenta ausente.
 // - Los eventos que el chico se perdió estando lesionado no le cuentan como
 //   falta: salen de su denominador y se informan aparte.
+// - Los eventos anteriores a su llegada al plantel tampoco cuentan: el que
+//   entró en septiembre no arrastra las ausencias de marzo.
 // - Los jugadores inactivos quedan afuera del promedio y del ranking.
 //
 // La única excepción a lo de las evaluaciones son los objetivos del mes: se
@@ -18,6 +20,7 @@
 // qué practicar. Ni la nota, ni el área, ni la fecha de esa evaluación salen
 // de acá.
 import { query } from './db.js'
+import { sqlLesionadoEnFecha, sqlEnPlantel } from './asistencia-sql.js'
 import { AREAS_EVAL, bandaEtaria, valoresConsolidados } from '../src/evaluacion.js'
 import { textoDesafio, textoObjetivo } from '../src/objetivos.js'
 
@@ -68,14 +71,10 @@ const PRESENTE = `(case when e.tipo = 'entrenamiento'
   else exists (select 1 from asistencias_partido ap
                where ap.evento_id = e.id and ap.jugador_id = j.id and ap.estado = 'presente') end)`
 
-// ¿Estaba lesionado ese día? La lesión no guarda fecha de alta real, así que
-// la ventana va desde la fecha de la lesión hasta el retorno estimado; si
-// sigue abierta y no tiene estimación, hasta hoy.
-const LESIONADO = `exists (
-  select 1 from lesiones l
-  where l.jugador_id = j.id and e.fecha >= l.fecha
-    and e.fecha <= coalesce(l.fecha_retorno_estimada,
-                            case when l.recuperado then l.fecha else current_date end))`
+// Los dos criterios compartidos con el router, para que el boletín y las
+// pantallas no se separen: ¿estaba lesionado ese día? ¿ya estaba en el plantel?
+const LESIONADO = sqlLesionadoEnFecha('j.id', 'e.fecha')
+const EN_PLANTEL = sqlEnPlantel('j.id', 'e')
 
 // Asistencia de todos los jugadores activos, mes por mes, en el rango pedido.
 // Una fila por (mes, jugador, tipo de evento).
@@ -90,6 +89,7 @@ async function asistenciaPorMes(desde, hasta) {
        where e.fecha >= $1::date and e.fecha < $2::date and e.fecha <= current_date
          and j.estado <> 'inactivo'
          and ${EVENTO_VIGENTE} and ${ASISTENCIA_TOMADA}
+         and (${PRESENTE} or ${EN_PLANTEL})
      )
      select mes, jugador_id, tipo,
        count(*) filter (where presente or not lesionado)::int as contables,
@@ -271,12 +271,15 @@ async function boletinDe({
      where j.id = $1
        and e.fecha >= $2::date and e.fecha < $3::date and e.fecha <= current_date
        and ${EVENTO_VIGENTE} and ${ASISTENCIA_TOMADA}
+       and (${PRESENTE} or ${EN_PLANTEL})
      order by e.fecha`,
     rango)
   const porEvento = Object.fromEntries(marcas.map((m) => [m.evento_id, m]))
 
-  const dias = eventosDelMes.map((e) => {
-    const m = porEvento[e.id] || {}
+  // Los eventos anteriores a su llegada al plantel no salen en su hoja: no
+  // tienen fila en `marcas` y marcarlos ausentes sería inventarle faltas.
+  const dias = eventosDelMes.filter((e) => porEvento[e.id]).map((e) => {
+    const m = porEvento[e.id]
     return {
       fecha: e.fecha,
       tipo: e.tipo,

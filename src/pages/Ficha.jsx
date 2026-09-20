@@ -383,6 +383,11 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
           {l.fecha_retorno_estimada && !l.recuperado && (
             <p className="mini" style={{ marginTop: 4 }}>Retorno estimado: {fechaCorta(l.fecha_retorno_estimada)}</p>
           )}
+          {/* Hasta acá estuvo lesionado: es la fecha con la que la app deja de
+              contarle como falta los entrenamientos que se perdió. */}
+          {l.recuperado && l.recuperado_en && (
+            <p className="mini" style={{ marginTop: 4 }}>Alta: {fechaCorta(l.recuperado_en)}</p>
+          )}
           <div className="fila" style={{ marginTop: 8 }}>
             <button
               className="btn sec chico"

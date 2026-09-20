@@ -1,4 +1,5 @@
 import { query } from './db.js'
+import { sqlLesionadoEnFecha, sqlEnPlantel } from './asistencia-sql.js'
 import { autenticar, crearToken, hashClave, compararClave } from './auth.js'
 // El catálogo de la evaluación es compartido con el frontend: así el promedio
 // de juego se calcula igual en los dos lados (src/evaluacion.js no toca el DOM)
@@ -48,17 +49,13 @@ function normalizarPosicion(p) {
   return p.trim()
 }
 const COLS_LESION = `id, jugador_id, fecha::text as fecha, descripcion,
-  fecha_retorno_estimada::text as fecha_retorno_estimada, recuperado`
+  fecha_retorno_estimada::text as fecha_retorno_estimada, recuperado,
+  recuperado_en::text as recuperado_en`
 const COLS_EVENTO = `id, tipo, fecha::text as fecha, hora::text as hora,
   hora_fin::text as hora_fin, modalidad, rival, lugar, notas,
   created_at::text as created_at,
   suspendido, motivo_suspension, nota_suspension, plazas_manual`
 
-// ¿El jugador estaba lesionado en la fecha del evento? Se reconstruye de la
-// tabla lesiones: cuenta desde la fecha de la lesión hasta la de retorno
-// estimada. Sin fecha de retorno, la lesión sigue abierta mientras no esté
-// marcada como recuperada (una recuperada sin fecha no se puede ubicar en el
-// tiempo, así que no descuenta a nadie).
 // Congela QUIÉNES formaban el plantel la primera vez que se toma asistencia de
 // un evento: los no dados de baja, más cualquiera con marca en el evento. Va
 // como conjunto y no como número para poder descontarle los lesionados al
@@ -77,14 +74,8 @@ async function congelarPlantel(eventoId, tipo) {
     [eventoId])
 }
 
-function sqlLesionadoEnFecha(exprJugadorId, aliasEvento) {
-  return `exists (
-    select 1 from lesiones l
-    where l.jugador_id = ${exprJugadorId}
-      and l.fecha <= ${aliasEvento}.fecha
-      and (l.fecha_retorno_estimada > ${aliasEvento}.fecha
-           or (l.fecha_retorno_estimada is null and not l.recuperado)))`
-}
+// Atajo para las consultas que ya tienen el evento en un alias
+const sqlLesionadoEnEvento = (idJugador, ev) => sqlLesionadoEnFecha(idJugador, `${ev}.fecha`)
 const COLS_SEGUIMIENTO = `id, jugador_id, fecha::text as fecha, area, valoracion, comentario, autor_email`
 const COLS_EVALUACION = `id, jugador_id, fecha::text as fecha, valores, comentario, autor_email,
   revisor_email, valores_revisor, comentario_revisor, revisado_en::date::text as revisado_en`
@@ -671,14 +662,26 @@ function eventoVigente(alias) {
 // `asistencias`, nunca cuenta como asistencia.
 const TABLA_ASISTENCIA = { entrenamiento: 'asistencias', partido: 'asistencias_partido' }
 
-// Denominador, igual para todos los jugadores: eventos ya ocurridos, vigentes y
-// con asistencia efectivamente tomada. El que no figura presente cuenta ausente.
-function sqlTotalesAsistencia() {
+// Denominador de un jugador: los eventos ya ocurridos, vigentes y con
+// asistencia tomada que le podían contar. No es el mismo para todos, porque
+// dos cosas sacan un evento de la cuenta:
+//  - todavía no estaba en el plantel (el que llegó en septiembre no arrastra
+//    las ausencias de marzo);
+//  - ese día estaba lesionado (lo mismo que ya hacía el boletín: un evento
+//    perdido por lesión no es una falta).
+// El que estuvo presente cuenta siempre, aunque haya ido lesionado: así el
+// numerador nunca puede superar al denominador.
+function sqlTotalesAsistencia(idJugador) {
   const porTipo = (tipo) => `(select count(*)::int from eventos e
      where e.tipo = '${tipo}' and e.fecha <= current_date
        and exists (select 1 from ${TABLA_ASISTENCIA[tipo]} a where a.evento_id = e.id)
-       and ${eventoVigente('e')})`
-  return `select ${porTipo('entrenamiento')} as ent, ${porTipo('partido')} as par`
+       and ${eventoVigente('e')}
+       and (exists (select 1 from ${TABLA_ASISTENCIA[tipo]} a
+                    where a.evento_id = e.id and a.jugador_id = ${idJugador}
+                      and a.estado = 'presente')
+            or (${sqlEnPlantel(idJugador, 'e')}
+                and not ${sqlLesionadoEnEvento(idJugador, 'e')})))`
+  return { ent: porTipo('entrenamiento'), par: porTipo('partido') }
 }
 
 // Presencias de un jugador (subconsultas escalares para el id que reciba)
@@ -879,7 +882,7 @@ async function enrutar(metodo, p, b, req, url) {
       // La miniatura del primer documento con imagen acompaña al listado: son
       // unos pocos KB por jugador, contra cientos si se mandara el archivo.
       const pres = sqlPresentesAsistencia('jugadores.id')
-      const [totales] = await query(sqlTotalesAsistencia())
+      const tot = sqlTotalesAsistencia('jugadores.id')
       const filas = await query(`select ${COLS_JUGADOR},
         ue.fecha::text as ultima_evaluacion,
         ue.valores as ultima_evaluacion_valores,
@@ -887,7 +890,9 @@ async function enrutar(metodo, p, b, req, url) {
         doc.documento_id,
         doc.miniatura,
         ${pres.ent} as asis_ent,
-        ${pres.par} as asis_par
+        ${pres.par} as asis_par,
+        ${tot.ent} as tot_ent,
+        ${tot.par} as tot_par
         from jugadores
         left join lateral (
           select e.fecha, e.valores, e.valores_revisor from evaluaciones e
@@ -901,9 +906,10 @@ async function enrutar(metodo, p, b, req, url) {
           order by d.created_at limit 1
         ) doc on true
         order by apellido, nombre`)
-      return filas.map(({ asis_ent, asis_par, ...j }) => ({
+      return filas.map(({ asis_ent, asis_par, tot_ent, tot_par, ...j }) => ({
         ...j,
-        asistencia: resumenAsistencia({ ent: asis_ent, par: asis_par }, totales),
+        asistencia: resumenAsistencia(
+          { ent: asis_ent, par: asis_par }, { ent: tot_ent, par: tot_par }),
       }))
     }
     if (metodo === 'POST' && !p[1]) {
@@ -999,12 +1005,16 @@ async function enrutar(metodo, p, b, req, url) {
              and e.tipo = 'entrenamiento'
          ) t
          order by fecha desc`, [p[1]])
-      // Ausente por defecto: cuentan todos los eventos ya ocurridos en los que
-      // se tomó asistencia; presente solo si tiene la marca explícita.
-      const [tot] = await query(sqlTotalesAsistencia())
+      // Ausente por defecto: cuentan los eventos ya ocurridos en los que se
+      // tomó asistencia y él estaba en el plantel sin lesión; presente solo si
+      // tiene la marca explícita.
+      const sqlTot = sqlTotalesAsistencia('$1')
       const sqlPres = sqlPresentesAsistencia('$1')
-      const [pres] = await query(
-        `select ${sqlPres.ent} as ent, ${sqlPres.par} as par`, [p[1]])
+      const [cuenta] = await query(
+        `select ${sqlPres.ent} as pres_ent, ${sqlPres.par} as pres_par,
+                ${sqlTot.ent} as tot_ent, ${sqlTot.par} as tot_par`, [p[1]])
+      const pres = { ent: cuenta.pres_ent, par: cuenta.pres_par }
+      const tot = { ent: cuenta.tot_ent, par: cuenta.tot_par }
       const [{ total }] = await query(
         'select count(*)::int as total from tiempo_jugadores where jugador_id = $1', [p[1]])
       // Rastro de las confirmaciones incumplidas: avisó que iba (asistencias,
@@ -1250,8 +1260,13 @@ async function enrutar(metodo, p, b, req, url) {
       return filas[0]
     }
     if (metodo === 'PUT' && p[1]) {
+      // El día del alta queda registrado: es el dato real de hasta cuándo
+      // estuvo lesionado, mejor que el retorno estimado. Si se reabre la
+      // lesión se borra, porque vuelve a estar en recuperación.
       const filas = await query(
-        'update lesiones set recuperado = $1 where id = $2 returning jugador_id', [!!b.recuperado, p[1]])
+        `update lesiones set recuperado = $1,
+           recuperado_en = case when $1 then current_date else null end
+         where id = $2 returning jugador_id`, [!!b.recuperado, p[1]])
       if (filas[0]) await sincronizarEstadoLesion(filas[0].jugador_id)
       return { ok: true }
     }
@@ -1428,14 +1443,18 @@ async function enrutar(metodo, p, b, req, url) {
              and ${eventoVigente('e')}
              and exists (select 1 from asistencias a where a.evento_id = e.id)
          ),
+         -- Solo los entrenamientos a los que podía ir: los de antes de entrar
+         -- al plantel no son suyos, y los que se perdió estando lesionado no
+         -- son una falta ni cortan la racha (el que va lesionado, sí la corta).
          marcas as (
            select j.id as jugador_id, en.fecha,
              (a.estado = 'presente') as fue,
              row_number() over (partition by j.id order by en.fecha desc, en.creado desc) as pos
            from jugadores j
-           join entrenamientos en on en.fecha >= j.created_at::date
+           join entrenamientos en on ${sqlEnPlantel('j.id', 'en')}
            left join asistencias a on a.evento_id = en.id and a.jugador_id = j.id
            where j.estado = 'activo'
+             and (a.estado = 'presente' or not ${sqlLesionadoEnEvento('j.id', 'en')})
          ),
          ultimo_presente as (
            select jugador_id, min(pos) as pos from marcas where fue group by jugador_id
@@ -1538,7 +1557,7 @@ async function enrutar(metodo, p, b, req, url) {
           -- estaban, en cambio, ya quedó fijo.
           (select count(*)::int from evento_plantel ep
             where ep.evento_id = e.id
-              and not ${sqlLesionadoEnFecha('ep.jugador_id', 'e')}) as plazas_congeladas,
+              and not ${sqlLesionadoEnEvento('ep.jugador_id', 'e')}) as plazas_congeladas,
           exists (select 1 from evento_plantel ep where ep.evento_id = e.id) as tiene_plantel,
           (select count(*)::int from jugadores j
             -- Tener marca en ese evento prueba que estaba en el plantel ese
@@ -1548,7 +1567,7 @@ async function enrutar(metodo, p, b, req, url) {
                     where a.evento_id = e.id and a.jugador_id = j.id)
                or (j.estado <> 'inactivo'
                    and j.created_at::date <= e.fecha
-                   and not ${sqlLesionadoEnFecha('j.id', 'e')})) as plazas_calculadas,
+                   and not ${sqlLesionadoEnEvento('j.id', 'e')})) as plazas_calculadas,
           (select string_agg(bl.rival, ' / ') from bloques bl
             where bl.evento_id = e.id and bl.rival is not null) as rival
         from eventos e
@@ -1624,20 +1643,24 @@ async function enrutar(metodo, p, b, req, url) {
       }
     }
     if (metodo === 'GET' && p[1] === 'asistencia') {
-      // Ausente por defecto: el total es la cantidad de eventos ya ocurridos
-      // con asistencia tomada, igual para todos los jugadores.
-      const [tot] = await query(sqlTotalesAsistencia())
+      // Ausente por defecto: el total son los eventos ya ocurridos con
+      // asistencia tomada que le podían contar a cada uno.
       const pres = sqlPresentesAsistencia('j.id')
+      const tot = sqlTotalesAsistencia('j.id')
       const filas = await query(
         `select j.id, j.nombre, j.apellido,
            ${pres.ent} as ent_presentes,
-           ${pres.par} as par_presentes
+           ${pres.par} as par_presentes,
+           ${tot.ent} as ent_total,
+           ${tot.par} as par_total
          from jugadores j
          where j.estado <> 'inactivo'
          order by j.apellido, j.nombre`)
       return filas.map((f) => ({
         id: f.id, nombre: f.nombre, apellido: f.apellido,
-        ...resumenAsistencia({ ent: f.ent_presentes, par: f.par_presentes }, tot),
+        ...resumenAsistencia(
+          { ent: f.ent_presentes, par: f.par_presentes },
+          { ent: f.ent_total, par: f.par_total }),
       }))
     }
   }
