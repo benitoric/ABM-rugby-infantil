@@ -107,6 +107,10 @@ create table if not exists lesiones (
   descripcion text not null,
   fecha_retorno_estimada date,
   recuperado boolean not null default false,
+  -- Día en que se le dio el alta: hasta ahí estuvo lesionado de verdad, sin
+  -- importar lo que decía el retorno estimado. Null en las lesiones abiertas
+  -- y en las que se marcaron recuperadas antes de que existiera la columna.
+  recuperado_en date,
   created_at timestamptz not null default now()
 );
 

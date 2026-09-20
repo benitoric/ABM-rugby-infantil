@@ -56,8 +56,11 @@ export async function migracionesAplicadas(pool) {
   const { rows: [col] } = await pool.query(
     `select exists (select 1 from information_schema.columns
        where table_schema = 'public' and table_name = 'asistencias_partido'
-         and column_name = 'condicion_desde') as existe`)
-  if (!col.existe) return false
+         and column_name = 'condicion_desde') as existe,
+       exists (select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'lesiones'
+         and column_name = 'recuperado_en') as existe_alta`)
+  if (!col.existe || !col.existe_alta) return false
   const { rows: [t] } = await pool.query(
     `select to_regclass('public.evento_plantel') is not null
         and to_regclass('public.plan_tecnico') is not null as existe`)
@@ -328,6 +331,11 @@ export async function migrar(pool) {
   // Desde qué tiempo rige el golpe o la lesión marcada en pleno partido: los
   // tiempos anteriores ya se jugaron y no los toca. Null en las marcas viejas.
   await pool.query('alter table asistencias_partido add column if not exists condicion_desde smallint')
+  // Día en que se le dio el alta: hasta ahí estuvo lesionado de verdad. El
+  // retorno estimado es solo un pronóstico y se queda corto o largo. Null en
+  // las lesiones marcadas recuperadas antes de este cambio: de esas no hay
+  // registro del día del alta y se sigue usando el retorno estimado.
+  await pool.query('alter table lesiones add column if not exists recuperado_en date')
 }
 
 // Arranca el historial de capitanes con la planilla que se venía llevando
