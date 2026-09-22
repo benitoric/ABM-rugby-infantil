@@ -5,6 +5,7 @@ import Login from './pages/Login.jsx'
 import Jugadores from './pages/Jugadores.jsx'
 import Entrenamientos from './pages/Entrenamientos.jsx'
 import Partidos from './pages/Partidos.jsx'
+import Viajes from './pages/Viajes.jsx'
 import Staff from './pages/Staff.jsx'
 import { VERSION } from './version.js'
 
@@ -12,6 +13,7 @@ const TABS = [
   { id: 'jugadores', label: 'Jugadores', ico: '👥' },
   { id: 'entrenamientos', label: 'Entrenamientos', ico: '📋' },
   { id: 'partidos', label: 'Partidos', ico: '🏉' },
+  { id: 'viajes', label: 'Viajes', ico: '🚌' },
   { id: 'staff', label: 'Staff', ico: '🧑‍🏫' },
 ]
 
@@ -75,6 +77,7 @@ export default function App() {
       {tab === 'jugadores' && <Jugadores yo={staff} />}
       {tab === 'entrenamientos' && <Entrenamientos yo={staff} />}
       {tab === 'partidos' && <Partidos />}
+      {tab === 'viajes' && <Viajes yo={staff} />}
       {tab === 'staff' && <Staff yo={staff} />}
     </div>
   )

@@ -44,6 +44,17 @@ pantalla de inicio" del teléfono y queda como una app más).
    malo).
 5. **Equipos por tiempo**: cada bloque juega 4 a 6 tiempos; se arma el equipo de
    cada tiempo y la app avisa qué chicos todavía no jugaron ningún tiempo.
+6. **Viajes**: las giras a otras provincias. De cada viaje se carga quiénes
+   van (elegidos del plantel), el staff que acompaña, el precio y las cuotas.
+   En **Alojados** se arman las casas: cada una es una familia del club
+   anfitrión (nombre, teléfono, dirección, notas) que recibe a uno o más
+   chicos; la hoja se imprime o se baja en CSV para el club que recibe. En
+   **Managers** se lleva el checklist de papeles de cada chico (autorización
+   firmada, fotocopia del DNI, ficha médica, carnet de obra social), los pagos
+   de cada familia (seña, cuotas, saldo, con medio de pago y quién lo
+   registró) y las observaciones que la familia anfitriona tiene que saber
+   (alergias, medicación). El listado y la ficha del viaje muestran cuánto
+   falta cobrar y quiénes tienen papeles pendientes.
 
 ## Arquitectura
 

@@ -63,7 +63,8 @@ export async function migracionesAplicadas(pool) {
   if (!col.existe || !col.existe_alta) return false
   const { rows: [t] } = await pool.query(
     `select to_regclass('public.evento_plantel') is not null
-        and to_regclass('public.plan_tecnico') is not null as existe`)
+        and to_regclass('public.plan_tecnico') is not null
+        and to_regclass('public.viaje_pagos') is not null as existe`)
   if (!t.existe) return false
   const { rows: [t2] } = await pool.query(
     `select not exists (
@@ -336,6 +337,65 @@ export async function migrar(pool) {
   // las lesiones marcadas recuperadas antes de este cambio: de esas no hay
   // registro del día del alta y se sigue usando el retorno estimado.
   await pool.query('alter table lesiones add column if not exists recuperado_en date')
+  // Giras a otras provincias: el viaje, el staff que va, los grupos de
+  // alojados con la familia que los recibe, quiénes viajan (con el checklist
+  // de los managers) y los pagos de cada familia. viaje_pagos es la última
+  // tabla y hace de testigo en migracionesAplicadas.
+  await pool.query(`create table if not exists viajes (
+    id uuid primary key default gen_random_uuid(),
+    nombre text not null,
+    destino text,
+    club_anfitrion text,
+    fecha_salida date not null,
+    fecha_regreso date,
+    precio numeric(12,2) check (precio is null or precio >= 0),
+    cuotas int check (cuotas is null or cuotas between 1 and 24),
+    notas text,
+    creado_por text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  )`)
+  await pool.query(`create table if not exists viaje_staff (
+    viaje_id uuid not null references viajes(id) on delete cascade,
+    staff_email text not null references staff(email) on delete cascade,
+    primary key (viaje_id, staff_email)
+  )`)
+  await pool.query(`create table if not exists viaje_grupos (
+    id uuid primary key default gen_random_uuid(),
+    viaje_id uuid not null references viajes(id) on delete cascade,
+    numero int not null,
+    familia_nombre text,
+    familia_telefono text,
+    familia_direccion text,
+    familia_notas text,
+    created_at timestamptz not null default now(),
+    unique (viaje_id, numero)
+  )`)
+  await pool.query(`create table if not exists viaje_jugadores (
+    viaje_id uuid not null references viajes(id) on delete cascade,
+    jugador_id uuid not null references jugadores(id) on delete cascade,
+    grupo_id uuid references viaje_grupos(id) on delete set null,
+    autorizacion boolean not null default false,
+    dni_copia boolean not null default false,
+    ficha_medica boolean not null default false,
+    obra_social boolean not null default false,
+    observaciones text,
+    created_at timestamptz not null default now(),
+    primary key (viaje_id, jugador_id)
+  )`)
+  await pool.query(`create table if not exists viaje_pagos (
+    id uuid primary key default gen_random_uuid(),
+    viaje_id uuid not null references viajes(id) on delete cascade,
+    jugador_id uuid not null references jugadores(id) on delete cascade,
+    fecha date not null default current_date,
+    monto numeric(12,2) not null check (monto > 0),
+    concepto text,
+    medio text check (medio in ('efectivo','transferencia','otro')),
+    registrado_por text,
+    created_at timestamptz not null default now()
+  )`)
+  await pool.query(`create index if not exists viaje_pagos_viaje_idx
+    on viaje_pagos (viaje_id, jugador_id)`)
 }
 
 // Arranca el historial de capitanes con la planilla que se venía llevando

@@ -373,6 +373,85 @@ create table if not exists avisos_enviados (
   primary key (tipo, referencia, fecha)
 );
 
+-- ---------- giras / viajes a otras provincias ----------
+-- Un viaje es una gira de la división a otra provincia (o a otro club de
+-- afuera). De cada viaje se lleva quiénes van, cómo se reparten para dormir
+-- en casas de familia del club anfitrión y la parte administrativa que
+-- siguen los managers: qué pagó cada uno y qué papeles ya entregó.
+create table if not exists viajes (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null,
+  -- Ciudad o provincia a la que se viaja, y club que recibe
+  destino text,
+  club_anfitrion text,
+  fecha_salida date not null,
+  fecha_regreso date,
+  -- Costo total del viaje por jugador y en cuántas cuotas se puede pagar.
+  -- Los pagos reales van en viaje_pagos; acá solo el precio de referencia.
+  precio numeric(12,2) check (precio is null or precio >= 0),
+  cuotas int check (cuotas is null or cuotas between 1 and 24),
+  notas text,
+  creado_por text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Staff que viaja con los chicos
+create table if not exists viaje_staff (
+  viaje_id uuid not null references viajes(id) on delete cascade,
+  staff_email text not null references staff(email) on delete cascade,
+  primary key (viaje_id, staff_email)
+);
+
+-- Grupos de alojados: cada grupo duerme en la casa de una misma familia del
+-- club anfitrión. Un chico puede ir solo (grupo de uno) o con compañeros.
+create table if not exists viaje_grupos (
+  id uuid primary key default gen_random_uuid(),
+  viaje_id uuid not null references viajes(id) on delete cascade,
+  -- Orden de creación, para numerarlos ("Casa 1", "Casa 2"…)
+  numero int not null,
+  familia_nombre text,
+  familia_telefono text,
+  familia_direccion text,
+  -- Lo que conviene saber de la casa: mascotas, otros chicos, cómo llegar
+  familia_notas text,
+  created_at timestamptz not null default now(),
+  unique (viaje_id, numero)
+);
+
+-- Quiénes viajan, con su grupo de alojados y el checklist de los managers.
+-- Lo cobrado no va acá: se suma de viaje_pagos.
+create table if not exists viaje_jugadores (
+  viaje_id uuid not null references viajes(id) on delete cascade,
+  jugador_id uuid not null references jugadores(id) on delete cascade,
+  grupo_id uuid references viaje_grupos(id) on delete set null,
+  -- Papeles que tienen que entregar los padres antes de viajar
+  autorizacion boolean not null default false,
+  dni_copia boolean not null default false,
+  ficha_medica boolean not null default false,
+  obra_social boolean not null default false,
+  -- Alergias, medicación, comidas: lo que la familia que lo recibe tiene que saber
+  observaciones text,
+  created_at timestamptz not null default now(),
+  primary key (viaje_id, jugador_id)
+);
+
+-- Cada pago que hace una familia por el viaje (seña, cuotas, saldo). El total
+-- pagado y lo que falta se calculan contra el precio del viaje.
+create table if not exists viaje_pagos (
+  id uuid primary key default gen_random_uuid(),
+  viaje_id uuid not null references viajes(id) on delete cascade,
+  jugador_id uuid not null references jugadores(id) on delete cascade,
+  fecha date not null default current_date,
+  monto numeric(12,2) not null check (monto > 0),
+  concepto text,
+  medio text check (medio in ('efectivo','transferencia','otro')),
+  registrado_por text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists viaje_pagos_viaje_idx on viaje_pagos (viaje_id, jugador_id);
+
 -- Primer miembro del staff (crea su contraseña en el primer ingreso)
 insert into staff (email, nombre) values ('benitoric@gmail.com', 'Benito')
 on conflict (email) do nothing;
