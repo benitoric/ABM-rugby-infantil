@@ -2556,6 +2556,13 @@ async function enrutar(metodo, p, b, req, url) {
     }
   }
 
+  // ---------- giras a otras provincias ----------
+  // Todo lo que empieza con `viajes` vive en server/viajes.js
+  if (p[0] === 'viajes') {
+    const { enrutarViajes } = await import('./viajes.js')
+    return enrutarViajes({ metodo, p, b, yo, admin: puedeAdministrar(yo) })
+  }
+
   // ---------- staff ----------
   if (p[0] === 'staff') {
     if (metodo === 'GET') {

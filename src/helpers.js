@@ -343,3 +343,58 @@ export const ROLES_STAFF = [
   'Manager asistente',
 ]
 
+
+// ---------- giras / viajes ----------
+// Papeles que los padres entregan antes de una gira. Mismas claves que las
+// columnas de viaje_jugadores (y que valida server/viajes.js).
+export const PAPELES_VIAJE = [
+  { clave: 'autorizacion', label: 'Autorización firmada', abrev: 'Autoriz.' },
+  { clave: 'dni_copia', label: 'Fotocopia del DNI', abrev: 'DNI' },
+  { clave: 'ficha_medica', label: 'Ficha médica / apto', abrev: 'Ficha' },
+  { clave: 'obra_social', label: 'Carnet de obra social', abrev: 'O. social' },
+]
+
+export const MEDIOS_PAGO = [
+  { value: 'efectivo', label: 'Efectivo' },
+  { value: 'transferencia', label: 'Transferencia' },
+  { value: 'otro', label: 'Otro' },
+]
+
+export function etiquetaMedioPago(m) {
+  return MEDIOS_PAGO.find((x) => x.value === m)?.label || ''
+}
+
+// "$ 12.345" (sin centavos salvo que los tenga)
+export function pesos(n) {
+  if (n == null || !Number.isFinite(Number(n))) return '—'
+  const v = Number(n)
+  const conCentavos = Math.round(v * 100) % 100 !== 0
+  return '$ ' + v.toLocaleString('es-AR', {
+    minimumFractionDigits: conCentavos ? 2 : 0,
+    maximumFractionDigits: conCentavos ? 2 : 0,
+  })
+}
+
+// ¿Le falta algún papel a este chico para viajar?
+export function papelesCompletos(vj) {
+  return PAPELES_VIAJE.every((p) => vj[p.clave])
+}
+
+// Próximo, en curso o ya hecho, según las fechas del viaje
+export function estadoViaje(v, hoy = new Date().toISOString().slice(0, 10)) {
+  const fin = v.fecha_regreso || v.fecha_salida
+  if (fin < hoy) return { clave: 'pasado', texto: 'Realizado' }
+  if (v.fecha_salida <= hoy) return { clave: 'en_curso', texto: 'En curso' }
+  const dias = Math.round((new Date(v.fecha_salida + 'T00:00:00') - new Date(hoy + 'T00:00:00')) / 86400000)
+  return {
+    clave: 'proximo',
+    texto: dias === 0 ? 'Sale hoy' : dias === 1 ? 'Sale mañana' : `Faltan ${dias} días`,
+  }
+}
+
+// "12/10 al 14/10/2026" o "12/10/2026" cuando es de un día
+export function fechasViaje(v) {
+  if (!v.fecha_regreso || v.fecha_regreso === v.fecha_salida) return fechaCorta(v.fecha_salida)
+  const [, m, d] = v.fecha_salida.split('-')
+  return `${d}/${m} al ${fechaCorta(v.fecha_regreso)}`
+}

@@ -54,6 +54,19 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   que no se imprime— y al boletín llega solo la frase de qué practicar, nunca
   la nota, el área ni la fecha. Con todo alto va un desafío en vez de una
   debilidad inventada, y con la evaluación de más de 90 días no sale nada.
+- **Viajes (giras)**: menú propio para las giras a otras provincias. Las
+  rutas `viajes/...` viven en `server/viajes.js` (el router delega ahí) y la
+  pantalla en `src/pages/Viajes.jsx`, con cuatro vistas: Jugadores (quiénes
+  van, elegidos sobre el plantel), Alojados (una "casa" por familia del club
+  anfitrión, con sus datos y los chicos que recibe; imprimible y exportable),
+  Managers (checklist de papeles —autorización, DNI, ficha, obra social—,
+  pagos de cada familia y observaciones para la casa) y Datos. Tablas:
+  `viajes`, `viaje_staff`, `viaje_grupos`, `viaje_jugadores` y `viaje_pagos`.
+  Lo cobrado nunca se guarda como total: se suma de `viaje_pagos`, y por eso
+  no se puede sacar del viaje a un chico con pagos cargados sin borrarlos
+  antes. Borrar un viaje entero queda para quien administra
+  (`puedeAdministrar`). El catálogo de papeles (`PAPELES_VIAJE`) está en
+  `src/helpers.js` y sus claves son las columnas de `viaje_jugadores`.
 - **Navegación**: la posición en la app vive en el hash de la URL
   (`#/partidos/<id>/<vista>`) con respaldo en localStorage (`src/navegacion.js`),
   para sobrevivir recargas y descartes de la PWA. La vista de partido se
