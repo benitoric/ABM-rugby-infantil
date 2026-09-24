@@ -350,7 +350,6 @@ export const ROLES_STAFF = [
 export const PAPELES_VIAJE = [
   { clave: 'autorizacion', label: 'Autorización firmada', abrev: 'Autorización' },
   { clave: 'dni_copia', label: 'Fotocopia del DNI', abrev: 'Fotocopia DNI' },
-  { clave: 'ficha_medica', label: 'Ficha médica / apto', abrev: 'Ficha médica' },
   // El DNI original viaja con el staff y se devuelve a la familia al volver
   { clave: 'dni_devuelto', label: 'Devolución del DNI', abrev: 'Devolución DNI' },
 ]

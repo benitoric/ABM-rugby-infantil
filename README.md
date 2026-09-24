@@ -50,7 +50,7 @@ pantalla de inicio" del teléfono y queda como una app más).
    anfitrión (nombre, teléfono, dirección, notas) que recibe a uno o más
    chicos; la hoja se imprime o se baja en CSV para el club que recibe. En
    **Managers** se lleva el checklist de papeles de cada chico (autorización
-   firmada, fotocopia del DNI, ficha médica, devolución del DNI al volver), los pagos
+   firmada, fotocopia del DNI, devolución del DNI al volver), los pagos
    de cada familia (seña, cuotas, saldo, con medio de pago y quién lo
    registró) y las observaciones que la familia anfitriona tiene que saber
    (alergias, medicación). El listado y la ficha del viaje muestran cuánto

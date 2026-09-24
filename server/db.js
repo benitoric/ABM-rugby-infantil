@@ -62,8 +62,11 @@ export async function migracionesAplicadas(pool) {
          and column_name = 'recuperado_en') as existe_alta,
        exists (select 1 from information_schema.columns
        where table_schema = 'public' and table_name = 'viaje_jugadores'
-         and column_name = 'dni_devuelto') as existe_dni_devuelto`)
-  if (!col.existe || !col.existe_alta || !col.existe_dni_devuelto) return false
+         and column_name = 'dni_devuelto') as existe_dni_devuelto,
+       exists (select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'viaje_jugadores'
+         and column_name = 'ficha_medica') as sobra_ficha_medica`)
+  if (!col.existe || !col.existe_alta || !col.existe_dni_devuelto || col.sobra_ficha_medica) return false
   const { rows: [t] } = await pool.query(
     `select to_regclass('public.evento_plantel') is not null
         and to_regclass('public.plan_tecnico') is not null
@@ -380,7 +383,6 @@ export async function migrar(pool) {
     grupo_id uuid references viaje_grupos(id) on delete set null,
     autorizacion boolean not null default false,
     dni_copia boolean not null default false,
-    ficha_medica boolean not null default false,
     dni_devuelto boolean not null default false,
     observaciones text,
     created_at timestamptz not null default now(),
@@ -392,6 +394,9 @@ export async function migrar(pool) {
   await pool.query('alter table viaje_jugadores drop column if exists obra_social')
   await pool.query(`alter table viaje_jugadores
     add column if not exists dni_devuelto boolean not null default false`)
+  // La ficha médica tampoco va en el checklist del viaje (ya se sigue desde
+  // el padrón). Que la columna no exista es el testigo más nuevo.
+  await pool.query('alter table viaje_jugadores drop column if exists ficha_medica')
   await pool.query(`create table if not exists viaje_pagos (
     id uuid primary key default gen_random_uuid(),
     viaje_id uuid not null references viajes(id) on delete cascade,

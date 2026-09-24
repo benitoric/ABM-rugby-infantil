@@ -428,7 +428,6 @@ create table if not exists viaje_jugadores (
   -- Papeles que tienen que entregar los padres antes de viajar
   autorizacion boolean not null default false,
   dni_copia boolean not null default false,
-  ficha_medica boolean not null default false,
   -- El DNI original viaja con el staff: acá se marca que se le devolvió a la
   -- familia al volver
   dni_devuelto boolean not null default false,
