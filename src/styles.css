@@ -1385,8 +1385,24 @@ details.tarjeta summary {
 .papel:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .papel.activo { background: #dcfce7; border-color: var(--ok); color: #15803d; }
 .papel.activo .papel-marca { background: var(--ok); border-color: var(--ok); color: #fff; }
+/* El de Pago con su panel abierto */
+.papel.abierto:not(.activo) { border-color: var(--primario); color: var(--primario); background: var(--celeste); }
+.papel.abierto:not(.activo) .papel-marca { border-color: var(--primario); color: var(--primario); }
+/* Observaciones del chico: un renglón tocable, con lápiz */
+.obs-boton {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 0;
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: 0.8rem;
+  color: var(--texto);
+  line-height: 1.35;
+}
 @media (min-width: 720px) {
-  .papeles { grid-template-columns: repeat(3, 1fr); }
+  .papeles { grid-template-columns: repeat(4, 1fr); }
   .papel { min-height: 44px; font-size: 0.85rem; }
   .papel:last-child:nth-child(odd) { grid-column: auto; }
 }
