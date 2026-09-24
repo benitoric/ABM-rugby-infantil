@@ -11,9 +11,6 @@
 // queda adentro.
 
 export const A4 = { ancho: 595.28, alto: 841.89 }
-// Hoja angosta con proporción de pantalla de celular: al abrirla en el
-// teléfono se ajusta al ancho y el texto queda grande sin hacer zoom
-export const CELULAR = { ancho: 400, alto: 700 }
 
 // Anchos de Helvetica (unidades de 1/1000 del cuerpo), códigos 32 a 126.
 // Salen de las métricas AFM estándar; los acentuados miden igual que su letra
@@ -97,10 +94,9 @@ const escapar = (s) => aWinAnsi(s).replace(/([\\()])/g, '\\$1')
 const num = (n) => (Math.round(n * 100) / 100).toString()
 const color = ([r, g, b]) => `${num(r / 255)} ${num(g / 255)} ${num(b / 255)}`
 
-export function nuevoPDF({ titulo = '', autor = '', hoja = A4 } = {}) {
+export function nuevoPDF({ titulo = '', autor = '' } = {}) {
   const paginas = []
   let actual = null
-  const { ancho: ANCHO, alto: ALTO } = hoja
 
   function nuevaPagina() {
     actual = []
@@ -109,8 +105,8 @@ export function nuevoPDF({ titulo = '', autor = '', hoja = A4 } = {}) {
   }
 
   const api = {
-    ancho: ANCHO,
-    alto: ALTO,
+    ancho: A4.ancho,
+    alto: A4.alto,
     nuevaPagina,
     get paginas() { return paginas.length },
 
@@ -134,20 +130,20 @@ export function nuevoPDF({ titulo = '', autor = '', hoja = A4 } = {}) {
       else if (alinear === 'centro') px = x - anchoTexto(t, tam, negrita) / 2
       actual.push(
         `BT ${color(c)} rg /${negrita ? 'F2' : 'F1'} ${num(tam)} Tf ` +
-        `${num(px)} ${num(ALTO - y - tam * 0.8)} Td (${escapar(t)}) Tj ET`)
+        `${num(px)} ${num(A4.alto - y - tam * 0.8)} Td (${escapar(t)}) Tj ET`)
       return api
     },
 
     rect(x, y, ancho, alto, c = [0, 0, 0]) {
       if (ancho <= 0 || alto <= 0) return api
-      actual.push(`${color(c)} rg ${num(x)} ${num(ALTO - y - alto)} ${num(ancho)} ${num(alto)} re f`)
+      actual.push(`${color(c)} rg ${num(x)} ${num(A4.alto - y - alto)} ${num(ancho)} ${num(alto)} re f`)
       return api
     },
 
     linea(x1, y1, x2, y2, c = [0, 0, 0], grosor = 0.7) {
       actual.push(
-        `${color(c)} RG ${num(grosor)} w ${num(x1)} ${num(ALTO - y1)} m ` +
-        `${num(x2)} ${num(ALTO - y2)} l S`)
+        `${color(c)} RG ${num(grosor)} w ${num(x1)} ${num(A4.alto - y1)} m ` +
+        `${num(x2)} ${num(A4.alto - y2)} l S`)
       return api
     },
 
@@ -182,7 +178,7 @@ export function nuevoPDF({ titulo = '', autor = '', hoja = A4 } = {}) {
 
       paginas.forEach((ordenes, i) => {
         objeto(idPagina(i),
-          `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${num(ANCHO)} ${num(ALTO)}] ` +
+          `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${num(A4.ancho)} ${num(A4.alto)}] ` +
           `/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${idContenido(i)} 0 R >>`)
         const flujo = ordenes.join('\n')
         objeto(idContenido(i), `<< /Length ${flujo.length} >>\nstream\n${flujo}\nendstream`)
