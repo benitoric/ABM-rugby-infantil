@@ -973,22 +973,20 @@ function FilaManager({ j, viaje, pagos, abierto, onAbrir, actualizar, mutar }) {
   const [obs, setObs] = useState(j.observaciones || '')
   useEffect(() => { setObs(j.observaciones || '') }, [j.observaciones])
   const [cargandoPago, setCargandoPago] = useState(false)
+  const [editandoObs, setEditandoObs] = useState(false)
+  // El botón "Pago" se tilda solo cuando está pagado el 100 % del precio
+  const pagadoTodo = precio != null && precio > 0 && j.pagado >= precio
 
   return (
     <div className="tarjeta viaje-manager">
-      <div className="fila entre" style={{ flexWrap: 'nowrap' }}>
-        <div className="crece" style={{ minWidth: 0 }}>
-          <div className="nombre-jugador">{nombreCompleto(j)}</div>
-          <div className="mini">
-            {precio == null
-              ? (j.pagado > 0 ? `Pagó ${pesos(j.pagado)}` : 'Sin pagos')
-              : falta > 0
-                ? <>Pagó {pesos(j.pagado)} · <span className="pendiente">falta {pesos(falta)}</span></>
-                : <span className="ok">Pagó todo ({pesos(j.pagado)})</span>}
-            {j.cantidad_pagos > 0 && ` · ${j.cantidad_pagos} ${j.cantidad_pagos === 1 ? 'pago' : 'pagos'}`}
-          </div>
-        </div>
-        <button className="btn sec chico" onClick={onAbrir}>{abierto ? 'Cerrar' : 'Detalle'}</button>
+      <div className="nombre-jugador">{nombreCompleto(j)}</div>
+      <div className="mini">
+        {precio == null
+          ? (j.pagado > 0 ? `Pagó ${pesos(j.pagado)}` : 'Sin pagos')
+          : falta > 0
+            ? <>Pagó {pesos(j.pagado)} · <span className="pendiente">falta {pesos(falta)}</span></>
+            : <span className="ok">Pagó todo ({pesos(j.pagado)})</span>}
+        {j.cantidad_pagos > 0 && ` · ${j.cantidad_pagos} ${j.cantidad_pagos === 1 ? 'pago' : 'pagos'}`}
       </div>
       {precio != null && <BarraPago pagado={j.pagado} total={precio} />}
 
@@ -1005,6 +1003,15 @@ function FilaManager({ j, viaje, pagos, abierto, onAbrir, actualizar, mutar }) {
             {p.abrev}
           </button>
         ))}
+        {/* Pago: abre la carga y el historial; se tilda solo con el 100 % pagado */}
+        <button
+          className={`papel${pagadoTodo ? ' activo' : ''}${abierto ? ' abierto' : ''}`}
+          title={pagadoTodo ? 'Pagó todo el viaje' : 'Registrar un pago y ver el historial'}
+          onClick={onAbrir}
+        >
+          <span className="papel-marca">{pagadoTodo ? '✓' : '$'}</span>
+          Pago
+        </button>
       </div>
       {j.tiene_dni_app && !j.dni_copia && (
         <div className="mini" style={{ marginTop: 6 }} title="El DNI está escaneado en el padrón">
@@ -1012,8 +1019,34 @@ function FilaManager({ j, viaje, pagos, abierto, onAbrir, actualizar, mutar }) {
         </div>
       )}
 
+      {/* Observaciones para la casa que lo recibe: a la vista si las hay, y un
+          toque para cargarlas o corregirlas */}
+      {editandoObs ? (
+        <div className="campo" style={{ marginTop: 10, marginBottom: 0 }}>
+          <label>Observaciones para el viaje (alergias, medicación, comidas)</label>
+          <textarea
+            autoFocus
+            value={obs}
+            onChange={(e) => setObs(e.target.value)}
+            onBlur={() => {
+              if (obs !== (j.observaciones || '')) actualizar({ observaciones: obs || null })
+              setEditandoObs(false)
+            }}
+          />
+          <span className="mini">Se guardan solas al salir del campo y salen en la hoja de alojamiento.</span>
+        </div>
+      ) : (
+        <button className="obs-boton" onClick={() => setEditandoObs(true)}>
+          📝 {j.observaciones ? j.observaciones : <span className="mini">Agregar observaciones (alergias, medicación…)</span>}
+        </button>
+      )}
+
       {abierto && (
         <div style={{ marginTop: 10 }}>
+          <div className="fila entre" style={{ marginBottom: 6 }}>
+            <b>Pagos de {j.nombre}</b>
+            <button className="btn sec chico" onClick={onAbrir}>Cerrar</button>
+          </div>
           <FormPago
             j={j}
             viaje={viaje}
@@ -1052,16 +1085,7 @@ function FilaManager({ j, viaje, pagos, abierto, onAbrir, actualizar, mutar }) {
               ))}
             </div>
           )}
-
-          <div className="campo" style={{ marginTop: 10 }}>
-            <label>Observaciones para el viaje (alergias, medicación, comidas)</label>
-            <textarea
-              value={obs}
-              onChange={(e) => setObs(e.target.value)}
-              onBlur={() => { if (obs !== (j.observaciones || '')) actualizar({ observaciones: obs || null }) }}
-            />
-            <span className="mini">Se guardan solas al salir del campo y salen en la hoja de alojamiento.</span>
-          </div>
+          {!pagos.length && <div className="mini" style={{ marginTop: 8 }}>Todavía no tiene pagos cargados.</div>}
         </div>
       )}
     </div>
