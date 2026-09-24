@@ -5,7 +5,7 @@
 // contacto del tutor y sus observaciones) y, al final, los que todavía no
 // tienen casa. Usa el generador propio de src/pdf.js, como el boletín.
 
-import { nuevoPDF, partirTexto } from './pdf.js'
+import { anchoTexto, nuevoPDF, partirTexto, CELULAR } from './pdf.js'
 import {
   fechaCorta, fechasViaje, nombreCompleto, nombreStaff, PAPELES_VIAJE,
 } from './helpers.js'
@@ -75,99 +75,111 @@ const PAPELES_INFORME = PAPELES_VIAJE.filter((p) => p.clave !== 'dni_devuelto')
 const conPapelesDelInforme = (j) => PAPELES_INFORME.every((p) => j[p.clave])
 
 // Listado de los chicos del viaje con cada requisito cumplido o no (los
-// papeles previos al viaje del checklist de Managers). Una fila por chico y
-// una columna por papel con Sí/No en color. Arriba, cuántos tienen cada papel
-// y cuántos están completos. Sin datos del tutor: es una hoja de control.
-
+// papeles previos al viaje del checklist de Managers). Está pensado para
+// leerse en el celular: hoja angosta con proporción de pantalla, letra
+// grande, y cada chico en una franja con fondo verde (completo) o ámbar
+// (le falta algo) con las pastillas de cada papel pegadas debajo del nombre,
+// así se sigue cada renglón sin perderse. Sin datos del tutor: es una hoja
+// de control.
 export function generarPapelesPDF({ viaje, jugadores, generadoPor }) {
   const doc = nuevoPDF({
     titulo: `Papeles · ${viaje.nombre}`,
     autor: 'Rugby M12 · Tucumán Lawn Tennis',
+    hoja: CELULAR,
   })
-  const ancho = doc.ancho - M * 2
-  const der = doc.ancho - M
-  const limite = doc.alto - PIE
+  const m = 18
+  const ancho = doc.ancho - m * 2
+  const der = doc.ancho - m
+  const limite = doc.alto - 26
   const papeles = PAPELES_INFORME
-  const ANCHO_PAPEL = 78
-  const ANCHO_COMPLETO = 58
-  const xPapeles = der - ANCHO_COMPLETO - ANCHO_PAPEL * papeles.length
+  const ALTO_CAB = 50
 
   let y = 0
-  function encabezadoTabla() {
-    doc.rect(M, y, ancho, 18, AZUL_CLARO)
-    doc.texto('JUGADOR', M + 6, y + 6, { tam: 7, negrita: true, color: GRIS })
-    papeles.forEach((p, i) => {
-      doc.texto(p.abrev.toUpperCase(), xPapeles + i * ANCHO_PAPEL + ANCHO_PAPEL / 2, y + 6,
-        { tam: 6.5, negrita: true, color: GRIS, alinear: 'centro' })
-    })
-    doc.texto('COMPLETO', der - ANCHO_COMPLETO / 2, y + 6, { tam: 6.5, negrita: true, color: GRIS, alinear: 'centro' })
-    y += 22
-  }
-  function nuevaHoja(primera) {
+  function cabecera(primera) {
     if (!primera) doc.nuevaPagina()
-    cabeceraHoja(doc, viaje, 'PAPELES DE LA GIRA', !primera)
-    y = ALTO_CABECERA + 20
-    if (!primera) encabezadoTabla()
+    doc.rect(0, 0, doc.ancho, ALTO_CAB, AZUL)
+    doc.rect(0, ALTO_CAB, doc.ancho, 3, DORADO)
+    doc.texto('PAPELES DE LA GIRA', m, 10, { tam: 8, negrita: true, color: DORADO })
+    // El nombre entra en una línea: si es largo, se achica la letra
+    let tam = 17
+    while (tam > 11 && anchoTexto(viaje.nombre, tam, true) > ancho) tam -= 1
+    doc.texto(viaje.nombre, m, 22, { tam, negrita: true, color: BLANCO })
+    if (!primera) doc.texto('(continúa)', der, 12, { tam: 8, color: [207, 220, 245], alinear: 'der' })
+    y = ALTO_CAB + 16
   }
   function asegurar(alto) {
     if (y + alto <= limite) return
-    nuevaHoja(false)
+    cabecera(false)
   }
-  nuevaHoja(true)
+  cabecera(true)
 
   // --- resumen ---
   const linea1 = [
     [viaje.destino, viaje.club_anfitrion].filter(Boolean).join(' · '),
     fechasViaje(viaje),
-  ].filter(Boolean).join('   ·   ')
-  doc.texto(linea1, M, y, { tam: 10.5, negrita: true, color: TINTA })
-  y += 16
+  ].filter(Boolean).join('  ·  ')
+  for (const l of partirTexto(linea1, ancho, 11, true)) {
+    doc.texto(l, m, y, { tam: 11, negrita: true, color: TINTA })
+    y += 14
+  }
   const completos = jugadores.filter(conPapelesDelInforme).length
   doc.texto(
     `${jugadores.length} ${jugadores.length === 1 ? 'jugador' : 'jugadores'} · ` +
-    `${completos} con todos los papeles · ${jugadores.length - completos} con pendientes`,
-    M, y, { tam: 9, color: GRIS })
-  y += 13
+    `${completos} ${completos === 1 ? 'completo' : 'completos'} · ${jugadores.length - completos} con pendientes`,
+    m, y, { tam: 10, color: GRIS })
+  y += 14
   doc.texto(
     papeles.map((p) => `${p.abrev} ${jugadores.filter((j) => j[p.clave]).length}/${jugadores.length}`)
       .join('   ·   '),
-    M, y, { tam: 9, color: GRIS })
-  y += 20
+    m, y, { tam: 10, color: GRIS })
+  y += 22
 
-  encabezadoTabla()
-
-  // --- una fila por chico ---
-  const pastilla = (x, yy, ok) => {
-    const w = 30
-    doc.rect(x - w / 2, yy, w, 12, ok ? VERDE_FONDO : ROJO_FONDO)
-    doc.texto(ok ? 'Sí' : 'No', x, yy + 2, {
-      tam: 8, negrita: true, color: ok ? VERDE_TEXTO : ROJO_TEXTO, alinear: 'centro',
-    })
-  }
+  // --- una franja por chico ---
+  const ALTO_FILA = 50
+  const ALTO_PASTILLA = 20
+  const hueco = 8
+  const anchoPastilla = (ancho - 16 - hueco * (papeles.length - 1)) / papeles.length
   for (const j of jugadores) {
-    const alto = 22
-    asegurar(alto)
+    asegurar(ALTO_FILA + 6)
     const completo = conPapelesDelInforme(j)
-    doc.linea(M, y, der, y, BORDE, 0.5)
-    if (!completo) doc.rect(M, y + 1, 2.5, alto - 2, AMBAR)
-    doc.texto(nombreCompleto(j), M + 6, y + 6, { tam: 9.5, negrita: true, color: TINTA })
-    papeles.forEach((p, i) => pastilla(xPapeles + i * ANCHO_PAPEL + ANCHO_PAPEL / 2, y + 5, !!j[p.clave]))
+    doc.rect(m, y, ancho, ALTO_FILA, completo ? VERDE_FONDO : AMBAR_FONDO)
+    doc.rect(m, y, 4, ALTO_FILA, completo ? VERDE : AMBAR)
+    let tam = 13
+    while (tam > 10 && anchoTexto(nombreCompleto(j), tam, true) > ancho - 16 - 60) tam -= 1
+    doc.texto(nombreCompleto(j), m + 12, y + 7, { tam, negrita: true, color: TINTA })
     if (completo) {
-      doc.rect(der - ANCHO_COMPLETO / 2 - 15, y + 5, 30, 12, VERDE)
-      doc.texto('OK', der - ANCHO_COMPLETO / 2, y + 7, { tam: 8, negrita: true, color: BLANCO, alinear: 'centro' })
+      doc.texto('COMPLETO', der - 8, y + 9, { tam: 8, negrita: true, color: VERDE_TEXTO, alinear: 'der' })
     } else {
       const faltan = papeles.filter((p) => !j[p.clave]).length
-      doc.texto(`falta${faltan === 1 ? '' : 'n'} ${faltan}`, der - ANCHO_COMPLETO / 2, y + 7,
-        { tam: 7.5, color: AMBAR_TEXTO, alinear: 'centro' })
+      doc.texto(`FALTA${faltan === 1 ? '' : 'N'} ${faltan}`, der - 8, y + 9,
+        { tam: 8, negrita: true, color: AMBAR_TEXTO, alinear: 'der' })
     }
-    y += alto
+    papeles.forEach((p, i) => {
+      const x = m + 12 + i * (anchoPastilla + hueco)
+      const yy = y + 25
+      const ok = !!j[p.clave]
+      doc.rect(x, yy, anchoPastilla, ALTO_PASTILLA, ok ? VERDE : ROJO_FONDO)
+      doc.texto(`${p.abrev}: ${ok ? 'Sí' : 'No'}`, x + anchoPastilla / 2, yy + 5, {
+        tam: 10, negrita: true, color: ok ? BLANCO : ROJO_TEXTO, alinear: 'centro',
+      })
+    })
+    y += ALTO_FILA + 6
   }
-  doc.linea(M, y, der, y, BORDE, 0.5)
   if (!jugadores.length) {
-    doc.texto('Todavía no hay jugadores en este viaje.', M, y + 10, { tam: 9.5, color: GRIS })
+    doc.texto('Todavía no hay jugadores en este viaje.', m, y, { tam: 11, color: GRIS })
   }
 
-  pieDeHojas(doc, generadoPor)
+  // --- pie ---
+  const total = doc.paginas
+  const generado = `Generado el ${new Date().toLocaleDateString('es-AR')}` +
+    (generadoPor ? ` por ${generadoPor}` : '')
+  for (let i = 0; i < total; i++) {
+    doc.enPagina(i, () => {
+      doc.linea(m, doc.alto - 18, der, doc.alto - 18, BORDE, 0.6)
+      doc.texto(generado, m, doc.alto - 14, { tam: 7, color: GRIS })
+      doc.texto(`Hoja ${i + 1} de ${total}`, der, doc.alto - 14, { tam: 7, color: GRIS, alinear: 'der' })
+    })
+  }
   return new Blob([doc.bytes()], { type: 'application/pdf' })
 }
 
