@@ -411,6 +411,8 @@ create table if not exists viaje_grupos (
   -- Orden de creación, para numerarlos ("Casa 1", "Casa 2"…)
   numero int not null,
   familia_nombre text,
+  -- Quién atiende ese teléfono (la mamá, el papá, la abuela…)
+  familia_contacto text,
   familia_telefono text,
   familia_direccion text,
   -- Lo que conviene saber de la casa: mascotas, otros chicos, cómo llegar

@@ -65,8 +65,12 @@ export async function migracionesAplicadas(pool) {
          and column_name = 'dni_devuelto') as existe_dni_devuelto,
        exists (select 1 from information_schema.columns
        where table_schema = 'public' and table_name = 'viaje_jugadores'
-         and column_name = 'ficha_medica') as sobra_ficha_medica`)
-  if (!col.existe || !col.existe_alta || !col.existe_dni_devuelto || col.sobra_ficha_medica) return false
+         and column_name = 'ficha_medica') as sobra_ficha_medica,
+       exists (select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'viaje_grupos'
+         and column_name = 'familia_contacto') as existe_contacto`)
+  if (!col.existe || !col.existe_alta || !col.existe_dni_devuelto || col.sobra_ficha_medica
+      || !col.existe_contacto) return false
   const { rows: [t] } = await pool.query(
     `select to_regclass('public.evento_plantel') is not null
         and to_regclass('public.plan_tecnico') is not null
@@ -371,12 +375,16 @@ export async function migrar(pool) {
     viaje_id uuid not null references viajes(id) on delete cascade,
     numero int not null,
     familia_nombre text,
+    familia_contacto text,
     familia_telefono text,
     familia_direccion text,
     familia_notas text,
     created_at timestamptz not null default now(),
     unique (viaje_id, numero)
   )`)
+  // De quién es el teléfono de la familia que recibe. Columna más nueva:
+  // testigo en migracionesAplicadas.
+  await pool.query('alter table viaje_grupos add column if not exists familia_contacto text')
   await pool.query(`create table if not exists viaje_jugadores (
     viaje_id uuid not null references viajes(id) on delete cascade,
     jugador_id uuid not null references jugadores(id) on delete cascade,

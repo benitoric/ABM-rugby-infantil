@@ -14,7 +14,7 @@ const COLS_VIAJE = `v.id, v.nombre, v.destino, v.club_anfitrion,
   v.precio::float8 as precio, v.cuotas, v.notas, v.creado_por,
   v.created_at::text as created_at`
 
-const COLS_GRUPO = `id, viaje_id, numero, familia_nombre, familia_telefono,
+const COLS_GRUPO = `id, viaje_id, numero, familia_nombre, familia_contacto, familia_telefono,
   familia_direccion, familia_notas`
 
 const COLS_PAGO = `id, viaje_id, jugador_id, fecha::text as fecha,
@@ -244,15 +244,15 @@ export async function enrutarViajes({ metodo, p, b, yo, admin }) {
   // ---------- grupos de alojados (una casa por grupo) ----------
   if (p[2] === 'grupos') {
     const datosGrupo = (c) => [
-      texto(c?.familia_nombre, 120), texto(c?.familia_telefono, 60),
+      texto(c?.familia_nombre, 120), texto(c?.familia_contacto, 120), texto(c?.familia_telefono, 60),
       texto(c?.familia_direccion, 200), texto(c?.familia_notas, 1000),
     ]
     if (metodo === 'POST' && !p[3]) {
       const [g] = await query(
-        `insert into viaje_grupos (viaje_id, numero, familia_nombre, familia_telefono,
-           familia_direccion, familia_notas)
+        `insert into viaje_grupos (viaje_id, numero, familia_nombre, familia_contacto,
+           familia_telefono, familia_direccion, familia_notas)
          values ($1, (select coalesce(max(numero), 0) + 1 from viaje_grupos where viaje_id = $1),
-                 $2, $3, $4, $5)
+                 $2, $3, $4, $5, $6)
          returning ${COLS_GRUPO}`, [viajeId, ...datosGrupo(b)])
       // Se puede crear la casa ya con sus chicos adentro
       const ids = Array.isArray(b?.jugador_ids) ? b.jugador_ids.map(String) : []
@@ -265,9 +265,9 @@ export async function enrutarViajes({ metodo, p, b, yo, admin }) {
     }
     if (metodo === 'PUT' && p[3]) {
       const filas = await query(
-        `update viaje_grupos set familia_nombre=$1, familia_telefono=$2,
-           familia_direccion=$3, familia_notas=$4
-         where id=$5 and viaje_id=$6 returning id`, [...datosGrupo(b), p[3], viajeId])
+        `update viaje_grupos set familia_nombre=$1, familia_contacto=$2, familia_telefono=$3,
+           familia_direccion=$4, familia_notas=$5
+         where id=$6 and viaje_id=$7 returning id`, [...datosGrupo(b), p[3], viajeId])
       if (!filas.length) throw { codigo: 404, error: 'no_existe' }
       return detalle(viajeId)
     }
