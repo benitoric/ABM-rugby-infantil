@@ -1429,3 +1429,27 @@ details.tarjeta summary {
   .viaje-casa { break-inside: avoid; page-break-inside: avoid; }
   .casa-miembro { border-top-color: #ccc; }
 }
+
+/* ---------- aviso de versión nueva ---------- */
+.aviso-version {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--dorado);
+  color: #3b2f00;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.aviso-version button {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  background: var(--primario);
+  color: #fff;
+  font-weight: 700;
+}

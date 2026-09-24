@@ -10,6 +10,7 @@ import Staff from './pages/Staff.jsx'
 import Padron from './pages/Padron.jsx'
 import Avisos from './pages/Avisos.jsx'
 import { VERSION } from './version.js'
+import { useVersionNueva } from './actualizacion.js'
 
 // Pestañas de quienes ven todo (entrenadores, PF, cabeza de división)
 const TABS_COMPLETO = [
@@ -44,6 +45,7 @@ const tabDeHash = (tabs) => {
 
 export default function App() {
   const [staff, setStaff] = useState(undefined) // undefined = cargando, null = sin sesión
+  const versionNueva = useVersionNueva()
   const [tab, setTab] = useState(() => tabDeHash(TABS_COMPLETO))
   const TABS = tabsDe(staff)
 
@@ -65,11 +67,21 @@ export default function App() {
     setStaff(null)
   }
 
+  // Hay un deploy más nuevo que lo que corre en esta pestaña: se ofrece
+  // recargar, arriba de todo, también en el login
+  const avisoVersion = versionNueva && (
+    <div className="aviso-version no-imprimir">
+      <span>Hay una versión nueva de la app.</span>
+      <button onClick={() => location.reload()}>Actualizar</button>
+    </div>
+  )
+
   if (staff === undefined) return <div className="vacio">Cargando…</div>
-  if (!staff) return <Login onIngreso={setStaff} />
+  if (!staff) return <>{avisoVersion}<Login onIngreso={setStaff} /></>
 
   return (
     <div className="app">
+      {avisoVersion}
       <header className="header no-imprimir">
         <div>
           <h1>Rugby M12</h1>
