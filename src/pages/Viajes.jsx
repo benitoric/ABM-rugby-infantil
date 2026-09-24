@@ -6,7 +6,7 @@ import {
   fechasViaje, fichaMedica, nombreCompleto, nombreStaff, papelesCompletos, pesos,
   MEDIOS_PAGO, PAPELES_VIAJE,
 } from '../helpers.js'
-import { compartirArchivo } from '../pdf.js'
+import { verOCompartirArchivo } from '../pdf.js'
 import { generarAlojadosPDF, nombreArchivoAlojados } from '../viajePDF.js'
 
 // Giras a otras provincias. La posición vive en el hash:
@@ -110,7 +110,8 @@ export default function Viajes({ yo }) {
 
 function TarjetaViaje({ v }) {
   const estado = estadoViaje(v)
-  const esperado = v.precio != null ? v.precio * v.jugadores : null
+  // Precio en cero o sin cargar: todavía no hay nada que cobrar
+  const esperado = v.precio ? v.precio * v.jugadores : null
   return (
     <button className="tarjeta viaje-item" onClick={() => irA('viajes', v.id)}>
       <div className="fila entre" style={{ flexWrap: 'nowrap' }}>
@@ -334,7 +335,7 @@ function DetalleViaje({ id, yo, staff, onVolver, onCambio }) {
   const sinAlojar = jugadores.filter((j) => !j.grupo_id)
   const conPapeles = jugadores.filter(papelesCompletos)
   const cobrado = pagos.reduce((s, p) => s + p.monto, 0)
-  const esperado = viaje.precio != null ? viaje.precio * jugadores.length : null
+  const esperado = viaje.precio ? viaje.precio * jugadores.length : null
 
   return (
     <div className="contenido">
@@ -442,7 +443,7 @@ function VistaJugadores({ datos, mutar }) {
         j.apellido, j.nombre, j.dni || '', fechaCorta(j.fecha_nacimiento), edad(j.fecha_nacimiento) ?? '',
         j.tutor_nombre || '', j.tutor_telefono || '', g ? `Casa ${g.numero}` : '', g?.familia_nombre || '',
         ...PAPELES_VIAJE.map((p) => (j[p.clave] ? 'Sí' : 'No')),
-        j.pagado, viaje.precio == null ? '' : Math.max(0, viaje.precio - j.pagado),
+        j.pagado, !viaje.precio ? '' : Math.max(0, viaje.precio - j.pagado),
         j.observaciones || '',
       ])
     }
@@ -611,7 +612,8 @@ function VistaAlojamiento({ datos, yo, mutar, actualizarJugador }) {
   const [generando, setGenerando] = useState(false)
 
   // Informe en PDF con todo lo de esta vista, para el club anfitrión y para
-  // llevar impreso. En el celular se comparte (WhatsApp); si no, se descarga.
+  // llevar impreso. En el celular se comparte (WhatsApp); en la PC se abre
+  // en una pestaña para verlo y guardarlo desde ahí.
   async function informePDF() {
     setGenerando(true)
     try {
@@ -619,7 +621,7 @@ function VistaAlojamiento({ datos, yo, mutar, actualizarJugador }) {
         viaje, staff: datos.staff, grupos, jugadores,
         generadoPor: yo?.nombre || yo?.email,
       })
-      await compartirArchivo(blob, nombreArchivoAlojados(viaje), `Alojados · ${viaje.nombre}`)
+      await verOCompartirArchivo(blob, nombreArchivoAlojados(viaje), `Alojados · ${viaje.nombre}`)
     } finally {
       setGenerando(false)
     }
@@ -628,22 +630,22 @@ function VistaAlojamiento({ datos, yo, mutar, actualizarJugador }) {
   const miembros = (g) => jugadores.filter((j) => j.grupo_id === g.id)
 
   function descargar() {
-    const filas = [['Casa', 'Familia', 'Teléfono', 'Dirección', 'Notas de la casa',
+    const filas = [['Casa', 'Familia', 'Contacto', 'Teléfono', 'Dirección', 'Notas de la casa',
       'Jugador', 'Tutor', 'Tel. tutor', 'Observaciones del jugador']]
     for (const g of grupos) {
       const del = miembros(g)
       if (!del.length) {
-        filas.push([`Casa ${g.numero}`, g.familia_nombre || '', g.familia_telefono || '',
+        filas.push([`Casa ${g.numero}`, g.familia_nombre || '', g.familia_contacto || '', g.familia_telefono || '',
           g.familia_direccion || '', g.familia_notas || '', '', '', '', ''])
       }
       for (const j of del) {
-        filas.push([`Casa ${g.numero}`, g.familia_nombre || '', g.familia_telefono || '',
+        filas.push([`Casa ${g.numero}`, g.familia_nombre || '', g.familia_contacto || '', g.familia_telefono || '',
           g.familia_direccion || '', g.familia_notas || '', nombreCompleto(j),
           j.tutor_nombre || '', j.tutor_telefono || '', j.observaciones || ''])
       }
     }
     for (const j of sinAlojar) {
-      filas.push(['Sin alojar', '', '', '', '', nombreCompleto(j),
+      filas.push(['Sin alojar', '', '', '', '', '', nombreCompleto(j),
         j.tutor_nombre || '', j.tutor_telefono || '', j.observaciones || ''])
     }
     descargarCSV(`${viaje.nombre} - alojamiento.csv`, filas)
@@ -708,10 +710,11 @@ function VistaAlojamiento({ datos, yo, mutar, actualizarJugador }) {
             <div className="fila entre" style={{ flexWrap: 'nowrap', alignItems: 'flex-start' }}>
               <div className="crece" style={{ minWidth: 0 }}>
                 <h3>🏠 {nombreCasa(g)}</h3>
-                {(g.familia_telefono || g.familia_direccion) && (
+                {(g.familia_telefono || g.familia_contacto || g.familia_direccion) && (
                   <div className="mini">
+                    {g.familia_contacto && `${g.familia_contacto}${g.familia_telefono ? ': ' : ''}`}
                     {g.familia_telefono && <Telefono numero={g.familia_telefono} />}
-                    {g.familia_telefono && g.familia_direccion ? ' · ' : ''}
+                    {(g.familia_telefono || g.familia_contacto) && g.familia_direccion ? ' · ' : ''}
                     {g.familia_direccion}
                   </div>
                 )}
@@ -792,6 +795,7 @@ function VistaAlojamiento({ datos, yo, mutar, actualizarJugador }) {
 function FormGrupo({ grupo, sinAlojar, onCerrar, onGuardar }) {
   const [f, setF] = useState(() => ({
     familia_nombre: grupo?.familia_nombre || '',
+    familia_contacto: grupo?.familia_contacto || '',
     familia_telefono: grupo?.familia_telefono || '',
     familia_direccion: grupo?.familia_direccion || '',
     familia_notas: grupo?.familia_notas || '',
@@ -831,10 +835,17 @@ function FormGrupo({ grupo, sinAlojar, onCerrar, onGuardar }) {
           <input autoFocus placeholder="Apellido de la familia" value={f.familia_nombre}
                  onChange={(e) => editar({ familia_nombre: e.target.value })} />
         </div>
-        <div className="campo">
-          <label>Teléfono</label>
-          <input type="tel" placeholder="381 555 5555" value={f.familia_telefono}
-                 onChange={(e) => editar({ familia_telefono: e.target.value })} />
+        <div className="grid2">
+          <div className="campo">
+            <label>Contacto (de quién es el teléfono)</label>
+            <input placeholder="María" value={f.familia_contacto}
+                   onChange={(e) => editar({ familia_contacto: e.target.value })} />
+          </div>
+          <div className="campo">
+            <label>Teléfono</label>
+            <input type="tel" placeholder="381 555 5555" value={f.familia_telefono}
+                   onChange={(e) => editar({ familia_telefono: e.target.value })} />
+          </div>
         </div>
         <div className="campo">
           <label>Dirección</label>
@@ -873,9 +884,10 @@ function VistaManagers({ datos, mutar, actualizarJugador }) {
   const { viaje, jugadores, pagos } = datos
   const [filtro, setFiltro] = useState('todos')
   const [abierto, setAbierto] = useState(null) // jugador_id con el detalle abierto
-  const precio = viaje.precio
+  // Precio en cero o sin cargar vale lo mismo: todavía no hay nada que cobrar
+  const precio = viaje.precio || null
   const cobrado = pagos.reduce((s, p) => s + p.monto, 0)
-  const esperado = precio != null ? precio * jugadores.length : null
+  const esperado = precio ? precio * jugadores.length : null
 
   const falta = (j) => (precio == null ? null : Math.max(0, precio - j.pagado))
   const pendiente = (j) => !papelesCompletos(j) || (falta(j) != null && falta(j) > 0)
@@ -968,21 +980,22 @@ function BarraPago({ pagado, total }) {
 }
 
 function FilaManager({ j, viaje, pagos, abierto, onAbrir, actualizar, mutar }) {
-  const precio = viaje.precio
+  // Sin precio (o en cero) no hay "pagó todo": ni la leyenda ni el tilde
+  const precio = viaje.precio || null
   const falta = precio == null ? null : Math.max(0, precio - j.pagado)
   const [obs, setObs] = useState(j.observaciones || '')
   useEffect(() => { setObs(j.observaciones || '') }, [j.observaciones])
   const [cargandoPago, setCargandoPago] = useState(false)
   const [editandoObs, setEditandoObs] = useState(false)
   // El botón "Pago" se tilda solo cuando está pagado el 100 % del precio
-  const pagadoTodo = precio != null && precio > 0 && j.pagado >= precio
+  const pagadoTodo = precio != null && j.pagado >= precio
 
   return (
     <div className="tarjeta viaje-manager">
       <div className="nombre-jugador">{nombreCompleto(j)}</div>
       <div className="mini">
         {precio == null
-          ? (j.pagado > 0 ? `Pagó ${pesos(j.pagado)}` : 'Sin pagos')
+          ? (j.pagado > 0 ? `Pagó ${pesos(j.pagado)} · sin precio cargado` : 'Sin precio cargado')
           : falta > 0
             ? <>Pagó {pesos(j.pagado)} · <span className="pendiente">falta {pesos(falta)}</span></>
             : <span className="ok">Pagó todo ({pesos(j.pagado)})</span>}
@@ -1093,7 +1106,7 @@ function FilaManager({ j, viaje, pagos, abierto, onAbrir, actualizar, mutar }) {
 }
 
 function FormPago({ j, viaje, cargando, onGuardar }) {
-  const cuota = viaje.cuotas > 1 && viaje.precio != null ? viaje.precio / viaje.cuotas : null
+  const cuota = viaje.cuotas > 1 && viaje.precio ? viaje.precio / viaje.cuotas : null
   const [f, setF] = useState(() => ({
     monto: cuota != null ? String(Math.round(cuota * 100) / 100) : '',
     fecha: hoy(),
@@ -1172,8 +1185,8 @@ function VistaDatos({ datos, yo, onEditar, onBorrar }) {
           <dt>Regreso</dt><dd>{viaje.fecha_regreso ? fechaCorta(viaje.fecha_regreso) : '—'}</dd>
           <dt>Precio</dt>
           <dd>
-            {viaje.precio == null ? '—' : pesos(viaje.precio)}
-            {viaje.precio != null && viaje.cuotas > 1 && ` en ${viaje.cuotas} cuotas de ${pesos(viaje.precio / viaje.cuotas)}`}
+            {!viaje.precio ? 'Sin cargar' : pesos(viaje.precio)}
+            {!!viaje.precio && viaje.cuotas > 1 && ` en ${viaje.cuotas} cuotas de ${pesos(viaje.precio / viaje.cuotas)}`}
           </dd>
           <dt>Staff que viaja</dt>
           <dd>{staff.length ? staff.map(nombreStaff).join(', ') : '—'}</dd>

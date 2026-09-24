@@ -225,6 +225,26 @@ export async function compartirArchivo(blob, nombre, texto) {
   return 'descargado'
 }
 
+// Ver o compartir: en el celular con Web Share se comparte (WhatsApp y demás);
+// en la PC se abre en una pestaña nueva, donde el visor del navegador lo
+// muestra y deja guardarlo o imprimirlo. Si el navegador bloquea la pestaña,
+// se descarga. La pestaña se abre ANTES de cualquier espera, para que el
+// bloqueador de ventanas la tome como respuesta al toque del usuario.
+export async function verOCompartirArchivo(blob, nombre, texto) {
+  const archivo = new File([blob], nombre, { type: blob.type })
+  if (navigator.canShare?.({ files: [archivo] })) return compartirArchivo(blob, nombre, texto)
+  const url = URL.createObjectURL(blob)
+  const ventana = window.open(url, '_blank')
+  if (!ventana) {
+    URL.revokeObjectURL(url)
+    descargarArchivo(blob, nombre)
+    return 'descargado'
+  }
+  // El visor ya tiene el archivo cargado; la URL se libera un rato después
+  setTimeout(() => URL.revokeObjectURL(url), 60000)
+  return 'abierto'
+}
+
 export function descargarArchivo(blob, nombre) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

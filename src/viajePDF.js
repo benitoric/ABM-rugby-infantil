@@ -128,8 +128,10 @@ export function generarAlojadosPDF({ viaje, staff = [], grupos, jugadores, gener
     // Título de la casa y datos de la familia: van juntos con al menos el
     // primer chico, para que no quede un título solo al pie de la hoja
     const titulo = g.familia_nombre ? `Casa ${g.numero} · Familia ${g.familia_nombre}` : `Casa ${g.numero}`
-    const contacto = [g.familia_telefono ? `Tel. ${g.familia_telefono}` : null, g.familia_direccion]
-      .filter(Boolean).join('   ·   ')
+    const telefono = g.familia_telefono
+      ? `${g.familia_contacto ? `${g.familia_contacto}: ` : 'Tel. '}${g.familia_telefono}`
+      : g.familia_contacto || null
+    const contacto = [telefono, g.familia_direccion].filter(Boolean).join('   ·   ')
     const notas = g.familia_notas ? partirTexto(g.familia_notas, ancho - 24, 8.5) : []
     const altoTitulo = 24 + (contacto ? 12 : 0) + notas.length * 11 + 6
     asegurar(altoTitulo + 22)
