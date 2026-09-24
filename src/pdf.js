@@ -225,14 +225,25 @@ export async function compartirArchivo(blob, nombre, texto) {
   return 'descargado'
 }
 
-// Ver o compartir: en el celular con Web Share se comparte (WhatsApp y demás);
-// en la PC se abre en una pestaña nueva, donde el visor del navegador lo
-// muestra y deja guardarlo o imprimirlo. Si el navegador bloquea la pestaña,
-// se descarga. La pestaña se abre ANTES de cualquier espera, para que el
-// bloqueador de ventanas la tome como respuesta al toque del usuario.
+// ¿Es un celular o una tablet? Decide entre compartir (WhatsApp y demás) y
+// abrir el archivo en una pestaña. No alcanza con preguntar si el navegador
+// sabe compartir: Chrome y Edge en Windows dicen que sí y después la ventana
+// de compartir falla o se cancela sola, y el usuario no ve nada.
+export function esMovil() {
+  const ua = navigator.userAgent || ''
+  // iPad con iPadOS se presenta como Mac, pero con pantalla táctil
+  if (/Mac/.test(ua) && navigator.maxTouchPoints > 1) return true
+  if (navigator.userAgentData?.mobile != null) return navigator.userAgentData.mobile
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(ua)
+}
+
+// Ver o compartir: en el celular se comparte (WhatsApp y demás); en la PC se
+// abre en una pestaña nueva, donde el visor del navegador lo muestra y deja
+// guardarlo o imprimirlo. Si el navegador bloquea la pestaña, se descarga. La
+// pestaña se abre ANTES de cualquier espera, para que el bloqueador de
+// ventanas la tome como respuesta al toque del usuario.
 export async function verOCompartirArchivo(blob, nombre, texto) {
-  const archivo = new File([blob], nombre, { type: blob.type })
-  if (navigator.canShare?.({ files: [archivo] })) return compartirArchivo(blob, nombre, texto)
+  if (esMovil()) return compartirArchivo(blob, nombre, texto)
   const url = URL.createObjectURL(blob)
   const ventana = window.open(url, '_blank')
   if (!ventana) {
