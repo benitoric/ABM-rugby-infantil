@@ -1382,11 +1382,13 @@ details.tarjeta summary {
   font-size: 0.8rem;
   font-weight: 800;
 }
+.papel:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .papel.activo { background: #dcfce7; border-color: var(--ok); color: #15803d; }
 .papel.activo .papel-marca { background: var(--ok); border-color: var(--ok); color: #fff; }
 @media (min-width: 720px) {
-  .papeles { grid-template-columns: repeat(4, 1fr); }
+  .papeles { grid-template-columns: repeat(3, 1fr); }
   .papel { min-height: 44px; font-size: 0.85rem; }
+  .papel:last-child:nth-child(odd) { grid-column: auto; }
 }
 .form-pago { background: var(--fondo); border-radius: 10px; padding: 10px; }
 .form-pago .campo { margin-bottom: 8px; }
