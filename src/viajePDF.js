@@ -7,7 +7,7 @@
 
 import { nuevoPDF, partirTexto } from './pdf.js'
 import {
-  fechaCorta, fechasViaje, nombreCompleto, nombreStaff, papelesCompletos, PAPELES_VIAJE,
+  fechaCorta, fechasViaje, nombreCompleto, nombreStaff, PAPELES_VIAJE,
 } from './helpers.js'
 
 const AZUL = [26, 74, 158]
@@ -69,9 +69,14 @@ function pieDeHojas(doc, generadoPor) {
   }
 }
 
+// Papeles que van al informe: los que hay que juntar ANTES de viajar. La
+// devolución del DNI es del regreso y el pago se sigue aparte, así que no van.
+const PAPELES_INFORME = PAPELES_VIAJE.filter((p) => p.clave !== 'dni_devuelto')
+const conPapelesDelInforme = (j) => PAPELES_INFORME.every((p) => j[p.clave])
+
 // Listado de los chicos del viaje con cada requisito cumplido o no (los
-// papeles del checklist de Managers, sin el pago). Una fila por chico con el
-// tutor y su teléfono, y una columna por papel con Sí/No en color. Arriba,
+// papeles previos al viaje del checklist de Managers). Una fila por chico con
+// el tutor y su teléfono, y una columna por papel con Sí/No en color. Arriba,
 // cuántos tienen cada papel y cuántos están completos.
 export function generarPapelesPDF({ viaje, jugadores, generadoPor }) {
   const doc = nuevoPDF({
@@ -81,8 +86,8 @@ export function generarPapelesPDF({ viaje, jugadores, generadoPor }) {
   const ancho = doc.ancho - M * 2
   const der = doc.ancho - M
   const limite = doc.alto - PIE
-  const papeles = PAPELES_VIAJE
-  const ANCHO_PAPEL = 68
+  const papeles = PAPELES_INFORME
+  const ANCHO_PAPEL = 78
   const ANCHO_COMPLETO = 58
   const xPapeles = der - ANCHO_COMPLETO - ANCHO_PAPEL * papeles.length
 
@@ -116,7 +121,7 @@ export function generarPapelesPDF({ viaje, jugadores, generadoPor }) {
   ].filter(Boolean).join('   ·   ')
   doc.texto(linea1, M, y, { tam: 10.5, negrita: true, color: TINTA })
   y += 16
-  const completos = jugadores.filter(papelesCompletos).length
+  const completos = jugadores.filter(conPapelesDelInforme).length
   doc.texto(
     `${jugadores.length} ${jugadores.length === 1 ? 'jugador' : 'jugadores'} · ` +
     `${completos} con todos los papeles · ${jugadores.length - completos} con pendientes`,
@@ -143,7 +148,7 @@ export function generarPapelesPDF({ viaje, jugadores, generadoPor }) {
       .filter(Boolean).join(' · ')
     const alto = 26
     asegurar(alto)
-    const completo = papelesCompletos(j)
+    const completo = conPapelesDelInforme(j)
     doc.linea(M, y, der, y, BORDE, 0.5)
     if (!completo) doc.rect(M, y + 1, 2.5, alto - 2, AMBAR)
     doc.texto(nombreCompleto(j), M + 6, y + 4, { tam: 9.5, negrita: true, color: TINTA })
