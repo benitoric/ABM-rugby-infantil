@@ -5,6 +5,7 @@ import {
   puestoPrincipal, tipoJugador, APTITUDES, AREAS, ESTADOS, PUESTOS,
 } from '../helpers.js'
 import { FormJugador } from './Jugadores.jsx'
+import { Telefono } from '../telefono.jsx'
 import { FormEvaluacion, TarjetaEvaluacion } from './Evaluacion.jsx'
 import Documentos from './Documentos.jsx'
 import GraficoEvolucion from './GraficoEvolucion.jsx'
@@ -168,7 +169,7 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
         {(j.tutor_nombre || j.tutor_telefono) && (
           <p className="suave" style={{ marginTop: 10 }}>
             Tutor: {j.tutor_nombre || '—'}
-            {j.tutor_telefono && <> · <a href={`tel:${j.tutor_telefono}`}>{j.tutor_telefono}</a></>}
+            {j.tutor_telefono && <> · <Telefono numero={j.tutor_telefono} /></>}
           </p>
         )}
         {j.observaciones && <p className="suave" style={{ marginTop: 6 }}>📝 {j.observaciones}</p>}

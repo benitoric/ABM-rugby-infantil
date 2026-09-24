@@ -7,7 +7,10 @@ import {
   MEDIOS_PAGO, PAPELES_VIAJE,
 } from '../helpers.js'
 import { verOCompartirArchivo } from '../pdf.js'
-import { generarAlojadosPDF, nombreArchivoAlojados } from '../viajePDF.js'
+import {
+  generarAlojadosPDF, generarPapelesPDF, nombreArchivoAlojados, nombreArchivoPapeles,
+} from '../viajePDF.js'
+import { Telefono } from '../telefono.jsx'
 
 // Giras a otras provincias. La posición vive en el hash:
 // #/viajes (listado) y #/viajes/<id>/<vista> (un viaje, en una de sus vistas).
@@ -26,12 +29,6 @@ const iniciales = (j) => `${(j.nombre || '?')[0]}${(j.apellido || '')[0] || ''}`
 function nombreCasa(g) {
   if (!g) return ''
   return g.familia_nombre ? `Casa ${g.numero} · Flia. ${g.familia_nombre}` : `Casa ${g.numero}`
-}
-
-// Teléfono como link para llamar desde el celular
-function Telefono({ numero }) {
-  if (!numero) return null
-  return <a href={`tel:${numero.replace(/[^\d+]/g, '')}`}>{numero}</a>
 }
 
 export default function Viajes({ yo }) {
@@ -397,7 +394,7 @@ function DetalleViaje({ id, yo, staff, onVolver, onCambio }) {
         <VistaAlojamiento datos={datos} yo={yo} mutar={mutar} actualizarJugador={actualizarJugador} />
       )}
       {vista === 'managers' && (
-        <VistaManagers datos={datos} mutar={mutar} actualizarJugador={actualizarJugador} />
+        <VistaManagers datos={datos} yo={yo} mutar={mutar} actualizarJugador={actualizarJugador} />
       )}
       {vista === 'datos' && (
         <VistaDatos
@@ -880,10 +877,23 @@ function FormGrupo({ grupo, sinAlojar, onCerrar, onGuardar }) {
 }
 
 // ---------- vista: managers (cobros y papeles) ----------
-function VistaManagers({ datos, mutar, actualizarJugador }) {
+function VistaManagers({ datos, yo, mutar, actualizarJugador }) {
   const { viaje, jugadores, pagos } = datos
   const [filtro, setFiltro] = useState('todos')
   const [abierto, setAbierto] = useState(null) // jugador_id con el detalle abierto
+  const [generando, setGenerando] = useState(false)
+
+  // Listado de los chicos con cada requisito cumplido o no, sin el pago:
+  // es para repasar qué papeles faltan, no para cobrar
+  async function informePapeles() {
+    setGenerando(true)
+    try {
+      const blob = generarPapelesPDF({ viaje, jugadores, generadoPor: yo?.nombre || yo?.email })
+      await verOCompartirArchivo(blob, nombreArchivoPapeles(viaje), `Papeles · ${viaje.nombre}`)
+    } finally {
+      setGenerando(false)
+    }
+  }
   // Precio en cero o sin cargar vale lo mismo: todavía no hay nada que cobrar
   const precio = viaje.precio || null
   const cobrado = pagos.reduce((s, p) => s + p.monto, 0)
@@ -935,6 +945,14 @@ function VistaManagers({ datos, mutar, actualizarJugador }) {
         </div>
       </div>
 
+      {jugadores.length > 0 && (
+        <div className="fila entre">
+          <h3>Papeles y pagos de cada chico</h3>
+          <button className="btn sec chico" disabled={generando} onClick={informePapeles}>
+            {generando ? 'Armando…' : '📄 PDF de papeles'}
+          </button>
+        </div>
+      )}
       {jugadores.length > 0 && (
         <div className="seg">
           <button className={filtro === 'todos' ? 'activo' : ''} onClick={() => setFiltro('todos')}>

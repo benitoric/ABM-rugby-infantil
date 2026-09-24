@@ -1453,3 +1453,6 @@ details.tarjeta summary {
   color: #fff;
   font-weight: 700;
 }
+
+/* Teléfono tocable dentro de una fila que ya es botón */
+.tel-link { color: var(--primario); text-decoration: underline; cursor: pointer; }

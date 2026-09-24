@@ -4,6 +4,7 @@ import { edad, fechaCorta, fichaMedica, nombreCompleto } from '../helpers.js'
 import { base64ABlob } from '../archivos.js'
 import { irA, leerHash, suscribir } from '../navegacion.js'
 import Documentos from './Documentos.jsx'
+import { Telefono } from '../telefono.jsx'
 
 // Padrón administrativo: la vista de los chicos para los managers. Datos de
 // contacto, DNI, fecha de nacimiento, ficha médica y los escaneos del DNI, y
@@ -134,7 +135,7 @@ export default function Padron() {
               <div className="mini">
                 {j.dni ? `DNI ${j.dni}` : 'Sin DNI'}
                 {edad(j.fecha_nacimiento) != null ? ` · ${edad(j.fecha_nacimiento)} años` : ''}
-                {j.tutor_telefono ? ` · 📞 ${j.tutor_telefono}` : ''}
+                {j.tutor_telefono && <> · 📞 <Telefono numero={j.tutor_telefono} enBoton /></>}
               </div>
             </div>
             <span className={`badge ${fm.clase}`}>{fm.texto}</span>
@@ -217,7 +218,7 @@ function DetallePadron({ jugadorId, onVolver, onCambio }) {
         </div>
         <p className="suave" style={{ marginTop: 10 }}>
           Tutor: {j.tutor_nombre || '—'}
-          {j.tutor_telefono && <> · <a href={`tel:${j.tutor_telefono}`}>{j.tutor_telefono}</a></>}
+          {j.tutor_telefono && <> · <Telefono numero={j.tutor_telefono} /></>}
         </p>
       </div>
 
