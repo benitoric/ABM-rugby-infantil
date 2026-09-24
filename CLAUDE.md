@@ -19,6 +19,30 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
 - **Auth**: login email + contraseña contra la tabla `staff` (bcryptjs + JWT
   de 60 días firmado con `JWT_SECRET`). El primer ingreso de un email invitado
   crea su contraseña. Sin registro abierto: solo emails cargados en `staff`.
+- **Permisos por rol**: todo vive en `server/permisos.js`. Dos alcances:
+  `completo` (Cabeza de división, Entrenador, PF, PF/entrenador y el dueño
+  del repo) y `administrativo` (Manager principal y asistente, y cualquier rol
+  vacío o desconocido). Los managers suelen ser padres: **nunca** deben ver
+  asistencia, evaluaciones, entrenamientos, partidos, lesiones, tests,
+  seguimientos, boletines ni las observaciones de la ficha. El router aplica
+  una **lista blanca** (`rutaAdministrativa`) justo después de `autenticar`:
+  al alcance administrativo solo le pasan `me`, `viajes/*`, `padron/*`,
+  `documentos/*`, `push/*` y `GET staff` (sin `tiene_clave`); el resto
+  devuelve 403 `solo_entrenadores`. Una ruta nueva nace cerrada para ellos:
+  si tiene que abrirse, se agrega a la lista y se prueba en
+  `scripts/test-permisos.mjs` (`npm run test:permisos`, base en memoria).
+  El control es en la API, no en las pestañas: el frontend solo arma las
+  pestañas según `alcance` (`me` y el login lo devuelven).
+  El rol se relee de la base en cada request, así que un cambio de rol corta
+  al instante. Sumar gente, cambiar roles, suspender y quitar del staff queda
+  para `puedeAdministrar` (Cabeza de división y dueño), y el rol es
+  obligatorio al sumar a alguien.
+- **Padrón** (`server/padron.js`, `src/pages/Padron.jsx`): la vista de los
+  chicos para los managers. Trae y edita solo lo administrativo (DNI, fecha
+  de nacimiento, tutor y teléfono, ficha médica) más los escaneos del DNI.
+  La pantalla de Viajes elige quiénes viajan con `viajes/plantel` (nombre,
+  estado y puestos), nunca con `GET jugadores`, que trae asistencia y
+  evaluaciones.
 - **Deploy**: Vercel (auto-deploy en cada push a `main`). Variables de entorno
   requeridas: `DATABASE_URL` (Neon) y `JWT_SECRET`; opcional `CRON_SECRET`,
   que exige que la tarea diaria venga de Vercel.

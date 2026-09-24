@@ -5,6 +5,7 @@
 // tabla `ajustes`: no hay nada que cargar a mano en Vercel.
 import webpush from 'web-push'
 import { query } from './db.js'
+import { EMAIL_DUENIO, ROLES_COMPLETOS } from './permisos.js'
 
 // Contacto que ven los servidores de push si hay un problema con los envíos
 const CONTACTO = 'mailto:benitoric@gmail.com'
@@ -42,6 +43,17 @@ export async function todasLasSuscripciones() {
                 from push_suscripciones ps
                 join staff s on s.email = ps.staff_email
                 where s.activo`)
+}
+
+// Solo los celulares de quienes ven todo (entrenadores, PF, cabeza de
+// división): para los avisos que llevan a pantallas que los managers no
+// pueden abrir, como los boletines.
+export async function suscripcionesDeEntrenadores() {
+  return query(`select ps.endpoint, ps.p256dh, ps.auth
+                from push_suscripciones ps
+                join staff s on s.email = ps.staff_email
+                where s.activo and (s.email = $1 or s.rol = any($2))`,
+    [EMAIL_DUENIO, ROLES_COMPLETOS])
 }
 
 // Manda el mismo aviso a varias suscripciones. Devuelve cuántas lo recibieron.

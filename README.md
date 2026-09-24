@@ -63,8 +63,14 @@ pantalla de inicio" del teléfono y queda como una app más).
 - **Base de datos**: PostgreSQL propio en [Neon](https://neon.tech) (plan
   gratuito). Esquema en `db/schema.sql`.
 - **Acceso**: login con email y contraseña. Solo pueden entrar los emails
-  cargados en la tabla `staff` desde la pestaña Staff de la app. En el primer
-  ingreso, cada persona crea su contraseña. Las sesiones usan JWT (60 días).
+  cargados en la tabla `staff` desde la pestaña Staff de la app (los suma,
+  con su rol, la cabeza de división). En el primer ingreso, cada persona crea
+  su contraseña. Las sesiones usan JWT (60 días).
+- **Roles**: entrenadores, preparadores físicos y la cabeza de división ven
+  toda la app. Los managers (principal y asistente) solo entran a lo
+  administrativo: Padrón (contacto, DNI, ficha médica), Viajes y sus avisos;
+  la API les cierra todo lo demás (asistencia, evaluaciones, entrenamientos,
+  partidos, lesiones, tests, boletines).
 
 ## Puesta en marcha (una sola vez)
 

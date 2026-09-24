@@ -21,6 +21,7 @@ export default function Staff({ yo }) {
   async function invitar(e) {
     e.preventDefault()
     setError('')
+    if (!rol) { setError('Elegí un rol antes de agregarlo.'); return }
     try {
       await api('staff', {
         method: 'POST',
@@ -28,7 +29,7 @@ export default function Staff({ yo }) {
           email,
           nombre: nombre.trim() || null,
           apellido: apellido.trim() || null,
-          rol: rol || null,
+          rol,
         },
       })
       setEmail('')
@@ -37,7 +38,9 @@ export default function Staff({ yo }) {
       setRol('')
       cargar()
     } catch (err) {
-      setError(err.error === 'ya_existe' ? 'Ese email ya está en la lista.' : 'No se pudo agregar.')
+      setError(err.error === 'ya_existe' ? 'Ese email ya está en la lista.'
+        : err.error === 'rol_requerido' ? 'Elegí un rol antes de agregarlo.'
+        : 'No se pudo agregar.')
     }
   }
 
@@ -60,9 +63,10 @@ export default function Staff({ yo }) {
   }
 
   async function cambiarRol(fila, nuevoRol) {
+    if (!nuevoRol) return
     await api(`staff/${fila.email}`, {
       method: 'PUT',
-      body: { rol: nuevoRol || null },
+      body: { rol: nuevoRol },
     })
     cargar()
   }
@@ -87,36 +91,43 @@ export default function Staff({ yo }) {
 
       <h2>Staff</h2>
       <p className="suave">
-        Todos los del staff tienen acceso completo a la app. Para sumar a alguien:
-        agregá su email acá y pedile que ingrese con ese email; en el primer
-        ingreso la app le pide crear su contraseña.
+        Entrenadores, preparadores físicos y la cabeza de división ven toda la
+        app. Los managers (principal y asistente) entran solo a lo
+        administrativo: Padrón, Viajes y sus avisos; no ven asistencia,
+        evaluaciones, entrenamientos ni partidos.
+        {yo.admin && (
+          <> Para sumar a alguien: agregá su email con su rol y pedile que ingrese
+          con ese email; en el primer ingreso la app le pide crear su contraseña.</>
+        )}
       </p>
 
-      <form className="tarjeta" onSubmit={invitar}>
-        <div className="campo">
-          <label>Email *</label>
-          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div className="grid2">
+      {yo.admin && (
+        <form className="tarjeta" onSubmit={invitar}>
           <div className="campo">
-            <label>Nombre</label>
-            <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+            <label>Email *</label>
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div className="grid2">
+            <div className="campo">
+              <label>Nombre</label>
+              <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+            </div>
+            <div className="campo">
+              <label>Apellido</label>
+              <input value={apellido} onChange={(e) => setApellido(e.target.value)} />
+            </div>
           </div>
           <div className="campo">
-            <label>Apellido</label>
-            <input value={apellido} onChange={(e) => setApellido(e.target.value)} />
+            <label>Rol *</label>
+            <select required value={rol} onChange={(e) => setRol(e.target.value)}>
+              <option value="">Elegí un rol</option>
+              {ROLES_STAFF.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
           </div>
-        </div>
-        <div className="campo">
-          <label>Rol</label>
-          <select value={rol} onChange={(e) => setRol(e.target.value)}>
-            <option value="">Sin definir</option>
-            {ROLES_STAFF.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </div>
-        {error && <div className="error">{error}</div>}
-        <button className="btn" style={{ width: '100%' }}>Agregar al staff</button>
-      </form>
+          {error && <div className="error">{error}</div>}
+          <button className="btn" style={{ width: '100%' }}>Agregar al staff</button>
+        </form>
+      )}
 
       {staff.map((s) => (
         <div key={s.email} className="tarjeta">
@@ -130,15 +141,16 @@ export default function Staff({ yo }) {
               </div>
               <div className="mini">
                 {s.email}
+                {s.rol ? ` · ${s.rol}` : ' · sin rol'}
                 {!s.tiene_clave && ' · todavía no ingresó por primera vez'}
               </div>
             </div>
-            {editando !== s.email && (
+            {yo.admin && editando !== s.email && (
               <button className="btn sec chico" onClick={() => empezarEdicion(s)}>Editar</button>
             )}
           </div>
 
-          {editando === s.email && (
+          {yo.admin && editando === s.email && (
             <form onSubmit={guardarEdicion} style={{ marginTop: 10 }}>
               <div className="grid2">
                 <div className="campo">
@@ -166,25 +178,27 @@ export default function Staff({ yo }) {
             </form>
           )}
 
-          <div className="fila" style={{ marginTop: 10 }}>
-            <select
-              className="crece"
-              style={{ border: '1px solid var(--borde)', borderRadius: 8, padding: 8 }}
-              value={s.rol || ''}
-              onChange={(e) => cambiarRol(s, e.target.value)}
-            >
-              <option value="">Rol sin definir</option>
-              {ROLES_STAFF.map((r) => <option key={r} value={r}>{r}</option>)}
-            </select>
-            {s.email !== yo.email && (
-              <>
-                <button className="btn sec chico" onClick={() => alternarActivo(s)}>
-                  {s.activo ? 'Suspender' : 'Reactivar'}
-                </button>
-                <button className="btn peligro chico" onClick={() => quitar(s)}>Quitar</button>
-              </>
-            )}
-          </div>
+          {yo.admin && (
+            <div className="fila" style={{ marginTop: 10 }}>
+              <select
+                className="crece"
+                style={{ border: '1px solid var(--borde)', borderRadius: 8, padding: 8 }}
+                value={s.rol || ''}
+                onChange={(e) => cambiarRol(s, e.target.value)}
+              >
+                {!s.rol && <option value="">Elegí un rol</option>}
+                {ROLES_STAFF.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+              {s.email !== yo.email && (
+                <>
+                  <button className="btn sec chico" onClick={() => alternarActivo(s)}>
+                    {s.activo ? 'Suspender' : 'Reactivar'}
+                  </button>
+                  <button className="btn peligro chico" onClick={() => quitar(s)}>Quitar</button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       ))}
     </div>

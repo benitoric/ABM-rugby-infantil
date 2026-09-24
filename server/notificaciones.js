@@ -1,7 +1,7 @@
 // Avisos automáticos que dispara la tarea diaria de Vercel (vercel.json →
-// crons), hoy solo los cumpleaños de los chicos.
+// crons): los cumpleaños de los chicos y los boletines del mes.
 import { query } from './db.js'
-import { enviar, todasLasSuscripciones } from './push.js'
+import { enviar, suscripcionesDeEntrenadores, todasLasSuscripciones } from './push.js'
 
 // La hora del servidor es UTC: el "hoy" se calcula en la zona del club para
 // que el saludo salga el día que corresponde y no de madrugada.
@@ -25,7 +25,8 @@ export async function avisarBoletines() {
     [mes, ZONA])
   if (!marca.length) return { mes, avisados: 0, repetido: true }
 
-  const avisados = await enviar(await todasLasSuscripciones(), {
+  // Los managers no ven los boletines: el aviso va solo a los entrenadores
+  const avisados = await enviar(await suscripcionesDeEntrenadores(), {
     titulo: `📄 Boletines de ${nombre}`,
     cuerpo: 'Ya están los boletines del mes para repartir entre los chicos.',
     url: '#jugadores',

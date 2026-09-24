@@ -513,7 +513,9 @@ function VistaJugadores({ datos, mutar }) {
 }
 
 // Elección de quiénes viajan sobre el plantel completo (los dados de baja
-// no aparecen, salvo que ya estuvieran en el viaje)
+// no aparecen, salvo que ya estuvieran en el viaje). El plantel sale de
+// `viajes/plantel`, que trae solo nombre, estado y puestos: la pantalla no
+// necesita (y los managers no pueden ver) asistencia ni evaluaciones.
 function ModalSeleccion({ elegidos, onCerrar, onGuardar }) {
   const [plantel, setPlantel] = useState(null)
   const [sel, setSel] = useState(() => new Set(elegidos))
@@ -522,7 +524,7 @@ function ModalSeleccion({ elegidos, onCerrar, onGuardar }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    api('jugadores').then(setPlantel).catch(() => setPlantel([]))
+    api('viajes/plantel').then(setPlantel).catch(() => setPlantel([]))
   }, [])
 
   const visibles = useMemo(() => {
@@ -982,7 +984,7 @@ function FilaManager({ j, viaje, pagos, abierto, onAbrir, actualizar, mutar }) {
           </button>
         ))}
         {j.tiene_dni_app && !j.dni_copia && (
-          <span className="mini" title="El DNI está escaneado en la ficha del jugador">📎 DNI en la app</span>
+          <span className="mini" title="El DNI está escaneado en el padrón">📎 DNI en la app</span>
         )}
       </div>
 
