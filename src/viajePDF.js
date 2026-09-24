@@ -75,9 +75,10 @@ const PAPELES_INFORME = PAPELES_VIAJE.filter((p) => p.clave !== 'dni_devuelto')
 const conPapelesDelInforme = (j) => PAPELES_INFORME.every((p) => j[p.clave])
 
 // Listado de los chicos del viaje con cada requisito cumplido o no (los
-// papeles previos al viaje del checklist de Managers). Una fila por chico con
-// el tutor y su teléfono, y una columna por papel con Sí/No en color. Arriba,
-// cuántos tienen cada papel y cuántos están completos.
+// papeles previos al viaje del checklist de Managers). Una fila por chico y
+// una columna por papel con Sí/No en color. Arriba, cuántos tienen cada papel
+// y cuántos están completos. Sin datos del tutor: es una hoja de control.
+
 export function generarPapelesPDF({ viaje, jugadores, generadoPor }) {
   const doc = nuevoPDF({
     titulo: `Papeles · ${viaje.nombre}`,
@@ -94,7 +95,7 @@ export function generarPapelesPDF({ viaje, jugadores, generadoPor }) {
   let y = 0
   function encabezadoTabla() {
     doc.rect(M, y, ancho, 18, AZUL_CLARO)
-    doc.texto('JUGADOR · TUTOR', M + 6, y + 6, { tam: 7, negrita: true, color: GRIS })
+    doc.texto('JUGADOR', M + 6, y + 6, { tam: 7, negrita: true, color: GRIS })
     papeles.forEach((p, i) => {
       doc.texto(p.abrev.toUpperCase(), xPapeles + i * ANCHO_PAPEL + ANCHO_PAPEL / 2, y + 6,
         { tam: 6.5, negrita: true, color: GRIS, alinear: 'centro' })
@@ -144,22 +145,19 @@ export function generarPapelesPDF({ viaje, jugadores, generadoPor }) {
     })
   }
   for (const j of jugadores) {
-    const contacto = [j.tutor_nombre, j.tutor_telefono ? `tel. ${j.tutor_telefono}` : null]
-      .filter(Boolean).join(' · ')
-    const alto = 26
+    const alto = 22
     asegurar(alto)
     const completo = conPapelesDelInforme(j)
     doc.linea(M, y, der, y, BORDE, 0.5)
     if (!completo) doc.rect(M, y + 1, 2.5, alto - 2, AMBAR)
-    doc.texto(nombreCompleto(j), M + 6, y + 4, { tam: 9.5, negrita: true, color: TINTA })
-    if (contacto) doc.texto(contacto, M + 6, y + 15, { tam: 7.5, color: GRIS })
-    papeles.forEach((p, i) => pastilla(xPapeles + i * ANCHO_PAPEL + ANCHO_PAPEL / 2, y + 7, !!j[p.clave]))
+    doc.texto(nombreCompleto(j), M + 6, y + 6, { tam: 9.5, negrita: true, color: TINTA })
+    papeles.forEach((p, i) => pastilla(xPapeles + i * ANCHO_PAPEL + ANCHO_PAPEL / 2, y + 5, !!j[p.clave]))
     if (completo) {
-      doc.rect(der - ANCHO_COMPLETO / 2 - 15, y + 7, 30, 12, VERDE)
-      doc.texto('OK', der - ANCHO_COMPLETO / 2, y + 9, { tam: 8, negrita: true, color: BLANCO, alinear: 'centro' })
+      doc.rect(der - ANCHO_COMPLETO / 2 - 15, y + 5, 30, 12, VERDE)
+      doc.texto('OK', der - ANCHO_COMPLETO / 2, y + 7, { tam: 8, negrita: true, color: BLANCO, alinear: 'centro' })
     } else {
       const faltan = papeles.filter((p) => !j[p.clave]).length
-      doc.texto(`falta${faltan === 1 ? '' : 'n'} ${faltan}`, der - ANCHO_COMPLETO / 2, y + 9,
+      doc.texto(`falta${faltan === 1 ? '' : 'n'} ${faltan}`, der - ANCHO_COMPLETO / 2, y + 7,
         { tam: 7.5, color: AMBAR_TEXTO, alinear: 'centro' })
     }
     y += alto
