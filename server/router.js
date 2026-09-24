@@ -1,6 +1,7 @@
 import { query } from './db.js'
 import { sqlLesionadoEnFecha, sqlEnPlantel } from './asistencia-sql.js'
 import { autenticar, crearToken, hashClave, compararClave } from './auth.js'
+import { perfil, puedeAdministrar, rutaAdministrativa, validarRol } from './permisos.js'
 // El catálogo de la evaluación es compartido con el frontend: así el promedio
 // de juego se calcula igual en los dos lados (src/evaluacion.js no toca el DOM)
 import { promedioDeAreas, GRUPOS } from '../src/evaluacion.js'
@@ -110,14 +111,8 @@ const MAX_BLOQUES = 6
 // físicos que no entrenan (los roles salen de ROLES_STAFF en src/helpers.js).
 const ROLES_EVALUADORES = ['Cabeza de división', 'Entrenador', 'PF/entrenador']
 
-// Acciones reservadas (borrar evaluaciones, reabrir un bloque cerrado): las
-// puede hacer la cabeza de división y el dueño del repositorio (el email
-// sembrado en db/schema.sql), que conserva todas las atribuciones aunque
-// cambie de rol o no tenga ninguno. Todo control por rol pasa por acá.
-const EMAIL_DUENIO = 'benitoric@gmail.com'
-function puedeAdministrar(yo) {
-  return yo.email === EMAIL_DUENIO || yo.rol === 'Cabeza de división'
-}
+// Acciones reservadas (borrar evaluaciones, reabrir un bloque cerrado) y el
+// alcance de cada rol: ver server/permisos.js. Todo control por rol pasa por ahí.
 
 // Jugadores que necesitan evaluación: sin evaluar o con la última de hace más
 // de 30 días, sin contar a los dados de baja ni a los ya repartidos.
@@ -775,7 +770,7 @@ async function enrutar(metodo, p, b, req, url) {
       if (!fila.password_hash) throw { codigo: 409, error: 'necesita_clave' }
       if (!(await compararClave(clave, fila.password_hash)))
         throw { codigo: 401, error: 'clave_incorrecta' }
-      return { token: await crearToken(email), staff: { email, nombre: fila.nombre } }
+      return { token: await crearToken(email), staff: perfil(fila) }
     }
 
     if (p[1] === 'setup' && metodo === 'POST') {
@@ -784,7 +779,7 @@ async function enrutar(metodo, p, b, req, url) {
         'update staff set password_hash = $1 where email = $2 and password_hash is null returning email',
         [await hashClave(clave), email])
       if (!act.length) throw { codigo: 409, error: 'ya_tiene_clave' }
-      return { token: await crearToken(email), staff: { email, nombre: fila.nombre } }
+      return { token: await crearToken(email), staff: perfil(fila) }
     }
     throw { codigo: 404, error: 'no_existe' }
   }
@@ -814,9 +809,16 @@ async function enrutar(metodo, p, b, req, url) {
   // ---------- todo lo demás requiere staff activo ----------
   const yo = await autenticar(req)
 
-  if (p[0] === 'me') {
-    return { email: yo.email, nombre: yo.nombre, rol: yo.rol, admin: puedeAdministrar(yo) }
+  // Los managers (alcance administrativo) solo pasan por la lista blanca de
+  // server/permisos.js: viajes, padrón, documentos, avisos y la lista del
+  // staff. Todo lo demás (asistencia, evaluaciones, entrenamientos, partidos,
+  // lesiones, tests, boletines...) les devuelve 403. El control es acá, en la
+  // API, y no en las pestañas que muestra el frontend.
+  if (perfil(yo).alcance !== 'completo' && !rutaAdministrativa(metodo, p)) {
+    throw { codigo: 403, error: 'solo_entrenadores' }
   }
+
+  if (p[0] === 'me') return perfil(yo)
 
   // ---------- boletín mensual ----------
   // `boletin?mes=YYYY-MM` trae el de todos los jugadores activos;
@@ -2563,13 +2565,28 @@ async function enrutar(metodo, p, b, req, url) {
     return enrutarViajes({ metodo, p, b, yo, admin: puedeAdministrar(yo) })
   }
 
+  // ---------- padrón administrativo (lo que ven los managers) ----------
+  if (p[0] === 'padron') {
+    const { enrutarPadron } = await import('./padron.js')
+    return enrutarPadron({ metodo, p, b })
+  }
+
   // ---------- staff ----------
   if (p[0] === 'staff') {
     if (metodo === 'GET') {
+      // Los managers ven la lista solo para elegir quién viaja: sin saber
+      // quién ingresó ya y quién no.
+      if (perfil(yo).alcance !== 'completo') {
+        return query(
+          `select email, nombre, apellido, rol, activo from staff order by created_at`)
+      }
       return query(
         `select email, nombre, apellido, rol, activo, password_hash is not null as tiene_clave
          from staff order by created_at`)
     }
+    // Sumar gente, cambiar roles, suspender y quitar: solo quien administra.
+    // Si no, cualquiera podría ascender a un manager a entrenador.
+    if (!puedeAdministrar(yo)) throw { codigo: 403, error: 'solo_cabeza' }
     if (metodo === 'POST') {
       const email = String(b.email || '').trim().toLowerCase()
       if (!email) throw { codigo: 400, error: 'faltan_datos' }
@@ -2616,21 +2633,6 @@ async function enrutar(metodo, p, b, req, url) {
   }
 
   throw { codigo: 404, error: 'no_existe' }
-}
-
-const ROLES = [
-  'Cabeza de división',
-  'Entrenador',
-  'Preparador físico (PF)',
-  'PF/entrenador',
-  'Manager principal',
-  'Manager asistente',
-]
-
-function validarRol(rol) {
-  if (!rol) return null
-  if (!ROLES.includes(rol)) throw { codigo: 400, error: 'rol_invalido' }
-  return rol
 }
 
 function datosJugador(b) {

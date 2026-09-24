@@ -7,9 +7,12 @@ import Entrenamientos from './pages/Entrenamientos.jsx'
 import Partidos from './pages/Partidos.jsx'
 import Viajes from './pages/Viajes.jsx'
 import Staff from './pages/Staff.jsx'
+import Padron from './pages/Padron.jsx'
+import Avisos from './pages/Avisos.jsx'
 import { VERSION } from './version.js'
 
-const TABS = [
+// Pestañas de quienes ven todo (entrenadores, PF, cabeza de división)
+const TABS_COMPLETO = [
   { id: 'jugadores', label: 'Jugadores', ico: '👥' },
   { id: 'entrenamientos', label: 'Entrenamientos', ico: '📋' },
   { id: 'partidos', label: 'Partidos', ico: '🏉' },
@@ -17,21 +20,37 @@ const TABS = [
   { id: 'staff', label: 'Staff', ico: '🧑‍🏫' },
 ]
 
+// Pestañas de los managers (alcance administrativo): solo lo administrativo.
+// Esto es cosmética: la API les cierra todo lo demás (server/permisos.js).
+const TABS_ADMINISTRATIVO = [
+  { id: 'padron', label: 'Padrón', ico: '🗂️' },
+  { id: 'viajes', label: 'Viajes', ico: '🚌' },
+  { id: 'avisos', label: 'Avisos', ico: '🔔' },
+]
+
+const tabsDe = (staff) => (staff?.alcance === 'completo' ? TABS_COMPLETO : TABS_ADMINISTRATIVO)
+
 // La pestaña activa vive en el hash (#/jugadores, #/partidos/...): sobrevive
-// recargas y descartes de la PWA, y el botón "atrás" vuelve a la vista anterior
-const tabDeHash = () => {
+// recargas y descartes de la PWA, y el botón "atrás" vuelve a la vista anterior.
+// Un hash que apunte a una pestaña que este rol no tiene (guardado cuando
+// tenía otro rol, o escrito a mano) cae a la primera de las suyas.
+const tabDeHash = (tabs) => {
   const [t] = leerHash()
   // #/asistencia es el nombre viejo de la pestaña: los hashes guardados en el
   // celular de cada uno siguen abriendo Entrenamientos
-  if (t === 'asistencia') return 'entrenamientos'
-  return TABS.some((x) => x.id === t) ? t : 'jugadores'
+  const id = t === 'asistencia' ? 'entrenamientos' : t
+  return tabs.some((x) => x.id === id) ? id : tabs[0].id
 }
 
 export default function App() {
   const [staff, setStaff] = useState(undefined) // undefined = cargando, null = sin sesión
-  const [tab, setTab] = useState(tabDeHash)
+  const [tab, setTab] = useState(() => tabDeHash(TABS_COMPLETO))
+  const TABS = tabsDe(staff)
 
-  useEffect(() => suscribir(() => setTab(tabDeHash())), [])
+  useEffect(() => {
+    setTab(tabDeHash(TABS))
+    return suscribir(() => setTab(tabDeHash(TABS)))
+  }, [staff])
 
   useEffect(() => {
     onSesionExpirada(() => setStaff(null))
@@ -79,6 +98,8 @@ export default function App() {
       {tab === 'partidos' && <Partidos />}
       {tab === 'viajes' && <Viajes yo={staff} />}
       {tab === 'staff' && <Staff yo={staff} />}
+      {tab === 'padron' && <Padron />}
+      {tab === 'avisos' && <div className="contenido"><Avisos /></div>}
     </div>
   )
 }

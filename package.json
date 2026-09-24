@@ -8,7 +8,8 @@
     "dev:api": "PGLITE=1 node scripts/dev-server.mjs",
     "build": "vite build",
     "preview": "vite preview",
-    "db:init": "node scripts/init-db.mjs"
+    "db:init": "node scripts/init-db.mjs",
+    "test:permisos": "PGLITE=1 node scripts/test-permisos.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

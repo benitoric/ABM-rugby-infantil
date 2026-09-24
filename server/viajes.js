@@ -116,6 +116,15 @@ async function detalle(id) {
 // Devuelve el resultado de la ruta, o lanza { codigo, error }. `admin` dice
 // si quien llama puede administrar (borrar un viaje entero queda para ellos).
 export async function enrutarViajes({ metodo, p, b, yo, admin }) {
+  // ---------- plantel para elegir quiénes viajan ----------
+  // Lo mínimo para reconocer a cada chico: la pantalla de Viajes usa esto y
+  // no el listado de jugadores, que trae asistencia y evaluaciones (y que
+  // los managers no pueden ver).
+  if (metodo === 'GET' && p[1] === 'plantel' && !p[2]) {
+    return query(`select id, nombre, apellido, estado, posicion, puestos, puesto_principal
+      from jugadores order by apellido, nombre`)
+  }
+
   // ---------- listado y alta ----------
   if (metodo === 'GET' && !p[1]) {
     return query(`select ${COLS_VIAJE},
