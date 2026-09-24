@@ -6,6 +6,8 @@ import {
   fechasViaje, fichaMedica, nombreCompleto, nombreStaff, papelesCompletos, pesos,
   MEDIOS_PAGO, PAPELES_VIAJE,
 } from '../helpers.js'
+import { compartirArchivo } from '../pdf.js'
+import { generarAlojadosPDF, nombreArchivoAlojados } from '../viajePDF.js'
 
 // Giras a otras provincias. La posición vive en el hash:
 // #/viajes (listado) y #/viajes/<id>/<vista> (un viaje, en una de sus vistas).
@@ -391,7 +393,7 @@ function DetalleViaje({ id, yo, staff, onVolver, onCambio }) {
         <VistaJugadores datos={datos} mutar={mutar} />
       )}
       {vista === 'alojamiento' && (
-        <VistaAlojamiento datos={datos} mutar={mutar} actualizarJugador={actualizarJugador} />
+        <VistaAlojamiento datos={datos} yo={yo} mutar={mutar} actualizarJugador={actualizarJugador} />
       )}
       {vista === 'managers' && (
         <VistaManagers datos={datos} mutar={mutar} actualizarJugador={actualizarJugador} />
@@ -603,9 +605,25 @@ function ModalSeleccion({ elegidos, onCerrar, onGuardar }) {
 }
 
 // ---------- vista: grupos de alojados ----------
-function VistaAlojamiento({ datos, mutar, actualizarJugador }) {
+function VistaAlojamiento({ datos, yo, mutar, actualizarJugador }) {
   const { viaje, jugadores, grupos } = datos
   const [formGrupo, setFormGrupo] = useState(null) // 'nuevo' | grupo en edición
+  const [generando, setGenerando] = useState(false)
+
+  // Informe en PDF con todo lo de esta vista, para el club anfitrión y para
+  // llevar impreso. En el celular se comparte (WhatsApp); si no, se descarga.
+  async function informePDF() {
+    setGenerando(true)
+    try {
+      const blob = generarAlojadosPDF({
+        viaje, staff: datos.staff, grupos, jugadores,
+        generadoPor: yo?.nombre || yo?.email,
+      })
+      await compartirArchivo(blob, nombreArchivoAlojados(viaje), `Alojados · ${viaje.nombre}`)
+    } finally {
+      setGenerando(false)
+    }
+  }
   const sinAlojar = jugadores.filter((j) => !j.grupo_id)
   const miembros = (g) => jugadores.filter((j) => j.grupo_id === g.id)
 
@@ -636,9 +654,11 @@ function VistaAlojamiento({ datos, mutar, actualizarJugador }) {
       <div className="fila entre no-imprimir">
         <h3>Alojamiento</h3>
         <div className="fila" style={{ gap: 6 }}>
-          {grupos.length > 0 && (
+          {(grupos.length > 0 || jugadores.length > 0) && (
             <>
-              <button className="btn sec chico" onClick={() => window.print()}>🖨 Imprimir</button>
+              <button className="btn sec chico" disabled={generando} onClick={informePDF}>
+                {generando ? 'Armando…' : '📄 Informe PDF'}
+              </button>
               <button className="btn sec chico" onClick={descargar}>⬇ CSV</button>
             </>
           )}
@@ -972,21 +992,25 @@ function FilaManager({ j, viaje, pagos, abierto, onAbrir, actualizar, mutar }) {
       </div>
       {precio != null && <BarraPago pagado={j.pagado} total={precio} />}
 
+      {/* Botones grandes: se marcan en el celular, en medio del ajetreo */}
       <div className="papeles" style={{ marginTop: 8 }}>
         {PAPELES_VIAJE.map((p) => (
           <button
             key={p.clave}
-            className={`chip${j[p.clave] ? ' activo' : ''}`}
+            className={`papel${j[p.clave] ? ' activo' : ''}`}
             title={p.label}
             onClick={() => actualizar({ [p.clave]: !j[p.clave] })}
           >
-            {j[p.clave] ? '✓ ' : ''}{p.abrev}
+            <span className="papel-marca">{j[p.clave] ? '✓' : ''}</span>
+            {p.abrev}
           </button>
         ))}
-        {j.tiene_dni_app && !j.dni_copia && (
-          <span className="mini" title="El DNI está escaneado en el padrón">📎 DNI en la app</span>
-        )}
       </div>
+      {j.tiene_dni_app && !j.dni_copia && (
+        <div className="mini" style={{ marginTop: 6 }} title="El DNI está escaneado en el padrón">
+          📎 El DNI está escaneado en la app: la fotocopia se puede imprimir desde el padrón.
+        </div>
+      )}
 
       {abierto && (
         <div style={{ marginTop: 10 }}>

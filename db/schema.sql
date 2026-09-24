@@ -429,7 +429,9 @@ create table if not exists viaje_jugadores (
   autorizacion boolean not null default false,
   dni_copia boolean not null default false,
   ficha_medica boolean not null default false,
-  obra_social boolean not null default false,
+  -- El DNI original viaja con el staff: acá se marca que se le devolvió a la
+  -- familia al volver
+  dni_devuelto boolean not null default false,
   -- Alergias, medicación, comidas: lo que la familia que lo recibe tiene que saber
   observaciones text,
   created_at timestamptz not null default now(),

@@ -1352,7 +1352,42 @@ details.tarjeta summary {
 .barra-pago { height: 6px; background: #e6eaf3; border-radius: 999px; overflow: hidden; }
 .barra-pago span { display: block; height: 100%; background: var(--ok); border-radius: 999px; }
 .barra-pago span.parcial { background: var(--warn); }
-.papeles { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+/* Checklist de papeles: botones grandes, de a dos por fila en el celular, para
+   marcarlos con el pulgar en medio del ajetreo */
+.papeles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.papel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 10px 12px;
+  border: 2px solid var(--borde);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--texto-suave);
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-align: left;
+  line-height: 1.15;
+}
+.papel-marca {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--borde);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+.papel.activo { background: #dcfce7; border-color: var(--ok); color: #15803d; }
+.papel.activo .papel-marca { background: var(--ok); border-color: var(--ok); color: #fff; }
+@media (min-width: 720px) {
+  .papeles { grid-template-columns: repeat(4, 1fr); }
+  .papel { min-height: 44px; font-size: 0.85rem; }
+}
 .form-pago { background: var(--fondo); border-radius: 10px; padding: 10px; }
 .form-pago .campo { margin-bottom: 8px; }
 /* Selección de jugadores con casillas (quiénes viajan, quiénes van a una casa) */
