@@ -23,7 +23,7 @@ const COLS_PAGO = `id, viaje_id, jugador_id, fecha::text as fecha,
 
 // Papeles que los padres entregan antes de viajar. Mismo catálogo que en
 // src/helpers.js (PAPELES_VIAJE): acá solo se validan las claves.
-const PAPELES = ['autorizacion', 'dni_copia', 'ficha_medica', 'obra_social']
+const PAPELES = ['autorizacion', 'dni_copia', 'ficha_medica', 'dni_devuelto']
 const MEDIOS_PAGO = ['efectivo', 'transferencia', 'otro']
 const MAX_CUOTAS = 24
 
@@ -95,7 +95,7 @@ async function detalle(id) {
   // DNI está escaneado en la app: el manager puede imprimir la copia de ahí.
   const jugadores = await query(
     `select vj.jugador_id, vj.grupo_id, vj.autorizacion, vj.dni_copia,
-       vj.ficha_medica, vj.obra_social, vj.observaciones,
+       vj.ficha_medica, vj.dni_devuelto, vj.observaciones,
        j.nombre, j.apellido, j.dni, j.fecha_nacimiento::text as fecha_nacimiento,
        j.estado, j.puestos, j.puesto_principal, j.posicion,
        j.tutor_nombre, j.tutor_telefono, j.ficha_medica_vigente,
@@ -134,7 +134,7 @@ export async function enrutarViajes({ metodo, p, b, yo, admin }) {
           where vj.viaje_id = v.id and vj.grupo_id is null)::int as sin_alojar,
         (select count(*) from viaje_jugadores vj
           where vj.viaje_id = v.id
-            and not (vj.autorizacion and vj.dni_copia and vj.ficha_medica and vj.obra_social)
+            and not (vj.autorizacion and vj.dni_copia and vj.ficha_medica and vj.dni_devuelto)
         )::int as papeles_pendientes,
         coalesce((select sum(monto) from viaje_pagos vp where vp.viaje_id = v.id), 0)::float8 as cobrado
       from viajes v order by v.fecha_salida desc, v.created_at desc`)

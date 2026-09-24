@@ -83,8 +83,9 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   pantalla en `src/pages/Viajes.jsx`, con cuatro vistas: Jugadores (quiénes
   van, elegidos sobre el plantel), Alojados (una "casa" por familia del club
   anfitrión, con sus datos y los chicos que recibe; imprimible y exportable),
-  Managers (checklist de papeles —autorización, DNI, ficha, obra social—,
-  pagos de cada familia y observaciones para la casa) y Datos. Tablas:
+  Managers (checklist de papeles —autorización, fotocopia del DNI, ficha,
+  devolución del DNI—, pagos de cada familia y observaciones para la casa) y
+  Datos. El informe de alojados en PDF lo arma `src/viajePDF.js`. Tablas:
   `viajes`, `viaje_staff`, `viaje_grupos`, `viaje_jugadores` y `viaje_pagos`.
   Lo cobrado nunca se guarda como total: se suma de `viaje_pagos`, y por eso
   no se puede sacar del viaje a un chico con pagos cargados sin borrarlos
