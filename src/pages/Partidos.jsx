@@ -2746,6 +2746,34 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
   }
 
   // Vacía el equipo del tiempo a la vista
+  // Repetir la formación del tiempo anterior tal cual: es lo más común
+  // cuando el equipo viene funcionando. Los que quedaron fuera de juego no
+  // se copian (no pueden volver a entrar) y se avisa cuáles fueron.
+  async function repetirAnterior() {
+    if (!tiempo || !anterior) return
+    const previo = enCancha[anterior.id] || {}
+    const copiables = jugadores.filter((j) => previo[j.id] && !fueraEnEsteTiempo(j))
+    const fuera = jugadores.filter((j) => previo[j.id] && fueraEnEsteTiempo(j))
+    if (!copiables.length) {
+      alert(`El T${anterior.numero} no tiene ningún jugador disponible para repetir.`)
+      return
+    }
+    const aviso = fuera.length
+      ? `\n\nNo se copian ${fuera.map((j) => j.apellido).join(', ')}: quedaron fuera de juego.`
+      : ''
+    const pisa = Object.keys(mapa).length
+      ? `\n\nSe reemplaza lo que ya está cargado en el T${tiempo.numero}.`
+      : ''
+    if (!confirm(`¿Repetir en el T${tiempo.numero} el equipo del T${anterior.numero}?${aviso}${pisa}`)) return
+    setSel(null)
+    setPuestoSel(null)
+    await onReemplazar(tiempo.id, copiables.map((j) => ({
+      jugador_id: j.id,
+      puesto: previo[j.id].puesto ?? null,
+      prestado: !!previo[j.id].prestado,
+    })))
+  }
+
   async function limpiarTiempo() {
     if (!tiempo) return
     if (!confirm(`¿Vaciar el equipo del tiempo T${tiempo.numero}?`)) return
@@ -2949,6 +2977,11 @@ function VistaBloque({ bloque, onEditar, onActualizado, jugadores, ausentes = []
             <button className="btn chico" disabled={sugiriendo} onClick={sugerirEquipos}>
               {sugiriendo ? 'Armando…' : `✨ Sugerir T${tiempo?.numero}`}
             </button>
+            {anterior && Object.keys(enCancha[anterior.id] || {}).length > 0 && (
+              <button className="btn sec chico" onClick={repetirAnterior}>
+                ⟳ Repetir T{anterior.numero}
+              </button>
+            )}
             <button className="btn sec chico" onClick={limpiarTiempo}>🧹 Limpiar</button>
             <button className="btn sec chico" onClick={() => setCerrandoTiempo(tiempo)}>
               ✔ Cerrar T{tiempo?.numero}
