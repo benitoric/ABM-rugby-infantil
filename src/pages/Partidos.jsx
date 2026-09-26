@@ -1008,6 +1008,7 @@ function ArmadoPartido({ partido, onActualizado, onBorrado }) {
 
           {vistaPrevia && (
             <VistaPreviaBloques
+              partido={partido}
               bloques={bloques}
               jugadores={jugadores}
               asignacion={sugerencia ? sugerencia.asignacion : asignacion}
@@ -1626,7 +1627,7 @@ function ControlAsistencia({
 // Vista previa de cómo quedaron los bloques: cada uno con sus forwards y sus
 // backs (según el puesto principal), del mejor al peor promedio de juego. Es
 // la mirada de control antes de aplicar o publicar.
-function VistaPreviaBloques({ bloques, jugadores, asignacion, propuesta, juegoDe, onCerrar }) {
+function VistaPreviaBloques({ partido, bloques, jugadores, asignacion, propuesta, juegoDe, onCerrar }) {
   const cerrarSiEsElFondo = (e) => { if (e.target === e.currentTarget) onCerrar() }
   const tipoDe = (j) => {
     const principal = puestoPrincipal(j)
@@ -1682,12 +1683,53 @@ function VistaPreviaBloques({ bloques, jugadores, asignacion, propuesta, juegoDe
     </div>
   )
 
+  // La misma agrupación que se ve en pantalla, servida para dibujar la placa
+  function exportar() {
+    const filas = []
+    for (const linea of LINEAS) {
+      const deLaLinea = bloques.map((bl) => jugadores
+        .filter((j) => asignacion[j.id] === bl.id && tipoDe(j) === linea.clave))
+      if (!deLaLinea.some((l) => l.length)) continue
+      const fila = (lista) => lista.map((j) => ({
+        nombre: `${j.apellido}${abrevPuestos(j) ? ` · ${abrevPuestos(j)}` : ''}`,
+        nota: juegoDe(j) != null ? juegoDe(j).toFixed(1) : '—',
+      }))
+      const grupos = linea.clave === 'sin' ? [] : gruposDe(linea.clave)
+      filas.push({
+        tipo: 'linea',
+        label: linea.label,
+        porBloque: grupos.length ? deLaLinea.map(() => []) : deLaLinea.map((l) => fila(ordenar(l))),
+      })
+      for (const g of grupos) {
+        const porBloque = deLaLinea.map((lista) =>
+          ordenar(lista.filter((j) => puestoPrincipal(j) === g.clave)))
+        if (!porBloque.some((l) => l.length)) continue
+        filas.push({
+          tipo: 'grupo',
+          label: `${g.label} (${porBloque.map((l) => l.length).join(' · ')})`,
+          vertebral: g.vertebral,
+          porBloque: porBloque.map(fila),
+        })
+      }
+    }
+    const resumen = bloques.map((bl) => {
+      const del = jugadores.filter((j) => asignacion[j.id] === bl.id)
+      const prom = promedio(del)
+      return `${del.length} jug.${prom != null ? ` · ★${prom.toFixed(1)}` : ''}`
+    })
+    const url = dibujarPreviaPuestos({ fecha: partido.fecha, bloques, filas, resumen })
+    compartirImagen(url, `bloques-por-puesto-${partido.fecha}.png`)
+  }
+
   return (
     <div className="modal-fondo" onClick={cerrarSiEsElFondo}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="fila entre" style={{ marginBottom: 8 }}>
           <h3>👁 Vista previa {propuesta ? 'de la propuesta' : 'de los bloques'}</h3>
-          <button className="btn sec chico" onClick={onCerrar}>Cerrar</button>
+          <div className="fila" style={{ gap: 6 }}>
+            <button className="btn chico" onClick={exportar}>📤 Compartir</button>
+            <button className="btn sec chico" onClick={onCerrar}>Cerrar</button>
+          </div>
         </div>
         {/* Los bloques van uno al lado del otro y las líneas alineadas entre
             sí: los forwards de un bloque quedan a la par de los del otro */}
@@ -1754,6 +1796,138 @@ function VistaPreviaBloques({ bloques, jugadores, asignacion, propuesta, juegoDe
 // Dibuja UNA placa con todos los bloques del partido, en un canvas, y la
 // devuelve como PNG. Angosta y a una columna, pensada para leerse en el
 // celular (WhatsApp), con los colores institucionales del club.
+// En el celular abre el menú de compartir (WhatsApp directo); en la
+// computadora, o si se cancela, baja la imagen.
+async function compartirImagen(url, nombre) {
+  const blob = await (await fetch(url)).blob()
+  const archivo = new File([blob], nombre, { type: 'image/png' })
+  if (navigator.canShare?.({ files: [archivo] })) {
+    try {
+      await navigator.share({ files: [archivo] })
+      return
+    } catch { /* cancelado por el usuario o sin permiso: cae a descarga */ }
+  }
+  const a = document.createElement('a')
+  a.href = url
+  a.download = nombre
+  a.click()
+}
+
+// Placa de la vista previa: los bloques lado a lado, agrupados por puesto
+// principal, para mandar por WhatsApp al staff. Mismo criterio que la placa
+// de la convocatoria: ancho fijo y alto ajustado al contenido, al doble de
+// resolución, porque WhatsApp reduce el lado mayor a ~1600 px.
+function dibujarPreviaPuestos({ fecha, bloques, filas, resumen }) {
+  const W = 1080
+  const M = 40
+  const SEP = 24
+  const AZUL = '#123a80'
+  const AZUL_CLARO = '#1a4a9e'
+  const DORADO = '#ffd200'
+  const GRIS = '#5b6270'
+  const FILA = 46
+  const ALTO_LINEA = 66
+  const ALTO_GRUPO = 50
+  const ESCALA = 2
+
+  const columnas = Math.max(1, bloques.length)
+  const anchoCol = (W - 2 * M - (columnas - 1) * SEP) / columnas
+  // El título de línea (FORWARDS / BACKS) no lleva jugadores propios cuando
+  // abajo van los grupos por puesto: ahí no ocupa ningún renglón
+  const renglones = (f) => {
+    const mayor = Math.max(0, ...f.porBloque.map((l) => l.length))
+    return f.tipo === 'linea' && !mayor ? 0 : Math.max(1, mayor)
+  }
+  const altoDe = (f) =>
+    (f.tipo === 'linea' ? ALTO_LINEA : ALTO_GRUPO) + renglones(f) * FILA
+
+  let H = 262 + 84
+  for (const f of filas) H += altoDe(f)
+  H += 60
+
+  const c = document.createElement('canvas')
+  c.width = W * ESCALA
+  c.height = H * ESCALA
+  const ctx = c.getContext('2d')
+  ctx.scale(ESCALA, ESCALA)
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, W, H)
+
+  const texto = (t, x, y, maxAncho, tamanio, negrita = false, color = '#1c2028') => {
+    let tam = tamanio
+    ctx.fillStyle = color
+    do {
+      ctx.font = `${negrita ? 'bold ' : ''}${tam}px system-ui, sans-serif`
+      if (ctx.measureText(t).width <= maxAncho) break
+      tam -= 1
+    } while (tam > 14)
+    ctx.fillText(t, x, y)
+  }
+
+  const franja = ctx.createLinearGradient(0, 0, 0, 224)
+  franja.addColorStop(0, AZUL_CLARO)
+  franja.addColorStop(1, AZUL)
+  ctx.fillStyle = franja
+  ctx.fillRect(0, 0, W, 224)
+  ctx.fillStyle = DORADO
+  ctx.fillRect(0, 224, W, 8)
+  ctx.textAlign = 'center'
+  texto('🏉 Tucumán Lawn Tennis Club', W / 2, 84, W - 2 * M, 46, true, '#ffffff')
+  texto('División M12 (clase 2014)', W / 2, 144, W - 2 * M, 36, true, DORADO)
+  texto(`Armado de bloques · ${fechaCorta(fecha)}`, W / 2, 196, W - 2 * M, 32, false, '#dbe4ff')
+
+  // encabezado de cada bloque
+  let y = 262
+  bloques.forEach((bl, i) => {
+    const x = M + i * (anchoCol + SEP)
+    ctx.fillStyle = AZUL
+    ctx.fillRect(x, y, anchoCol, 56)
+    texto(`${bl.nombre || `Bloque ${bl.numero}`}${bl.rival ? ` vs ${bl.rival}` : ''}`,
+      x + anchoCol / 2, y + 38, anchoCol - 20, 30, true, '#ffffff')
+    texto(resumen[i], x + anchoCol / 2, y + 78, anchoCol - 20, 26, false, GRIS)
+  })
+  y += 84
+
+  for (const f of filas) {
+    if (f.tipo === 'linea') {
+      texto(f.label.toUpperCase(), W / 2, y + 40, W - 2 * M, 30, true, AZUL)
+      ctx.fillStyle = DORADO
+      ctx.fillRect(M, y + 52, W - 2 * M, 4)
+      y += ALTO_LINEA
+    } else {
+      texto(`${f.vertebral ? '🔹 ' : ''}${f.label}`, W / 2, y + 34, W - 2 * M, 26,
+        f.vertebral, f.vertebral ? AZUL_CLARO : GRIS)
+      y += ALTO_GRUPO
+    }
+    if (!renglones(f)) continue
+    f.porBloque.forEach((lista, i) => {
+      const x = M + i * (anchoCol + SEP)
+      let fy = y
+      lista.forEach((linea, k) => {
+        if (k % 2 === 0) {
+          ctx.fillStyle = '#f4f6fa'
+          ctx.fillRect(x, fy - 2, anchoCol, FILA - 4)
+        }
+        ctx.textAlign = 'left'
+        texto(linea.nombre, x + 12, fy + 28, anchoCol - 90, 26)
+        ctx.textAlign = 'right'
+        texto(linea.nota, x + anchoCol - 12, fy + 28, 70, 26, true, GRIS)
+        ctx.textAlign = 'center'
+        fy += FILA
+      })
+      if (!lista.length) texto('—', x + anchoCol / 2, fy + 28, anchoCol, 26, false, GRIS)
+    })
+    y += renglones(f) * FILA
+  }
+
+  ctx.textAlign = 'center'
+  texto('🔹 Columna vertebral: hookers, octavos, medios scrum, aperturas y fullbacks',
+    W / 2, H - 26, W - 2 * M, 24, false, GRIS)
+  ctx.fillStyle = DORADO
+  ctx.fillRect(0, H - 12, W, 12)
+  return c.toDataURL('image/png')
+}
+
 function dibujarPlaca({ fecha, secciones }) {
   // WhatsApp reduce las imágenes a ~1600 px en el lado mayor, así que la
   // clave para que el texto se lea es que la placa sea BAJA: los bloques van
@@ -1906,20 +2080,7 @@ function Publicacion({ partido, bloques, jugadores, asignacion, staff, asignacio
     }
   }, [bloques, jugadores, asignacion, staff, asignacionStaff, capitan, partido.fecha])
 
-  async function compartir() {
-    const blob = await (await fetch(placa.url)).blob()
-    const archivo = new File([blob], placa.nombre, { type: 'image/png' })
-    if (navigator.canShare?.({ files: [archivo] })) {
-      try {
-        await navigator.share({ files: [archivo] })
-        return
-      } catch { /* cancelado por el usuario o sin permiso: cae a descarga */ }
-    }
-    const a = document.createElement('a')
-    a.href = placa.url
-    a.download = placa.nombre
-    a.click()
-  }
+  const compartir = () => compartirImagen(placa.url, placa.nombre)
 
   return (
     <div className="modal-fondo" onClick={cerrarSiEsElFondo}>
