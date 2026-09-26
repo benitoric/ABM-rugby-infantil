@@ -1012,6 +1012,8 @@ function ArmadoPartido({ partido, onActualizado, onBorrado }) {
               bloques={bloques}
               jugadores={jugadores}
               asignacion={sugerencia ? sugerencia.asignacion : asignacion}
+              staff={staff}
+              asignacionStaff={asignacionStaff}
               propuesta={!!sugerencia}
               juegoDe={juegoDe}
               onCerrar={cerrarModal(() => setVistaPrevia(false))}
@@ -1627,7 +1629,7 @@ function ControlAsistencia({
 // Vista previa de cómo quedaron los bloques: cada uno con sus forwards y sus
 // backs (según el puesto principal), del mejor al peor promedio de juego. Es
 // la mirada de control antes de aplicar o publicar.
-function VistaPreviaBloques({ partido, bloques, jugadores, asignacion, propuesta, juegoDe, onCerrar }) {
+function VistaPreviaBloques({ partido, bloques, jugadores, asignacion, staff = [], asignacionStaff = {}, propuesta, juegoDe, onCerrar }) {
   const cerrarSiEsElFondo = (e) => { if (e.target === e.currentTarget) onCerrar() }
   const tipoDe = (j) => {
     const principal = puestoPrincipal(j)
@@ -1655,6 +1657,9 @@ function VistaPreviaBloques({ partido, bloques, jugadores, asignacion, propuesta
     // Los que juegan en varios puestos y todavía no eligieron el principal
     return [...propios, { clave: null, label: 'Sin principal elegido' }]
   }
+  const staffDe = (bl) => staff
+    .filter((x) => asignacionStaff[x.email] === bl.id)
+    .sort((x, y) => nombreStaff(x).localeCompare(nombreStaff(y), 'es'))
   const ordenar = (lista) => [...lista].sort((x, y) =>
     (juegoDe(y) ?? 0) - (juegoDe(x) ?? 0) || x.apellido.localeCompare(y.apellido))
 
@@ -1711,6 +1716,13 @@ function VistaPreviaBloques({ partido, bloques, jugadores, asignacion, propuesta
           porBloque: porBloque.map(fila),
         })
       }
+    }
+    // El staff también se reparte entre los bloques: va al pie de la placa
+    const porStaff = bloques.map((bl) => staffDe(bl).map((x) => ({
+      nombre: nombreStaff(x), nota: '',
+    })))
+    if (porStaff.some((l) => l.length)) {
+      filas.push({ tipo: 'linea', label: 'Staff a cargo', porBloque: porStaff })
     }
     const resumen = bloques.map((bl) => {
       const del = jugadores.filter((j) => asignacion[j.id] === bl.id)
@@ -1780,6 +1792,21 @@ function VistaPreviaBloques({ partido, bloques, jugadores, asignacion, propuesta
               </Fragment>
             )
           })}
+          {bloques.some((bl) => staffDe(bl).length) && (
+            <Fragment key="staff">
+              <div className="mini puesto-grupo previa-linea">Staff a cargo</div>
+              {bloques.map((bl) => (
+                <div key={bl.id} className="previa-col">
+                  {staffDe(bl).map((x) => (
+                    <div key={x.email} className="previa-jug">
+                      <span className="crece" style={{ minWidth: 0 }}>{nombreStaff(x)}</span>
+                    </div>
+                  ))}
+                  {!staffDe(bl).length && <div className="mini" style={{ textAlign: 'center' }}>—</div>}
+                </div>
+              ))}
+            </Fragment>
+          )}
         </div>
         <p className="mini" style={{ marginTop: 8 }}>
           Cada línea enfrentada entre bloques, agrupada por puesto principal y
