@@ -23,6 +23,26 @@ const formatearDni = (dni) => {
   return limpio.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 }
 
+const AZUL = [26, 74, 158]
+const DORADO = [255, 210, 0]
+const DORADO_OSCURO = [201, 164, 0]
+const BLANCO = [255, 255, 255]
+
+// Escudo del club, el mismo de public/icon.svg: el aspa azul sobre el fondo
+// dorado y la pelota al medio. Va dibujado con primitivas en vez de ir como
+// imagen, para no incrustar archivos en el PDF (ver src/pdf.js).
+function escudo(doc, x, y, lado) {
+  const u = lado / 64 // el dibujo original está sobre una grilla de 64
+  doc.rectRedondeado(x, y, lado, lado, 14 * u, DORADO)
+  doc.rectRedondeado(x + 6 * u, y + 6 * u, 52 * u, 52 * u, 9 * u, BLANCO)
+  const linea = (x1, y1, x2, y2) =>
+    doc.linea(x + x1 * u, y + y1 * u, x + x2 * u, y + y2 * u, AZUL, 9 * u, true)
+  linea(14, 14, 50, 50)
+  linea(50, 14, 14, 50)
+  doc.elipse(x + 32 * u, y + 32 * u, 10 * u, 6.5 * u, DORADO_OSCURO, -30)
+  doc.elipse(x + 32 * u, y + 32 * u, 9.2 * u, 5.7 * u, DORADO, -30)
+}
+
 const M = 42 // margen lateral
 const PIE = 56 // reserva al pie para la firma y el número de hoja
 
@@ -41,14 +61,17 @@ export function manifiestoBus({ partido, bloque, jugadores, staff, generadoPor }
 
   // ---- encabezado
   const encabezado = (continuacion) => {
-    y = 46
-    doc.texto('TUCUMÁN LAWN TENNIS CLUB', M, y, { tam: 10, negrita: true, color: GRIS })
+    y = 40
+    const LADO = 44
+    escudo(doc, M, y - 6, LADO)
+    const xTexto = M + LADO + 14
+    doc.texto('TUCUMÁN LAWN TENNIS CLUB', xTexto, y, { tam: 10, negrita: true, color: GRIS })
     y += 16
-    doc.texto('MANIFIESTO PARA BUS', M, y, { tam: 19, negrita: true, color: TINTA })
+    doc.texto('MANIFIESTO PARA BUS', xTexto, y, { tam: 19, negrita: true, color: TINTA })
     if (continuacion) {
       doc.texto('(continuación)', der, y + 6, { tam: 8, color: GRIS, alinear: 'der' })
     }
-    y += 26
+    y += 32
     doc.linea(M, y, der, y, BORDE, 1.2)
     y += 14
     // Datos del viaje, en dos columnas de etiqueta y valor
