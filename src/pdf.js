@@ -92,10 +92,25 @@ export function partirTexto(texto, ancho, tam, negrita = false) {
 
 const escapar = (s) => aWinAnsi(s).replace(/([\\()])/g, '\\$1')
 const num = (n) => (Math.round(n * 100) / 100).toString()
+// base64 a bytes, sin depender de atob (el PDF también se arma en pruebas
+// fuera del navegador)
+function deBase64(b64) {
+  const limpio = String(b64).replace(/\s+/g, '')
+  const binario = typeof atob === 'function'
+    ? atob(limpio)
+    : Buffer.from(limpio, 'base64').toString('binary')
+  const bytes = new Uint8Array(binario.length)
+  for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i)
+  return bytes
+}
+
 const color = ([r, g, b]) => `${num(r / 255)} ${num(g / 255)} ${num(b / 255)}`
 
 export function nuevoPDF({ titulo = '', autor = '' } = {}) {
   const paginas = []
+  // Imágenes incrustadas, compartidas entre hojas: la misma foto usada en
+  // varias páginas (el escudo del membrete) va una sola vez en el archivo
+  const imagenes = []
   let actual = null
 
   function nuevaPagina() {
@@ -140,48 +155,27 @@ export function nuevoPDF({ titulo = '', autor = '' } = {}) {
       return api
     },
 
-    linea(x1, y1, x2, y2, c = [0, 0, 0], grosor = 0.7, redondeada = false) {
+    linea(x1, y1, x2, y2, c = [0, 0, 0], grosor = 0.7) {
       actual.push(
-        `${color(c)} RG ${num(grosor)} w ${redondeada ? '1 J ' : '0 J '}` +
-        `${num(x1)} ${num(A4.alto - y1)} m ${num(x2)} ${num(A4.alto - y2)} l S`)
+        `${color(c)} RG ${num(grosor)} w ${num(x1)} ${num(A4.alto - y1)} m ` +
+        `${num(x2)} ${num(A4.alto - y2)} l S`)
       return api
     },
 
-    // Rectángulo con las esquinas redondeadas, en cuatro curvas de Bézier
-    rectRedondeado(x, y, ancho, alto, radio, c = [0, 0, 0]) {
-      const r = Math.min(radio, ancho / 2, alto / 2)
-      const k = r * 0.5523 // distancia del control para aproximar un cuarto de círculo
-      const Y = (v) => A4.alto - v
+    // Imagen JPEG (base64), estirada al rectángulo indicado. Solo JPEG: el
+    // PDF lo guarda tal cual viene (DCTDecode), sin recomprimir nada ni
+    // necesitar una librería. Un PNG habría que desinflarlo y volver a
+    // comprimirlo acá adentro.
+    imagen({ jpegBase64, ancho: anchoPx, alto: altoPx }, x, y, ancho, alto) {
+      let i = imagenes.findIndex((im) => im.jpegBase64 === jpegBase64)
+      if (i === -1) {
+        i = imagenes.length
+        imagenes.push({ jpegBase64, ancho: anchoPx, alto: altoPx })
+      }
+      // q/Q aísla la matriz: la imagen se dibuja en el cuadrado unidad, así
+      // que la escala y el traslado la llevan a su lugar en la hoja
       actual.push(
-        `${color(c)} rg ${num(x + r)} ${num(Y(y))} m ` +
-        `${num(x + ancho - r)} ${num(Y(y))} l ` +
-        `${num(x + ancho - r + k)} ${num(Y(y))} ${num(x + ancho)} ${num(Y(y + r - k))} ${num(x + ancho)} ${num(Y(y + r))} c ` +
-        `${num(x + ancho)} ${num(Y(y + alto - r))} l ` +
-        `${num(x + ancho)} ${num(Y(y + alto - r + k))} ${num(x + ancho - r + k)} ${num(Y(y + alto))} ${num(x + ancho - r)} ${num(Y(y + alto))} c ` +
-        `${num(x + r)} ${num(Y(y + alto))} l ` +
-        `${num(x + r - k)} ${num(Y(y + alto))} ${num(x)} ${num(Y(y + alto - r + k))} ${num(x)} ${num(Y(y + alto - r))} c ` +
-        `${num(x)} ${num(Y(y + r))} l ` +
-        `${num(x)} ${num(Y(y + r - k))} ${num(x + r - k)} ${num(Y(y))} ${num(x + r)} ${num(Y(y))} c f`)
-      return api
-    },
-
-    // Elipse, opcionalmente girada: cuatro curvas de Bézier desde el centro
-    elipse(cx, cy, rx, ry, c = [0, 0, 0], giroGrados = 0) {
-      const k = 0.5523
-      const a = (giroGrados * Math.PI) / 180
-      const cos = Math.cos(a)
-      const sen = Math.sin(a)
-      // punto del contorno en coordenadas de la elipse, ya girado y en PDF
-      const p = (u, v) => [
-        num(cx + u * cos - v * sen),
-        num(A4.alto - (cy + u * sen + v * cos)),
-      ].join(' ')
-      actual.push(
-        `${color(c)} rg ${p(rx, 0)} m ` +
-        `${p(rx, ry * k)} ${p(rx * k, ry)} ${p(0, ry)} c ` +
-        `${p(-rx * k, ry)} ${p(-rx, ry * k)} ${p(-rx, 0)} c ` +
-        `${p(-rx, -ry * k)} ${p(-rx * k, -ry)} ${p(0, -ry)} c ` +
-        `${p(rx * k, -ry)} ${p(rx, -ry * k)} ${p(rx, 0)} c f`)
+        `q ${num(ancho)} 0 0 ${num(alto)} ${num(x)} ${num(A4.alto - y - alto)} cm /Im${i} Do Q`)
       return api
     },
 
@@ -201,10 +195,13 @@ export function nuevoPDF({ titulo = '', autor = '' } = {}) {
         agregar(`${id} 0 obj\n${cuerpo}\nendobj\n`)
       }
 
-      // 1 catálogo · 2 páginas · 3 y 4 fuentes · 5 metadatos
-      const idPagina = (i) => 6 + i * 2
-      const idContenido = (i) => 7 + i * 2
-      const total = 5 + paginas.length * 2
+      // 1 catálogo · 2 páginas · 3 y 4 fuentes · 5 metadatos · las imágenes
+      // y, después de todo eso, dos objetos por hoja
+      const idImagen = (i) => 6 + i
+      const base = 5 + imagenes.length
+      const idPagina = (i) => base + 1 + i * 2
+      const idContenido = (i) => base + 2 + i * 2
+      const total = base + paginas.length * 2
 
       agregar('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n')
       objeto(1, '<< /Type /Catalog /Pages 2 0 R >>')
@@ -214,10 +211,25 @@ export function nuevoPDF({ titulo = '', autor = '' } = {}) {
       objeto(4, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>')
       objeto(5, `<< /Title (${escapar(titulo)}) /Author (${escapar(autor)}) /Producer (Rugby M12) >>`)
 
+      imagenes.forEach((im, i) => {
+        const datos = deBase64(im.jpegBase64)
+        offsets[idImagen(i)] = largo
+        agregar(`${idImagen(i)} 0 obj\n<< /Type /XObject /Subtype /Image ` +
+          `/Width ${im.ancho} /Height ${im.alto} /ColorSpace /DeviceRGB ` +
+          `/BitsPerComponent 8 /Filter /DCTDecode /Length ${datos.length} >>\nstream\n`)
+        partes.push(datos)
+        largo += datos.length
+        agregar('\nendstream\nendobj\n')
+      })
+
+      const recursoImagenes = imagenes.length
+        ? ` /XObject << ${imagenes.map((_, i) => `/Im${i} ${idImagen(i)} 0 R`).join(' ')} >>`
+        : ''
+
       paginas.forEach((ordenes, i) => {
         objeto(idPagina(i),
           `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${num(A4.ancho)} ${num(A4.alto)}] ` +
-          `/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${idContenido(i)} 0 R >>`)
+          `/Resources << /Font << /F1 3 0 R /F2 4 0 R >>${recursoImagenes} >> /Contents ${idContenido(i)} 0 R >>`)
         const flujo = ordenes.join('\n')
         objeto(idContenido(i), `<< /Length ${flujo.length} >>\nstream\n${flujo}\nendstream`)
       })
