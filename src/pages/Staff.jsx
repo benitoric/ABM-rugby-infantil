@@ -9,9 +9,10 @@ export default function Staff({ yo }) {
   const [nombre, setNombre] = useState('')
   const [apellido, setApellido] = useState('')
   const [rol, setRol] = useState('')
+  const [dni, setDni] = useState('')
   const [error, setError] = useState('')
   const [editando, setEditando] = useState(null) // email de la fila en edición
-  const [edicion, setEdicion] = useState({ nombre: '', apellido: '' })
+  const [edicion, setEdicion] = useState({ nombre: '', apellido: '', dni: '' })
 
   async function cargar() {
     setStaff(await api('staff'))
@@ -29,12 +30,14 @@ export default function Staff({ yo }) {
           email,
           nombre: nombre.trim() || null,
           apellido: apellido.trim() || null,
+          dni: dni.trim() || null,
           rol,
         },
       })
       setEmail('')
       setNombre('')
       setApellido('')
+      setDni('')
       setRol('')
       cargar()
     } catch (err) {
@@ -46,7 +49,7 @@ export default function Staff({ yo }) {
 
   function empezarEdicion(fila) {
     setEditando(fila.email)
-    setEdicion({ nombre: fila.nombre || '', apellido: fila.apellido || '' })
+    setEdicion({ nombre: fila.nombre || '', apellido: fila.apellido || '', dni: fila.dni || '' })
   }
 
   async function guardarEdicion(e) {
@@ -56,6 +59,7 @@ export default function Staff({ yo }) {
       body: {
         nombre: edicion.nombre.trim() || null,
         apellido: edicion.apellido.trim() || null,
+        dni: edicion.dni.trim() || null,
       },
     })
     setEditando(null)
@@ -118,6 +122,10 @@ export default function Staff({ yo }) {
             </div>
           </div>
           <div className="campo">
+            <label>DNI</label>
+            <input inputMode="numeric" value={dni} onChange={(e) => setDni(e.target.value)} />
+          </div>
+          <div className="campo">
             <label>Rol *</label>
             <select required value={rol} onChange={(e) => setRol(e.target.value)}>
               <option value="">Elegí un rol</option>
@@ -142,6 +150,7 @@ export default function Staff({ yo }) {
               <div className="mini">
                 {s.email}
                 {s.rol ? ` · ${s.rol}` : ' · sin rol'}
+                {s.dni ? ` · DNI ${s.dni}` : ''}
                 {!s.tiene_clave && ' · todavía no ingresó por primera vez'}
               </div>
             </div>
@@ -168,6 +177,14 @@ export default function Staff({ yo }) {
                     onChange={(e) => setEdicion({ ...edicion, apellido: e.target.value })}
                   />
                 </div>
+              </div>
+              <div className="campo">
+                <label>DNI</label>
+                <input
+                  inputMode="numeric"
+                  value={edicion.dni}
+                  onChange={(e) => setEdicion({ ...edicion, dni: e.target.value })}
+                />
               </div>
               <div className="fila">
                 <button className="btn chico crece">Guardar</button>

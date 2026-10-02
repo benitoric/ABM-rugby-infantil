@@ -6,6 +6,9 @@ create table if not exists staff (
   nombre text,
   apellido text,
   rol text,
+  -- Para el manifiesto del bus, que la empresa pide con el documento de
+  -- todos los que viajan, chicos y grandes
+  dni text,
   password_hash text,
   activo boolean not null default true,
   created_at timestamptz not null default now()
