@@ -140,10 +140,48 @@ export function nuevoPDF({ titulo = '', autor = '' } = {}) {
       return api
     },
 
-    linea(x1, y1, x2, y2, c = [0, 0, 0], grosor = 0.7) {
+    linea(x1, y1, x2, y2, c = [0, 0, 0], grosor = 0.7, redondeada = false) {
       actual.push(
-        `${color(c)} RG ${num(grosor)} w ${num(x1)} ${num(A4.alto - y1)} m ` +
-        `${num(x2)} ${num(A4.alto - y2)} l S`)
+        `${color(c)} RG ${num(grosor)} w ${redondeada ? '1 J ' : '0 J '}` +
+        `${num(x1)} ${num(A4.alto - y1)} m ${num(x2)} ${num(A4.alto - y2)} l S`)
+      return api
+    },
+
+    // Rectángulo con las esquinas redondeadas, en cuatro curvas de Bézier
+    rectRedondeado(x, y, ancho, alto, radio, c = [0, 0, 0]) {
+      const r = Math.min(radio, ancho / 2, alto / 2)
+      const k = r * 0.5523 // distancia del control para aproximar un cuarto de círculo
+      const Y = (v) => A4.alto - v
+      actual.push(
+        `${color(c)} rg ${num(x + r)} ${num(Y(y))} m ` +
+        `${num(x + ancho - r)} ${num(Y(y))} l ` +
+        `${num(x + ancho - r + k)} ${num(Y(y))} ${num(x + ancho)} ${num(Y(y + r - k))} ${num(x + ancho)} ${num(Y(y + r))} c ` +
+        `${num(x + ancho)} ${num(Y(y + alto - r))} l ` +
+        `${num(x + ancho)} ${num(Y(y + alto - r + k))} ${num(x + ancho - r + k)} ${num(Y(y + alto))} ${num(x + ancho - r)} ${num(Y(y + alto))} c ` +
+        `${num(x + r)} ${num(Y(y + alto))} l ` +
+        `${num(x + r - k)} ${num(Y(y + alto))} ${num(x)} ${num(Y(y + alto - r + k))} ${num(x)} ${num(Y(y + alto - r))} c ` +
+        `${num(x)} ${num(Y(y + r))} l ` +
+        `${num(x)} ${num(Y(y + r - k))} ${num(x + r - k)} ${num(Y(y))} ${num(x + r)} ${num(Y(y))} c f`)
+      return api
+    },
+
+    // Elipse, opcionalmente girada: cuatro curvas de Bézier desde el centro
+    elipse(cx, cy, rx, ry, c = [0, 0, 0], giroGrados = 0) {
+      const k = 0.5523
+      const a = (giroGrados * Math.PI) / 180
+      const cos = Math.cos(a)
+      const sen = Math.sin(a)
+      // punto del contorno en coordenadas de la elipse, ya girado y en PDF
+      const p = (u, v) => [
+        num(cx + u * cos - v * sen),
+        num(A4.alto - (cy + u * sen + v * cos)),
+      ].join(' ')
+      actual.push(
+        `${color(c)} rg ${p(rx, 0)} m ` +
+        `${p(rx, ry * k)} ${p(rx * k, ry)} ${p(0, ry)} c ` +
+        `${p(-rx * k, ry)} ${p(-rx, ry * k)} ${p(-rx, 0)} c ` +
+        `${p(-rx, -ry * k)} ${p(-rx * k, -ry)} ${p(0, -ry)} c ` +
+        `${p(rx * k, -ry)} ${p(rx, -ry * k)} ${p(rx, 0)} c f`)
       return api
     },
 
