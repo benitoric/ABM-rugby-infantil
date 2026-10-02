@@ -9,6 +9,8 @@ import {
 } from '../helpers.js'
 import { promediosResumen, valoresConsolidados } from '../evaluacion.js'
 import { CampoSugerido, useSugerencias } from '../sugerencias.jsx'
+import { manifiestoBus, nombreArchivoManifiesto } from '../manifiestoPDF.js'
+import { verOCompartirArchivo } from '../pdf.js'
 import { FormEvento, PanelSuspension } from './Evento.jsx'
 
 const MAX_TIEMPOS = 6
@@ -234,6 +236,8 @@ function ArmadoPartido({ partido, onActualizado, onBorrado }) {
   const [sugerencia, setSugerencia] = useState(null)
   const [califs, setCalifs] = useState(null)
   const [publicando, setPublicando] = useState(false)
+  // Manifiesto para bus: un PDF por bloque, con el DNI de todos los que viajan
+  const [manifiesto, setManifiesto] = useState(false)
   const [vistaPrevia, setVistaPrevia] = useState(false)
   const [listo, setListo] = useState(false)
   const [sugerencias, recargarSugerencias] = useSugerencias()
@@ -999,6 +1003,7 @@ function ArmadoPartido({ partido, onActualizado, onBorrado }) {
                   )}
                   <button className="btn sec chico" onClick={limpiarBloques}>🧹 Limpiar</button>
                   <button className="btn sec chico" onClick={() => setPublicando(true)}>📣 Publicar</button>
+                  <button className="btn sec chico" onClick={() => setManifiesto(true)}>🚌 Manifiesto</button>
                 </>
               )}
               {/* También sirve con una propuesta abierta: se ve cómo quedaría */}
@@ -1017,6 +1022,18 @@ function ArmadoPartido({ partido, onActualizado, onBorrado }) {
               propuesta={!!sugerencia}
               juegoDe={juegoDe}
               onCerrar={cerrarModal(() => setVistaPrevia(false))}
+            />
+          )}
+
+          {manifiesto && (
+            <ManifiestoBus
+              partido={partido}
+              bloques={bloques}
+              jugadores={jugadores}
+              asignacion={asignacion}
+              staff={staff}
+              asignacionStaff={asignacionStaff}
+              onCerrar={cerrarModal(() => setManifiesto(false))}
             />
           )}
 
@@ -2080,6 +2097,83 @@ function dibujarPlaca({ fecha, secciones }) {
   ctx.fillRect(0, H - 12, W, 12)
 
   return c.toDataURL('image/png')
+}
+
+// Manifiesto para bus: un PDF por bloque con el documento de todos los que
+// viajan. Se emite de a uno porque cada bloque viaja en su propio micro.
+function ManifiestoBus({ partido, bloques, jugadores, asignacion, staff, asignacionStaff, onCerrar }) {
+  const cerrarSiEsElFondo = (e) => { if (e.target === e.currentTarget) onCerrar() }
+  const [emitiendo, setEmitiendo] = useState(null)
+
+  const porBloque = bloques.map((bl) => ({
+    bloque: bl,
+    jugadores: jugadores
+      .filter((j) => asignacion[j.id] === bl.id)
+      .sort((x, y) => nombreCompleto(x).localeCompare(nombreCompleto(y), 'es')),
+    staff: staff
+      .filter((s) => asignacionStaff[s.email] === bl.id)
+      .sort((x, y) => nombreStaff(x).localeCompare(nombreStaff(y), 'es')),
+  }))
+
+  async function emitir(s) {
+    setEmitiendo(s.bloque.id)
+    try {
+      const blob = manifiestoBus({
+        partido, bloque: s.bloque, jugadores: s.jugadores, staff: s.staff,
+      })
+      await verOCompartirArchivo(blob, nombreArchivoManifiesto(partido, s.bloque),
+        `Manifiesto para bus · Bloque ${s.bloque.numero} · ${fechaCorta(partido.fecha)}`)
+    } finally {
+      setEmitiendo(null)
+    }
+  }
+
+  return (
+    <div className="modal-fondo" onClick={cerrarSiEsElFondo}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="fila entre" style={{ marginBottom: 10 }}>
+          <h3>🚌 Manifiesto para bus</h3>
+          <button className="btn sec chico" onClick={onCerrar}>Cerrar</button>
+        </div>
+        <p className="mini" style={{ marginTop: 0 }}>
+          Listado formal con el DNI de todos los que viajan, para entregar a la
+          empresa de transporte. Sale un PDF por bloque.
+        </p>
+        {porBloque.map((s) => {
+          const total = s.jugadores.length + s.staff.length
+          const sinDni = [...s.jugadores, ...s.staff].filter((x) => !x.dni)
+          return (
+            <div key={s.bloque.id} className="tarjeta">
+              <div className="fila entre">
+                <div className="crece">
+                  <b>{s.bloque.nombre || `Bloque ${s.bloque.numero}`}</b>
+                  {s.bloque.rival && <span className="mini"> vs {s.bloque.rival}</span>}
+                  <div className="mini">
+                    {s.jugadores.length} jugadores · {s.staff.length} del staff ·{' '}
+                    {total} {total === 1 ? 'pasajero' : 'pasajeros'}
+                  </div>
+                </div>
+                <button
+                  className="btn chico"
+                  disabled={!total || emitiendo === s.bloque.id}
+                  onClick={() => emitir(s)}
+                >
+                  {emitiendo === s.bloque.id ? 'Emitiendo…' : '📄 Emitir'}
+                </button>
+              </div>
+              {!total && <p className="mini" style={{ margin: '6px 0 0' }}>Sin nadie asignado todavía.</p>}
+              {sinDni.length > 0 && (
+                <p className="mini" style={{ margin: '6px 0 0', color: 'var(--warn)' }}>
+                  ⚠️ Sin DNI cargado: {sinDni.map((x) => x.apellido ? x.apellido : nombreStaff(x)).join(', ')}.
+                  {' '}Salen igual en el manifiesto, marcados como "SIN DNI".
+                </p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 function Publicacion({ partido, bloques, jugadores, asignacion, staff, asignacionStaff, capitan = {}, onCerrar }) {

@@ -53,6 +53,11 @@ async function inicializar() {
 // exista haría fallar la consulta al planificarla. Exportada para poder
 // probarla contra bases en distintos estados.
 export async function migracionesAplicadas(pool) {
+  const { rows: [dniStaff] } = await pool.query(
+    `select exists (select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'staff'
+         and column_name = 'dni') as existe`)
+  if (!dniStaff.existe) return false
   const { rows: [col] } = await pool.query(
     `select exists (select 1 from information_schema.columns
        where table_schema = 'public' and table_name = 'asistencias_partido'
@@ -88,6 +93,8 @@ export async function migracionesAplicadas(pool) {
 
 // Exportada para poder probarla contra una base con el esquema viejo
 export async function migrar(pool) {
+  // DNI del staff, para el manifiesto del bus
+  await pool.query('alter table staff add column if not exists dni text')
   // Plantel de ese día cargado a mano, para corregir el % de asistencia de los
   // eventos anteriores a la carga del plantel en la app (ver db/schema.sql)
   await pool.query('alter table eventos add column if not exists plazas_manual int')

@@ -2581,7 +2581,8 @@ async function enrutar(metodo, p, b, req, url) {
           `select email, nombre, apellido, rol, activo from staff order by created_at`)
       }
       return query(
-        `select email, nombre, apellido, rol, activo, password_hash is not null as tiene_clave
+        `select email, nombre, apellido, rol, dni, activo,
+                password_hash is not null as tiene_clave
          from staff order by created_at`)
     }
     // Sumar gente, cambiar roles, suspender y quitar: solo quien administra.
@@ -2591,9 +2592,10 @@ async function enrutar(metodo, p, b, req, url) {
       const email = String(b.email || '').trim().toLowerCase()
       if (!email) throw { codigo: 400, error: 'faltan_datos' }
       const filas = await query(
-        `insert into staff (email, nombre, apellido, rol) values ($1, $2, $3, $4)
+        `insert into staff (email, nombre, apellido, rol, dni) values ($1, $2, $3, $4, $5)
          on conflict (email) do nothing returning email`,
-        [email, b.nombre?.trim() || null, b.apellido?.trim() || null, validarRol(b.rol)])
+        [email, b.nombre?.trim() || null, b.apellido?.trim() || null, validarRol(b.rol),
+         b.dni?.trim() || null])
       if (!filas.length) throw { codigo: 409, error: 'ya_existe' }
       return { ok: true }
     }
@@ -2620,6 +2622,12 @@ async function enrutar(metodo, p, b, req, url) {
         const r = await query(
           'update staff set apellido = $1 where email = $2 returning email',
           [b.apellido?.trim() || null, p[1]])
+        tocados += r.length
+      }
+      if ('dni' in b) {
+        const r = await query(
+          'update staff set dni = $1 where email = $2 returning email',
+          [b.dni?.trim() || null, p[1]])
         tocados += r.length
       }
       if (!tocados) throw { codigo: 404, error: 'no_existe' }

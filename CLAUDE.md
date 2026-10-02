@@ -92,6 +92,14 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   antes. Borrar un viaje entero queda para quien administra
   (`puedeAdministrar`). El catálogo de papeles (`PAPELES_VIAJE`) está en
   `src/helpers.js` y sus claves son las columnas de `viaje_jugadores`.
+- **Manifiesto para bus** (`src/manifiestoPDF.js`): el listado formal que pide
+  la empresa de transporte, con el DNI de todos los que viajan. Se emite desde
+  Partidos → Armar bloques → "Manifiesto", **un PDF por bloque** (cada bloque
+  viaja en su micro). Va sobrio a propósito: sin colores, una fila por persona
+  y el pie con el total de pasajeros y la firma del responsable. Los que no
+  tienen DNI cargado salen igual, marcados "SIN DNI", y el diálogo los avisa
+  antes de emitir. El DNI del staff vive en `staff.dni` y se carga en la
+  pantalla de Staff.
 - **Navegación**: la posición en la app vive en el hash de la URL
   (`#/partidos/<id>/<vista>`) con respaldo en localStorage (`src/navegacion.js`),
   para sobrevivir recargas y descartes de la PWA. La vista de partido se
