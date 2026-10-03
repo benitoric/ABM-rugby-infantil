@@ -9,13 +9,13 @@ import {
 
 // Boletín mensual de desempeño, escrito para el propio jugador. Solo
 // asistencia y rugby jugado: nunca muestra nada de las evaluaciones.
-export default function Boletin({ jugadorId = null, yo, onVolver }) {
+// La posición (mes y chico elegido) la maneja Jugadores desde el hash: acá
+// llega por props y se pide cambiarla con onMes / onVer.
+export default function Boletin({ jugadorId = null, mes, verDe = null, yo, onMes, onVer, onVolver }) {
   const meses = ultimosMeses(12)
-  const [mes, setMes] = useState(meses[0])
   const [datos, setDatos] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
-  const [verDe, setVerDe] = useState(jugadorId)
   const [compartiendo, setCompartiendo] = useState('')
 
   async function cargar(m = mes) {
@@ -29,7 +29,7 @@ export default function Boletin({ jugadorId = null, yo, onVolver }) {
     }
     setCargando(false)
   }
-  useEffect(() => { cargar() }, [mes])
+  useEffect(() => { cargar() }, [mes, jugadorId])
 
   async function compartir(b = null) {
     const lista = b ? [b] : datos.jugadores
@@ -62,7 +62,7 @@ export default function Boletin({ jugadorId = null, yo, onVolver }) {
         <button className="btn sec chico" onClick={onVolver}>← Volver</button>
         <select
           value={mes}
-          onChange={(e) => setMes(e.target.value)}
+          onChange={(e) => onMes(e.target.value)}
           style={{ border: '1px solid var(--borde)', borderRadius: 10, padding: '6px 8px' }}
         >
           {meses.map((m) => <option key={m} value={m}>{tituloDelMes(m)}</option>)}
@@ -104,7 +104,7 @@ export default function Boletin({ jugadorId = null, yo, onVolver }) {
           </div>
 
           {datos.jugadores.map((b) => (
-            <button key={b.jugador.id} className="jugador-item" onClick={() => setVerDe(b.jugador.id)}>
+            <button key={b.jugador.id} className="jugador-item" onClick={() => onVer(b.jugador.id)}>
               <div className="avatar">{b.jugador.nombre[0]}{b.jugador.apellido[0]}</div>
               <div className="crece">
                 <div style={{ fontWeight: 600 }}>{b.jugador.apellido}, {b.jugador.nombre}</div>
@@ -123,7 +123,7 @@ export default function Boletin({ jugadorId = null, yo, onVolver }) {
       {!cargando && elegido && (
         <>
           {!jugadorId && (
-            <button className="btn sec chico" onClick={() => setVerDe(null)}>
+            <button className="btn sec chico" onClick={() => onVer(null)}>
               ← Todos los jugadores
             </button>
           )}

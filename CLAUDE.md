@@ -105,6 +105,10 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   para sobrevivir recargas y descartes de la PWA. La vista de partido se
   refresca sola (`GET partido/:id/estado` al volver a la app y cada 15 s),
   salteándose los refrescos mientras haya escrituras propias en vuelo.
+  Los boletines también viven en el hash (`#/jugadores/boletines/<mes>/<id>`,
+  y `#/jugadores/boletin/<id>/<mes>` desde la ficha), así "atrás" desde el
+  boletín de un chico vuelve al listado del mes elegido; cambiar el mes
+  reemplaza la entrada del historial en vez de sumar una.
 
 ## Desarrollo y pruebas
 
