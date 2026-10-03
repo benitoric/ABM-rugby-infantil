@@ -720,6 +720,17 @@ export async function handle(req, res) {
     })
     const cuerpo = await leerCuerpo(req)
     const resultado = await enrutar(req.method, partes, cuerpo, req, url)
+    // Una escritura que salió bien puede haber dejado viejos los boletines
+    // guardados: se tiran los meses afectados y el próximo pedido los rearma.
+    // Si esto falla no se le niega la escritura a nadie: queda en el log.
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+      try {
+        const { invalidarGuardados } = await import('./boletin.js')
+        await invalidarGuardados(req.method, partes, cuerpo)
+      } catch (e) {
+        console.error('No se pudieron invalidar los boletines guardados', e)
+      }
+    }
     json(res, resultado?._codigo || 200, resultado ?? { ok: true })
   } catch (e) {
     if (e && e.codigo) json(res, e.codigo, { error: e.error || 'error' })

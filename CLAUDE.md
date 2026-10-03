@@ -73,6 +73,16 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   **nunca muestra evaluaciones ni tests físicos**: lo lee el propio chico. Los
   eventos que se perdió estando lesionado no le cuentan como falta. El día 1
   de cada mes la tarea `cron/boletines` avisa por push que ya están.
+  Armarlos es pesado, así que cada mes se arma una vez y queda guardado en
+  `boletines_guardados` (una fila por mes con el JSON completo); `boletin` y
+  `boletin/:id` se sirven de ahí. El armado va con una consulta por tabla
+  para todos los chicos (nunca una por jugador). Cualquier escritura que
+  pase por el router y toque lo que sale en la hoja tira los meses afectados
+  (`invalidarGuardados` en `server/boletin.js`: una escritura sobre un
+  evento tira desde su mes en adelante, el resto tira todo); las rutas que
+  no cambian nada del boletín están en `RUTAS_AJENAS`, y una ruta nueva nace
+  invalidando. Por las dudas, un guardado de otro día se rearma. La tarea
+  del día 1 deja armado el mes cerrado antes de avisar.
   Los "objetivos del mes" (`src/objetivos.js`) son la única parte que mira la
   última evaluación: se eligen las dos variables más bajas —sin el área social,
   que no se imprime— y al boletín llega solo la frase de qué practicar, nunca

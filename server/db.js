@@ -79,7 +79,8 @@ export async function migracionesAplicadas(pool) {
   const { rows: [t] } = await pool.query(
     `select to_regclass('public.evento_plantel') is not null
         and to_regclass('public.plan_tecnico') is not null
-        and to_regclass('public.viaje_pagos') is not null as existe`)
+        and to_regclass('public.viaje_pagos') is not null
+        and to_regclass('public.boletines_guardados') is not null as existe`)
   if (!t.existe) return false
   const { rows: [t2] } = await pool.query(
     `select not exists (
@@ -141,6 +142,12 @@ export async function migrar(pool) {
     staff_email text not null references staff(email) on delete cascade,
     estado text not null check (estado in ('presente','ausente')),
     unique (evento_id, staff_email)
+  )`)
+  // Boletines ya armados, uno por mes (ver db/schema.sql y server/boletin.js)
+  await pool.query(`create table if not exists boletines_guardados (
+    mes text primary key,
+    datos jsonb not null,
+    generado_en timestamptz not null default now()
   )`)
   // Entrenamientos de rutina vs. extra, y suspensión de eventos y bloques
   await pool.query('alter table eventos add column if not exists hora_fin time')

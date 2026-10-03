@@ -144,8 +144,80 @@ function ranking(resumen) {
   return { puestos, total: orden.length }
 }
 
+// Zona del club: el "hoy" de la validez del guardado y de las fechas
+const ZONA = 'America/Argentina/Tucuman'
+
+// Los boletines de un mes se arman una vez y quedan guardados en
+// `boletines_guardados` (una fila por mes con el JSON completo): abrir el mes
+// o cambiar de mes es una sola lectura. El guardado vale hasta que cambie
+// algo de lo que sale en la hoja (ver invalidarGuardados) y, por las dudas,
+// se rearma el primer día que se lo pide: un par de criterios miran la fecha
+// de hoy (lesiones abiertas, eventos futuros).
 export async function boletines({ mes, jugadorId = null }) {
   if (!mesValido(mes)) throw { codigo: 400, error: 'mes_invalido' }
+  const todos = await leerGuardado(mes) || await armarYGuardar(mes)
+  if (!jugadorId) return todos
+  const propio = todos.jugadores.find((b) => b.jugador.id === jugadorId)
+  if (!propio) throw { codigo: 404, error: 'no_existe' }
+  return { ...todos, jugadores: [propio] }
+}
+
+async function leerGuardado(mes) {
+  const [fila] = await query(
+    `select datos from boletines_guardados
+     where mes = $1
+       and (generado_en at time zone $2)::date = (now() at time zone $2)::date`,
+    [mes, ZONA])
+  if (!fila) return null
+  return typeof fila.datos === 'string' ? JSON.parse(fila.datos) : fila.datos
+}
+
+async function armarYGuardar(mes) {
+  const datos = await armar(mes)
+  await query(
+    `insert into boletines_guardados (mes, datos, generado_en)
+     values ($1, $2::jsonb, now())
+     on conflict (mes) do update set datos = excluded.datos, generado_en = excluded.generado_en`,
+    [mes, JSON.stringify(datos)])
+  return datos
+}
+
+// Rutas cuyas escrituras no tocan ninguna de las tablas que lee el boletín
+// (eventos, asistencias, plantel, bloques, tiempos, capitanías, lesiones,
+// evaluaciones y los datos del jugador). Una ruta nueva nace invalidando:
+// solo se suma acá si está claro que no cambia nada de lo que sale en la hoja.
+const RUTAS_AJENAS = new Set([
+  'auth', 'health', 'cron', 'me', 'push', 'documentos', 'staff', 'viajes',
+  'boletin', 'tests', 'seguimientos', 'aspectos-tecnicos', 'asignaciones',
+  'sugerencias', 'stats',
+])
+// Rutas que escriben sobre un evento puntual (p[1] es su id): alcanza con
+// tirar los meses desde el del evento, así una toma de asistencia de hoy no
+// hace rearmar los meses ya cerrados.
+const RUTAS_DE_EVENTO = new Set(['eventos', 'partido'])
+
+// Se llama después de cada escritura que salió bien: tira los guardados que
+// esa escritura pudo haber dejado viejos. Un boletín de un mes mira los seis
+// meses anteriores y el año hasta ese mes, así que un cambio en un evento
+// alcanza a todos los meses desde el suyo en adelante (nunca a los previos).
+export async function invalidarGuardados(metodo, p, b) {
+  if (metodo === 'GET' || !p[0] || RUTAS_AJENAS.has(p[0])) return
+  // Un evento borrado o con la fecha cambiada pudo estar en otro mes: cae todo
+  if (RUTAS_DE_EVENTO.has(p[0]) && p[1] && metodo !== 'DELETE' && !b?.fecha) {
+    const [ev] = await query(
+      `select to_char(fecha, 'YYYY-MM') as mes from eventos where id::text = $1`, [p[1]])
+    if (ev) {
+      await query('delete from boletines_guardados where mes >= $1', [ev.mes])
+      return
+    }
+  }
+  await query('delete from boletines_guardados')
+}
+
+// Arma de cero los boletines de todos los jugadores activos de un mes. Cada
+// dato sale en una sola consulta para todos los chicos (agrupada por
+// jugador): con una consulta por jugador eran cientos de viajes a la base.
+async function armar(mes) {
   const desde = primerDia(sumarMeses(mes, -(MESES_EVOLUCION - 1)))
   const hasta = primerDia(sumarMeses(mes, 1))
   const inicioMes = primerDia(mes)
@@ -180,27 +252,31 @@ export async function boletines({ mes, jugadorId = null }) {
     `select id, nombre, apellido, fecha_nacimiento::text as fecha_nacimiento,
             puestos, puesto_principal
      from jugadores
-     where estado <> 'inactivo' ${jugadorId ? 'and id = $1' : ''}
-     order by apellido, nombre`,
-    jugadorId ? [jugadorId] : [])
-  if (jugadorId && !jugadores.length) throw { codigo: 404, error: 'no_existe' }
+     where estado <> 'inactivo'
+     order by apellido, nombre`)
 
+  const detalle = await detalleDelMes(inicioMes, hasta)
   const hayRanking = eventosDelMes.length >= MINIMO_EVENTOS
-  const armados = []
-  for (const j of jugadores) {
-    armados.push(await boletinDe({
-      jugador: j, mes, inicioMes, hasta, eventosDelMes, hayRanking,
-      resumen: delMes[j.id], puesto: puestos[j.id] ?? null, rankeados,
-      anio: anio[j.id], promedioAnio, puestoAnio: puestosAnio[j.id] ?? null, rankeadosAnio,
-      evolucion: meses.map((m) => ({
-        mes: m,
-        jugador: resumenPorMes[m][j.id]?.total ?? null,
-        division: promedios[m],
-      })),
-      progreso: progresoDe(resumenPorMes, meses, j.id),
-      mejorProgreso: mejorProgreso(resumenPorMes, meses),
-    }))
-  }
+  const mejor = mejorProgreso(resumenPorMes, meses)
+  const armados = jugadores.map((j) => boletinDe({
+    jugador: j, mes, eventosDelMes, hayRanking,
+    resumen: delMes[j.id], puesto: puestos[j.id] ?? null, rankeados,
+    anio: anio[j.id], promedioAnio, puestoAnio: puestosAnio[j.id] ?? null, rankeadosAnio,
+    evolucion: meses.map((m) => ({
+      mes: m,
+      jugador: resumenPorMes[m][j.id]?.total ?? null,
+      division: promedios[m],
+    })),
+    progreso: progresoDe(resumenPorMes, meses, j.id),
+    mejorProgreso: mejor,
+    marcas: detalle.marcas[j.id] || {},
+    juego: detalle.juego[j.id] || {},
+    tiemposPosibles: detalle.tiemposPosibles[j.id] || 0,
+    camisetas: detalle.camisetas[j.id] || [],
+    capitanias: detalle.capitanias[j.id] || { mes: 0, anio: 0 },
+    lesiones: detalle.lesiones[j.id] || [],
+    objetivos: objetivosDe(j, hasta, detalle.evaluaciones[j.id]),
+  }))
 
   return {
     mes,
@@ -233,17 +309,25 @@ function mejorProgreso(resumenPorMes, meses) {
   return mejor
 }
 
-async function boletinDe({
-  jugador, mes, inicioMes, hasta, eventosDelMes, hayRanking, resumen, puesto, rankeados,
-  anio, promedioAnio, puestoAnio, rankeadosAnio, evolucion, progreso, mejorProgreso,
-}) {
-  const id = jugador.id
-  const rango = [id, inicioMes, hasta]
+// Agrupa las filas de una consulta por jugador_id, sacándole esa columna
+function porJugador(filas, armarFila = (f) => f) {
+  const grupos = {}
+  for (const { jugador_id, ...resto } of filas) {
+    (grupos[jugador_id] ||= []).push(armarFila(resto))
+  }
+  return grupos
+}
 
-  // Marca del jugador en cada evento del mes (presente, tarde, golpe) y si
-  // ese día estaba lesionado
+// Todo el detalle del mes de todos los jugadores activos, una consulta por
+// tabla, ya repartido por jugador.
+async function detalleDelMes(inicioMes, hasta) {
+  const rango = [inicioMes, hasta]
+
+  // Marca de cada jugador en cada evento del mes (presente, tarde, golpe) y
+  // si ese día estaba lesionado. Los eventos anteriores a su llegada al
+  // plantel no tienen fila: no salen en su hoja.
   const marcas = await query(
-    `select e.id as evento_id,
+    `select j.id as jugador_id, e.id as evento_id,
        ${PRESENTE} as presente,
        ${LESIONADO} as lesionado,
        (select ap.tarde from asistencias_partido ap
@@ -268,18 +352,103 @@ async function boletinDe({
                where c.jugador_id = j.id and c.fecha = e.fecha) as capitan
      from eventos e
      cross join jugadores j
-     where j.id = $1
-       and e.fecha >= $2::date and e.fecha < $3::date and e.fecha <= current_date
+     where j.estado <> 'inactivo'
+       and e.fecha >= $1::date and e.fecha < $2::date and e.fecha <= current_date
        and ${EVENTO_VIGENTE} and ${ASISTENCIA_TOMADA}
-       and (${PRESENTE} or ${EN_PLANTEL})
-     order by e.fecha`,
+       and (${PRESENTE} or ${EN_PLANTEL})`,
     rango)
-  const porEvento = Object.fromEntries(marcas.map((m) => [m.evento_id, m]))
+
+  // Rugby jugado en el mes
+  const juego = await query(
+    `select tj.jugador_id,
+       count(distinct bl.evento_id)::int as partidos_jugados,
+       count(*)::int as tiempos_jugados,
+       count(*) filter (where tj.prestado)::int as prestado
+     from tiempo_jugadores tj
+     join tiempos t on t.id = tj.tiempo_id
+     join bloques bl on bl.id = t.bloque_id
+     join eventos e on e.id = bl.evento_id
+     where e.fecha >= $1::date and e.fecha < $2::date
+     group by tj.jugador_id`,
+    rango)
+
+  // Tiempos que se jugaron en los bloques a los que cada uno estuvo citado
+  const posibles = await query(
+    `select bj.jugador_id, count(*)::int as tiempos_posibles
+     from tiempos t
+     join bloques bl on bl.id = t.bloque_id
+     join bloque_jugadores bj on bj.bloque_id = bl.id
+     join eventos e on e.id = bl.evento_id
+     where e.fecha >= $1::date and e.fecha < $2::date
+     group by bj.jugador_id`,
+    rango)
+
+  const camisetas = await query(
+    `select tj.jugador_id, tj.puesto, count(*)::int as tiempos
+     from tiempo_jugadores tj
+     join tiempos t on t.id = tj.tiempo_id
+     join bloques bl on bl.id = t.bloque_id
+     join eventos e on e.id = bl.evento_id
+     where tj.puesto is not null
+       and e.fecha >= $1::date and e.fecha < $2::date
+     group by tj.jugador_id, tj.puesto
+     order by tj.jugador_id, count(*) desc, tj.puesto`,
+    rango)
+
+  const capitanias = await query(
+    `select jugador_id,
+            count(*) filter (where fecha >= $1::date and fecha < $2::date)::int as mes,
+            count(*) filter (where date_part('year', fecha) = date_part('year', $1::date))::int as anio
+     from capitanias
+     group by jugador_id`,
+    rango)
+
+  // Lesiones que pisan el mes, para la nota de arriba de la hoja
+  const lesiones = await query(
+    `select jugador_id, fecha::text as fecha, descripcion, recuperado,
+            fecha_retorno_estimada::text as fecha_retorno_estimada
+     from lesiones
+     where fecha < $2::date
+       and coalesce(fecha_retorno_estimada,
+                    case when recuperado then fecha else current_date end) >= $1::date
+     order by fecha`,
+    rango)
+
+  // La última evaluación vigente de cada uno, solo para elegir los objetivos
+  const evaluaciones = await query(
+    `select distinct on (jugador_id) jugador_id, valores, valores_revisor
+     from evaluaciones
+     where fecha < $1::date
+       and fecha >= ($1::date - ($2 || ' days')::interval)
+     order by jugador_id, fecha desc, created_at desc`,
+    [hasta, DIAS_EVALUACION_VIGENTE])
+
+  const marcasPorJugador = {}
+  for (const { jugador_id, evento_id, ...m } of marcas) {
+    (marcasPorJugador[jugador_id] ||= {})[evento_id] = m
+  }
+  return {
+    marcas: marcasPorJugador,
+    juego: Object.fromEntries(juego.map(({ jugador_id, ...j }) => [jugador_id, j])),
+    tiemposPosibles: Object.fromEntries(posibles.map((p) => [p.jugador_id, p.tiempos_posibles])),
+    camisetas: porJugador(camisetas),
+    capitanias: Object.fromEntries(capitanias.map(({ jugador_id, ...c }) => [jugador_id, c])),
+    lesiones: porJugador(lesiones),
+    evaluaciones: Object.fromEntries(evaluaciones.map(({ jugador_id, ...e }) => [jugador_id, e])),
+  }
+}
+
+function boletinDe({
+  jugador, mes, eventosDelMes, hayRanking, resumen, puesto, rankeados,
+  anio, promedioAnio, puestoAnio, rankeadosAnio, evolucion, progreso, mejorProgreso,
+  marcas, juego, tiemposPosibles, camisetas, capitanias, lesiones, objetivos,
+}) {
+  const id = jugador.id
 
   // Los eventos anteriores a su llegada al plantel no salen en su hoja: no
-  // tienen fila en `marcas` y marcarlos ausentes sería inventarle faltas.
-  const dias = eventosDelMes.filter((e) => porEvento[e.id]).map((e) => {
-    const m = porEvento[e.id]
+  // tienen marca y marcarlos ausentes sería inventarle faltas.
+  const dias = eventosDelMes.filter((e) => marcas[e.id]).map((e) => {
+    const m = marcas[e.id]
     return {
       fecha: e.fecha,
       tipo: e.tipo,
@@ -294,68 +463,6 @@ async function boletinDe({
       capitan: !!m.capitan,
     }
   })
-
-  // Rugby jugado en el mes
-  const [juego] = await query(
-    `select
-       (select count(distinct bl.evento_id)::int
-        from tiempo_jugadores tj
-        join tiempos t on t.id = tj.tiempo_id
-        join bloques bl on bl.id = t.bloque_id
-        join eventos e on e.id = bl.evento_id
-        where tj.jugador_id = $1 and e.fecha >= $2::date and e.fecha < $3::date) as partidos_jugados,
-       (select count(*)::int
-        from tiempo_jugadores tj
-        join tiempos t on t.id = tj.tiempo_id
-        join bloques bl on bl.id = t.bloque_id
-        join eventos e on e.id = bl.evento_id
-        where tj.jugador_id = $1 and e.fecha >= $2::date and e.fecha < $3::date) as tiempos_jugados,
-       -- Tiempos que se jugaron en los bloques a los que estuvo citado
-       (select count(*)::int
-        from tiempos t
-        join bloques bl on bl.id = t.bloque_id
-        join bloque_jugadores bj on bj.bloque_id = bl.id and bj.jugador_id = $1
-        join eventos e on e.id = bl.evento_id
-        where e.fecha >= $2::date and e.fecha < $3::date) as tiempos_posibles,
-       (select count(*)::int
-        from tiempo_jugadores tj
-        join tiempos t on t.id = tj.tiempo_id
-        join bloques bl on bl.id = t.bloque_id
-        join eventos e on e.id = bl.evento_id
-        where tj.jugador_id = $1 and tj.prestado
-          and e.fecha >= $2::date and e.fecha < $3::date) as prestado`,
-    rango)
-
-  const camisetas = await query(
-    `select tj.puesto, count(*)::int as tiempos
-     from tiempo_jugadores tj
-     join tiempos t on t.id = tj.tiempo_id
-     join bloques bl on bl.id = t.bloque_id
-     join eventos e on e.id = bl.evento_id
-     where tj.jugador_id = $1 and tj.puesto is not null
-       and e.fecha >= $2::date and e.fecha < $3::date
-     group by tj.puesto
-     order by count(*) desc, tj.puesto`,
-    rango)
-
-  const [capitanias] = await query(
-    `select count(*) filter (where fecha >= $2::date and fecha < $3::date)::int as mes,
-            count(*) filter (where date_part('year', fecha) = date_part('year', $2::date))::int as anio
-     from capitanias where jugador_id = $1`,
-    rango)
-
-  // Lesiones que pisan el mes, para la nota de arriba de la hoja
-  const lesiones = await query(
-    `select fecha::text as fecha, descripcion, recuperado,
-            fecha_retorno_estimada::text as fecha_retorno_estimada
-     from lesiones
-     where jugador_id = $1 and fecha < $3::date
-       and coalesce(fecha_retorno_estimada,
-                    case when recuperado then fecha else current_date end) >= $2::date
-     order by fecha`,
-    rango)
-
-  const objetivos = await objetivosDe(jugador, hasta)
 
   const tarde = dias.filter((d) => d.tarde).map((d) => d.fecha)
   const faltoAvisando = dias.filter((d) => d.falto_avisando)
@@ -391,10 +498,10 @@ async function boletinDe({
     evolucion,
     progreso,
     juego: {
-      partidos_jugados: juego.partidos_jugados,
-      tiempos_jugados: juego.tiempos_jugados,
-      tiempos_posibles: juego.tiempos_posibles,
-      prestado: juego.prestado,
+      partidos_jugados: juego.partidos_jugados || 0,
+      tiempos_jugados: juego.tiempos_jugados || 0,
+      tiempos_posibles: tiemposPosibles,
+      prestado: juego.prestado || 0,
       camisetas,
       capitanias_mes: capitanias.mes,
       capitanias_anio: capitanias.anio,
@@ -417,15 +524,7 @@ async function boletinDe({
 // Dos cosas para practicar el mes que viene, sacadas de lo más bajo de la
 // última evaluación. Devuelve solo las frases: la nota, el área y la fecha de
 // la evaluación se quedan acá adentro y nunca llegan al boletín.
-async function objetivosDe(jugador, hasta) {
-  const [ultima] = await query(
-    `select fecha::text as fecha, valores, valores_revisor
-     from evaluaciones
-     where jugador_id = $1 and fecha < $2::date
-       and fecha >= ($2::date - ($3 || ' days')::interval)
-     order by fecha desc, created_at desc
-     limit 1`,
-    [jugador.id, hasta, DIAS_EVALUACION_VIGENTE])
+function objetivosDe(jugador, hasta, ultima) {
   if (!ultima) return []
 
   const banda = bandaEtaria(edadAlCierre(jugador.fecha_nacimiento, hasta))
