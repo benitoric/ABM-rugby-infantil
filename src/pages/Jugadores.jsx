@@ -7,8 +7,31 @@ import {
 } from '../helpers.js'
 import { promediosResumen, valoresConsolidados, GRUPOS } from '../evaluacion.js'
 import { base64ABlob } from '../archivos.js'
+import { irA, leerHash, reponer, suscribir } from '../navegacion.js'
+import { ultimosMeses } from '../boletin.js'
 import Boletin from './Boletin.jsx'
 import Ficha from './Ficha.jsx'
+
+// La posición dentro de los boletines vive en el hash, así "atrás" vuelve al
+// listado del mes elegido en vez de saltar a la pestaña anterior:
+//   #/jugadores/boletines/<mes>        listado del mes
+//   #/jugadores/boletines/<mes>/<id>   el boletín de un chico, abierto desde el listado
+//   #/jugadores/boletin/<id>/<mes>     el boletín de un chico solo (desde su ficha)
+// Un mes que no está entre los últimos doce (hash viejo o escrito a mano) cae
+// al mes actual.
+function boletinDeHash() {
+  const [seccion, sub, a, b] = leerHash()
+  if (seccion !== 'jugadores') return null
+  const meses = ultimosMeses(12)
+  const mesValido = (m) => (meses.includes(m) ? m : meses[0])
+  if (sub === 'boletines') return { solo: false, mes: mesValido(a), jugadorId: b || null }
+  if (sub === 'boletin' && a) return { solo: true, mes: mesValido(b), jugadorId: a }
+  return null
+}
+
+const hashBoletin = (b) => (b.solo
+  ? ['jugadores', 'boletin', b.jugadorId, b.mes]
+  : ['jugadores', 'boletines', b.mes, b.jugadorId])
 
 const VACIO = {
   nombre: '', apellido: '', fecha_nacimiento: '', dni: '', posicion: '',
@@ -102,8 +125,18 @@ export default function Jugadores({ yo }) {
   const [autoEvaluar, setAutoEvaluar] = useState(false)
   const [revisar, setRevisar] = useState(null)
   const [repartiendo, setRepartiendo] = useState(false)
-  // Boletín mensual: null, 'todos' o el id de un jugador
-  const [boletinDe, setBoletinDe] = useState(null)
+  // Boletín mensual: null o la posición que sale del hash (ver boletinDeHash)
+  const [boletin, setBoletin] = useState(boletinDeHash)
+  useEffect(() => suscribir(() => setBoletin(boletinDeHash())), [])
+
+  // Mueve la posición dentro de los boletines. Elegir un chico suma historial
+  // (para que "atrás" vuelva al listado); cambiar el mes reemplaza la entrada,
+  // porque es un filtro del mismo listado y no una vista nueva.
+  function moverBoletin(cambios, { reemplazar = false } = {}) {
+    const b = { ...boletin, ...cambios }
+    if (reemplazar) { reponer(...hashBoletin(b)); setBoletin(b) }
+    else irA(...hashBoletin(b))
+  }
 
   // Ampliación de la foto del DNI: se baja el archivo completo recién al tocarla
   async function abrirFoto(j) {
@@ -237,12 +270,16 @@ export default function Jugadores({ yo }) {
     )
   }
 
-  if (boletinDe) {
+  if (boletin) {
     return (
       <Boletin
-        jugadorId={boletinDe === 'todos' ? null : boletinDe}
+        jugadorId={boletin.solo ? boletin.jugadorId : null}
+        mes={boletin.mes}
+        verDe={boletin.jugadorId}
         yo={yo}
-        onVolver={() => setBoletinDe(null)}
+        onMes={(m) => moverBoletin({ mes: m }, { reemplazar: true })}
+        onVer={(id) => moverBoletin({ jugadorId: id })}
+        onVolver={() => irA('jugadores')}
       />
     )
   }
@@ -254,7 +291,7 @@ export default function Jugadores({ yo }) {
         yo={yo}
         evaluarAlAbrir={autoEvaluar}
         revisar={revisar}
-        onBoletin={() => { setBoletinDe(fichaDe); setFichaDe(null) }}
+        onBoletin={() => { setFichaDe(null); irA('jugadores', 'boletin', fichaDe) }}
         onVolver={() => { setFichaDe(null); setAutoEvaluar(false); setRevisar(null); cargar() }}
       />
     )
@@ -267,7 +304,7 @@ export default function Jugadores({ yo }) {
       <div className="fila entre">
         <h2>Jugadores ({visibles.length})</h2>
         <div className="fila">
-          <button className="btn sec" onClick={() => setBoletinDe('todos')}>📄 Boletines</button>
+          <button className="btn sec" onClick={() => irA('jugadores', 'boletines')}>📄 Boletines</button>
           <button className="btn sec" onClick={() => setImportando(true)}>Importar lista</button>
           <button className="btn" onClick={() => setEditando({ ...VACIO })}>+ Nuevo</button>
         </div>
