@@ -18,6 +18,16 @@ export async function avisarBoletines() {
   const [anio, numero] = mes.split('-')
   const nombre = `${MESES[Number(numero) - 1]} de ${anio}`
 
+  // Se dejan armados y guardados antes de avisar, así el primero que los
+  // abre los tiene al instante. Si falla, el aviso sale igual: se arman al
+  // abrirlos.
+  try {
+    const { boletines } = await import('./boletin.js')
+    await boletines({ mes })
+  } catch (e) {
+    console.error('No se pudieron dejar armados los boletines', e)
+  }
+
   const marca = await query(
     `insert into avisos_enviados (tipo, referencia, fecha)
      values ('boletin', $1, (now() at time zone $2)::date)

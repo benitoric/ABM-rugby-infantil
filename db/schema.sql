@@ -376,6 +376,17 @@ create table if not exists avisos_enviados (
   primary key (tipo, referencia, fecha)
 );
 
+-- Boletines ya armados: una fila por mes con el JSON completo de todos los
+-- jugadores, tal como lo devuelve `boletin?mes=`. Armarlos cuesta varias
+-- consultas pesadas, así que se arman una vez y se sirven de acá. Cualquier
+-- escritura que toque lo que sale en la hoja borra los meses afectados
+-- (server/boletin.js, invalidarGuardados); el siguiente pedido los rearma.
+create table if not exists boletines_guardados (
+  mes text primary key,
+  datos jsonb not null,
+  generado_en timestamptz not null default now()
+);
+
 -- ---------- giras / viajes a otras provincias ----------
 -- Un viaje es una gira de la división a otra provincia (o a otro club de
 -- afuera). De cada viaje se lleva quiénes van, cómo se reparten para dormir
