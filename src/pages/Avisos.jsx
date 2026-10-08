@@ -99,3 +99,45 @@ export default function Avisos() {
     </div>
   )
 }
+
+// Tarjeta de la pantalla de inicio: aparece solo cuando este celular tenía
+// los avisos activos y los perdió (el sistema de push dio de baja la
+// suscripción, se reinstaló la app, etc.). Un toque los vuelve a activar.
+export function AvisosPerdidos() {
+  const [perdido, setPerdido] = useState(false)
+  const [trabajando, setTrabajando] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    estadoPush().then((e) => setPerdido(!!e.perdido)).catch(() => {})
+  }, [])
+
+  async function reactivar() {
+    setTrabajando(true)
+    setError('')
+    try {
+      const r = await activarPush()
+      if (r.ok) setPerdido(false)
+      else setError('El navegador no dejó activar los avisos. Revisá las notificaciones de la app en la configuración del teléfono.')
+    } catch {
+      setError('No se pudo. Probá de nuevo en un rato.')
+    }
+    setTrabajando(false)
+  }
+
+  if (!perdido) return null
+  return (
+    <div className="tarjeta aviso-push-perdido">
+      <h3>🔕 Los avisos se desactivaron en este celular</h3>
+      <p className="mini" style={{ margin: '4px 0 8px' }}>
+        El teléfono dio de baja la suscripción (pasa al reinstalar la app, borrar
+        datos del navegador o con algunas actualizaciones). Hasta que los
+        vuelvas a activar no te llegan los cumpleaños ni los boletines.
+      </p>
+      <button className="btn" style={{ width: '100%' }} disabled={trabajando} onClick={reactivar}>
+        {trabajando ? 'Activando…' : '🔔 Volver a activar los avisos'}
+      </button>
+      {error && <p className="mini" style={{ marginTop: 8 }}>{error}</p>}
+    </div>
+  )
+}

@@ -3,6 +3,11 @@
 // activa en la computadora.
 import { api } from './api.js'
 
+// Recuerda si en este celular los avisos estuvieron activos ('1') o si fue
+// la persona quien los apagó ('0'): sirve para avisarle cuando se pierden
+// solos, sin molestar a quien los desactivó a propósito.
+const CLAVE_ESTADO = 'rugby_m12_push'
+
 export function soportaPush() {
   return typeof navigator !== 'undefined' &&
     'serviceWorker' in navigator &&
@@ -24,11 +29,20 @@ async function registrar() {
   return navigator.serviceWorker.register('./sw.js')
 }
 
-// Qué pasa hoy en este dispositivo: si puede recibir avisos y si ya los tiene
-// activados (la suscripción del navegador tiene que estar además guardada en
-// el servidor: si se reinstaló la app, puede quedar solo de un lado).
+function recordar(valor) {
+  try { localStorage.setItem(CLAVE_ESTADO, valor) } catch { /* sin almacenamiento */ }
+}
+function recordado() {
+  try { return localStorage.getItem(CLAVE_ESTADO) } catch { return null }
+}
+
+// Qué pasa hoy en este dispositivo: si puede recibir avisos, si ya los tiene
+// activados y si los tenía y los perdió. "Activo" exige las dos partes: la
+// suscripción del navegador y que el servidor la conozca. Si el navegador la
+// tiene con la clave vigente y el servidor no (base restaurada, renovación que
+// no llegó), se vuelve a registrar sola acá mismo.
 export async function estadoPush() {
-  if (!soportaPush()) return { soportado: false, activo: false, permiso: 'default' }
+  if (!soportaPush()) return { soportado: false, activo: false, perdido: false, permiso: 'default' }
   const permiso = Notification.permission
   let activo = false
   try {
@@ -37,11 +51,19 @@ export async function estadoPush() {
     if (sus) {
       const { endpoints } = await api('push/suscripciones')
       activo = endpoints.includes(sus.endpoint)
-      // Suscripción del navegador que el servidor no conoce (base restaurada,
-      // otra cuenta): se vuelve a registrar sola al activar.
+      if (!activo) {
+        const { clave } = await api('push/clave')
+        if (mismaClave(sus, clave)) {
+          await api('push/suscripciones', { method: 'POST', body: sus.toJSON() })
+          activo = true
+        }
+      }
     }
-  } catch { /* sin service worker todavía */ }
-  return { soportado: true, activo, permiso }
+  } catch { /* sin service worker todavía, o sin red */ }
+  if (activo) recordar('1')
+  // Los tenía (o al menos dio el permiso) y ya no están: hay que avisarle
+  const perdido = !activo && permiso === 'granted' && recordado() !== '0'
+  return { soportado: true, activo, perdido, permiso }
 }
 
 export async function activarPush() {
@@ -50,16 +72,24 @@ export async function activarPush() {
   const reg = await registrar()
   await navigator.serviceWorker.ready
   const { clave } = await api('push/clave')
-  const sus = await reg.pushManager.getSubscription() ||
-    await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: claveAplicacion(clave),
-    })
+  let sus = await reg.pushManager.getSubscription()
+  // Una suscripción hecha con otra clave de la app no sirve: el sistema de
+  // push rechazaría los envíos. Se descarta y se saca una nueva.
+  if (sus && !mismaClave(sus, clave)) {
+    await sus.unsubscribe()
+    sus = null
+  }
+  sus ||= await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: claveAplicacion(clave),
+  })
   await api('push/suscripciones', { method: 'POST', body: sus.toJSON() })
+  recordar('1')
   return { ok: true }
 }
 
 export async function desactivarPush() {
+  recordar('0')
   const reg = await navigator.serviceWorker.getRegistration()
   const sus = await reg?.pushManager.getSubscription()
   if (!sus) return { ok: true }
@@ -71,6 +101,19 @@ export async function desactivarPush() {
 export async function probarPush() {
   const { enviados } = await api('push/prueba', { method: 'POST' })
   return enviados
+}
+
+// ¿La suscripción del navegador se hizo con la clave que hoy usa el servidor?
+function mismaClave(sus, claveBase64url) {
+  const propia = sus.options?.applicationServerKey
+  if (!propia) return true // navegadores que no la exponen: se confía
+  return aBase64url(new Uint8Array(propia)) === claveBase64url
+}
+
+function aBase64url(bytes) {
+  let bin = ''
+  for (const b of bytes) bin += String.fromCharCode(b)
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
 // La clave pública viaja en base64url y el navegador la pide como bytes
