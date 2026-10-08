@@ -272,10 +272,13 @@ async function main() {
   esperar('manager desmarca pagado', r.codigo === 200 && r.datos.jugadores[0].pagado === 0 && !r.datos.pagos.length, r)
   r = await pedir(`viajes/${viaje.id}/jugadores/${jugador.id}/pagado`, { method: 'PUT', token: M, body: { pagado: true } })
   esperar('el pagado de un toque es solo para encuentros', r.codigo === 400 && r.datos.error === 'solo_encuentros', r)
-  r = await pedir(`viajes/${encuentro.id}`, { method: 'PUT', token: M, body: {
-    ...encuentro, tipo: 'gira', fecha_salida: '2026-11-14', hora: '11:00', club_anfitrion: 'Cardenales',
-  } })
-  esperar('manager edita el encuentro (y el tipo no cambia)', r.codigo === 200 && r.datos.viaje.tipo === 'encuentro', r)
+  const cambios = { ...encuentro, tipo: 'gira', fecha_salida: '2026-11-14', hora: '11:00', club_anfitrion: 'Cardenales' }
+  r = await pedir(`viajes/${encuentro.id}`, { method: 'PUT', token: M, body: cambios })
+  esperar('manager no edita los datos del encuentro', r.codigo === 403 && r.datos.error === 'solo_administrador', r)
+  r = await pedir(`viajes/${viaje.id}`, { method: 'PUT', token: M, body: { ...viaje, destino: 'Jujuy' } })
+  esperar('manager sigue editando la gira', r.codigo === 200 && r.datos.viaje.destino === 'Jujuy', r)
+  r = await pedir(`viajes/${encuentro.id}`, { method: 'PUT', token: T, body: cambios })
+  esperar('el dueño edita el encuentro (y el tipo no cambia)', r.codigo === 200 && r.datos.viaje.tipo === 'encuentro', r)
   r = await pedir('eventos', { token: T })
   partido = r.datos.find((e) => e.id === encuentro.evento_id)
   esperar('el partido sigue los cambios del encuentro',

@@ -456,7 +456,13 @@ function DetalleViaje({ id, yo, staff, onVolver, onCambio }) {
     <div className="contenido">
       <div className="fila entre no-imprimir">
         <button className="btn sec chico" onClick={onVolver}>← Viajes</button>
-        <span className={`badge viaje-${estado.clave}`}>{estado.texto}</span>
+        <div className="fila" style={{ gap: 8 }}>
+          {/* Los datos del encuentro los edita solo quien administra */}
+          {encuentro && yo.admin && (
+            <button className="btn chico" onClick={() => setEditando(true)}>✏️ Editar</button>
+          )}
+          <span className={`badge viaje-${estado.clave}`}>{estado.texto}</span>
+        </div>
       </div>
 
       <div className="tarjeta">
@@ -1457,8 +1463,15 @@ function VistaDatos({ datos, yo, onEditar, onBorrar }) {
       <div className="tarjeta">
         <div className="fila entre">
           <h3>Datos del {encuentro ? 'encuentro' : 'viaje'}</h3>
-          <button className="btn chico" onClick={onEditar}>Editar</button>
+          {(!encuentro || yo.admin) && (
+            <button className="btn chico" onClick={onEditar}>Editar</button>
+          )}
         </div>
+        {encuentro && !yo.admin && (
+          <p className="mini" style={{ margin: '0 0 8px' }}>
+            Los datos del encuentro los edita la cabeza de división.
+          </p>
+        )}
         {encuentro ? (
           <dl className="datos-viaje">
             <dt>Club</dt><dd>{viaje.club_anfitrion || '—'}</dd>
