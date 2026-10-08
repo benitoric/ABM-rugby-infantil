@@ -66,6 +66,13 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   `cron/cumpleanos`, que saluda a los que cumplen ese día; `avisos_enviados`
   evita repetir el saludo si la tarea corre de más. En iPhone los avisos solo
   llegan si la app está agregada a la pantalla de inicio.
+  La suscripción la puede dar de baja el sistema del teléfono (reinstalar la
+  app, borrar datos, rotación periódica de Chrome): el service worker escucha
+  `pushsubscriptionchange` y la renueva con `POST push/renovar` (sin sesión:
+  la suscripción anterior hace de credencial y el dueño queda el mismo), y la
+  pantalla de inicio muestra una tarjeta para reactivarlos cuando el celular
+  tenía el permiso dado y ya no tiene suscripción válida. `/api/health`
+  informa cuántos celulares hay suscriptos y cuándo salió el último aviso.
 - **Boletín mensual**: hoja A4 por jugador (`server/boletin.js` arma los
   números, `src/boletin.js` dibuja el PDF con el generador propio) con la
   asistencia del mes, la comparación contra la división, el ranking y las

@@ -758,6 +758,24 @@ async function enrutar(metodo, p, b, req, url) {
         r.staff_cargados = c.n
         const [s] = await query('select count(*)::int as n from staff where password_hash is null')
         r.staff_sin_clave_todavia = s.n
+        // Avisos push: para ver de un vistazo si hay celulares suscriptos y si
+        // la tarea diaria viene corriendo, sin entrar a la base.
+        const [tp] = await query("select to_regclass('public.push_suscripciones') as t")
+        if (tp.t) {
+          const [n] = await query('select count(*)::int as n from push_suscripciones')
+          const [u] = await query(
+            `select max(fecha) filter (where tipo = 'cumple')::text as cumple,
+                    max(fecha) filter (where tipo = 'boletin')::text as boletin
+             from avisos_enviados`)
+          const [k] = await query(
+            "select count(*)::int as n from ajustes where clave like 'vapid_%'")
+          r.avisos = {
+            celulares_suscriptos: n.n,
+            claves_push_generadas: k.n === 2,
+            ultimo_cumple_avisado: u.cumple,
+            ultimo_boletin_avisado: u.boletin,
+          }
+        }
       } else {
         r.tablas = 'FALTAN: ejecutá db/schema.sql en el SQL Editor de Neon (misma base a la que apunta DATABASE_URL)'
       }
@@ -815,6 +833,28 @@ async function enrutar(metodo, p, b, req, url) {
     }
     const { avisarBoletines } = await import('./notificaciones.js')
     return avisarBoletines()
+  }
+
+  // Renovación de una suscripción push, pedida por el service worker cuando el
+  // sistema del teléfono la rota (public/sw.js). Va sin sesión porque el
+  // service worker no tiene el token: la suscripción anterior hace de
+  // credencial —solo ese celular la conocía— y el dueño queda el mismo.
+  if (p[0] === 'push' && p[1] === 'renovar' && metodo === 'POST') {
+    const { anterior, nueva } = b || {}
+    if (!anterior || !nueva?.endpoint || !nueva.keys?.p256dh || !nueva.keys?.auth) {
+      throw { codigo: 400, error: 'faltan_datos' }
+    }
+    const [vieja] = await query(
+      'select staff_email from push_suscripciones where endpoint = $1', [anterior])
+    if (!vieja) throw { codigo: 404, error: 'no_existe' }
+    await query('delete from push_suscripciones where endpoint = $1', [anterior])
+    await query(
+      `insert into push_suscripciones (endpoint, staff_email, p256dh, auth)
+       values ($1,$2,$3,$4)
+       on conflict (endpoint) do update
+         set staff_email = excluded.staff_email, p256dh = excluded.p256dh, auth = excluded.auth`,
+      [nueva.endpoint, vieja.staff_email, nueva.keys.p256dh, nueva.keys.auth])
+    return { ok: true }
   }
 
   // ---------- todo lo demás requiere staff activo ----------
