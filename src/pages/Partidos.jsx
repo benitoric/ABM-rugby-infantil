@@ -1409,6 +1409,7 @@ function Convocatoria({
       <p className="mini">
         Marcá quién avisó que va. Los lesionados no se convocan, y la asistencia
         real se toma el día del partido en "Tomar asistencia".
+        {partido.encuentro && ' Los que están en la lista del encuentro quedan marcados solos.'}
       </p>
       <div className="fila" style={{ gap: 12 }}>
         <span className="mini"><b style={{ color: 'var(--ok)' }}>Van: {van.length}</b></span>

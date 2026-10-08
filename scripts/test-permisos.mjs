@@ -270,6 +270,17 @@ async function main() {
     r.datos.find((v) => v.id === encuentro.id)?.pagaron === 1, r.datos)
   r = await pedir(`viajes/${encuentro.id}/jugadores/${jugador.id}/pagado`, { method: 'PUT', token: M, body: { pagado: false } })
   esperar('manager desmarca pagado', r.codigo === 200 && r.datos.jugadores[0].pagado === 0 && !r.datos.pagos.length, r)
+  // Los de la lista del encuentro quedan como "va" en la convocatoria del
+  // partido, pagos aparte; al sacarlos de la lista vuelven a "sin responder"
+  r = await pedir(`eventos/${encuentro.evento_id}/asistencias`, { token: T })
+  esperar('el de la lista del encuentro queda como "va" en el partido',
+    r.datos.some((a) => a.jugador_id === jugador.id && a.estado === 'presente'), r.datos)
+  r = await pedir(`viajes/${encuentro.id}/jugadores`, { method: 'PUT', token: M, body: { jugador_ids: [] } })
+  esperar('manager lo saca de la lista', r.codigo === 200 && !r.datos.jugadores.length, r)
+  r = await pedir(`eventos/${encuentro.evento_id}/asistencias`, { token: T })
+  esperar('fuera de la lista, vuelve a "sin responder"', !r.datos.some((a) => a.jugador_id === jugador.id), r.datos)
+  r = await pedir(`viajes/${encuentro.id}/jugadores`, { method: 'PUT', token: M, body: { jugador_ids: [jugador.id] } })
+  esperar('manager lo vuelve a poner en la lista', r.codigo === 200 && r.datos.jugadores.length === 1, r)
   r = await pedir(`viajes/${viaje.id}/jugadores/${jugador.id}/pagado`, { method: 'PUT', token: M, body: { pagado: true } })
   esperar('el pagado de un toque es solo para encuentros', r.codigo === 400 && r.datos.error === 'solo_encuentros', r)
   const cambios = { ...encuentro, tipo: 'gira', fecha_salida: '2026-11-14', hora: '11:00', club_anfitrion: 'Cardenales' }

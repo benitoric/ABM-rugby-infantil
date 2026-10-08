@@ -117,7 +117,11 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   papeles). El "pagado" es de un toque: `PUT viajes/:id/jugadores/:jid/pagado`
   con `{ pagado }` registra un pago en `viaje_pagos` por lo que falta de la
   inscripción (concepto "Inscripción") o borra los pagos del chico; solo vale
-  para encuentros. Al crear un encuentro nace solo su partido en la sección
+  para encuentros. Los chicos de la lista del encuentro quedan marcados "va"
+  en la convocatoria del partido, pagos aparte (`sincronizarConvocatoria`:
+  una fila "presente" en `asistencias`, como si lo marcara un entrenador); al
+  sacarlos de la lista se les saca la marca "va", y solo se tocan los que
+  cambiaron. Al crear un encuentro nace solo su partido en la sección
   Partidos (`eventos`, tipo partido, con dos bloques vacíos y sin rival: los
   entrenadores los cargan por bloque; las notas del encuentro se copian solo
   al crearlo) atado por `viajes.evento_id`; editar
