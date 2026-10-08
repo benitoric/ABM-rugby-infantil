@@ -15,7 +15,7 @@
 // entrenadores arman los bloques. Los managers no ven partidos: el partido
 // se crea acá, de su lado solo queda el id.
 import { query } from './db.js'
-import { invalidarTodos } from './boletin.js'
+import { invalidarGuardados, invalidarTodos } from './boletin.js'
 
 // Columnas del viaje; `a` es el alias de la tabla ('v.' en los SELECT, nada
 // en los RETURNING)
@@ -119,6 +119,36 @@ async function actualizarPartido(v) {
   await query('update eventos set fecha = $1, hora = $2, lugar = $3 where id = $4',
     [d.fecha, d.hora, d.lugar, v.evento_id])
   await invalidarTodos()
+}
+
+// Los chicos de la lista del encuentro van al partido: al entrar a la lista
+// quedan marcados "va" en la convocatoria (tabla `asistencias`, igual que si
+// los marcara un entrenador) y al salir de la lista se les saca la marca "va"
+// (vuelven a "sin responder"). Solo se tocan los que cambiaron: lo que un
+// entrenador marcó a mano sobre otros chicos queda como está. La convocatoria
+// sale en el boletín (avisó que iba y no fue), así que se invalida desde el
+// mes del partido.
+async function sincronizarConvocatoria(viajeId, { entran = [], salen = [] }) {
+  if (!entran.length && !salen.length) return
+  const [v] = await query(
+    `select evento_id from viajes
+     where id = $1 and tipo = 'encuentro' and evento_id is not null`, [viajeId])
+  if (!v) return
+  if (entran.length) {
+    await query(
+      `insert into asistencias (evento_id, jugador_id, estado)
+       select $1, vj.jugador_id, 'presente' from viaje_jugadores vj
+       where vj.viaje_id = $2 and vj.jugador_id = any($3::uuid[])
+       on conflict (evento_id, jugador_id) do update set estado = excluded.estado`,
+      [v.evento_id, viajeId, entran])
+  }
+  if (salen.length) {
+    await query(
+      `delete from asistencias
+       where evento_id = $1 and jugador_id = any($2::uuid[]) and estado = 'presente'`,
+      [v.evento_id, salen])
+  }
+  await invalidarGuardados('PUT', ['eventos', v.evento_id], {})
 }
 
 // Al borrar un encuentro se va también su partido, salvo que los entrenadores
@@ -291,15 +321,18 @@ export async function enrutarViajes({ metodo, p, b, yo, admin }) {
                        where p.viaje_id = vj.viaje_id and p.jugador_id = vj.jugador_id)`,
         [viajeId, ids])
       if (conPagos.length) throw { codigo: 409, error: 'tiene_pagos' }
-      await query(
-        `delete from viaje_jugadores where viaje_id = $1 and not (jugador_id = any($2::uuid[]))`,
-        [viajeId, ids])
+      const salen = (await query(
+        `delete from viaje_jugadores where viaje_id = $1 and not (jugador_id = any($2::uuid[]))
+         returning jugador_id`, [viajeId, ids])).map((f) => f.jugador_id)
+      const entran = []
       for (const jid of ids) {
-        await query(
+        const [nuevo] = await query(
           `insert into viaje_jugadores (viaje_id, jugador_id)
            select $1, id from jugadores where id = $2
-           on conflict do nothing`, [viajeId, jid])
+           on conflict do nothing returning jugador_id`, [viajeId, jid])
+        if (nuevo) entran.push(nuevo.jugador_id)
       }
+      await sincronizarConvocatoria(viajeId, { entran, salen })
       return detalle(viajeId)
     }
     // "Pagó" de un toque, solo para encuentros: marcarlo registra un pago por
