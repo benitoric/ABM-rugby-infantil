@@ -17,7 +17,7 @@ const TABS_COMPLETO = [
   { id: 'jugadores', label: 'Jugadores', ico: '👥' },
   { id: 'entrenamientos', label: 'Entrenamientos', ico: '📋' },
   { id: 'partidos', label: 'Partidos', ico: '🏉' },
-  { id: 'viajes', label: 'Viajes', ico: '🚌' },
+  { id: 'viajes', label: 'Viajes y encuentros', ico: '🚌' },
   { id: 'staff', label: 'Staff', ico: '🧑‍🏫' },
 ]
 
@@ -25,7 +25,7 @@ const TABS_COMPLETO = [
 // Esto es cosmética: la API les cierra todo lo demás (server/permisos.js).
 const TABS_ADMINISTRATIVO = [
   { id: 'padron', label: 'Padrón', ico: '🗂️' },
-  { id: 'viajes', label: 'Viajes', ico: '🚌' },
+  { id: 'viajes', label: 'Viajes y encuentros', ico: '🚌' },
   { id: 'avisos', label: 'Avisos', ico: '🔔' },
 ]
 
@@ -100,7 +100,7 @@ export default function App() {
             onClick={() => tab !== t.id && irA(t.id)}
           >
             <span className="ico">{t.ico}</span>
-            {t.label}
+            <span className="etiqueta-nav">{t.label}</span>
           </button>
         ))}
       </nav>
