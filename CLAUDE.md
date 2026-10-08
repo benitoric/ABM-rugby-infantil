@@ -109,6 +109,24 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   antes. Borrar un viaje entero queda para quien administra
   (`puedeAdministrar`). El catálogo de papeles (`PAPELES_VIAJE`) está en
   `src/helpers.js` y sus claves son las columnas de `viaje_jugadores`.
+- **Encuentros**: la versión de un día de un viaje —se juega en otro club
+  contra varios rivales, con una inscripción por jugador—. Viven en la misma
+  tabla `viajes` con `tipo = 'encuentro'` (las giras son `'gira'`, y el tipo
+  no se cambia después), con las mismas rutas y la misma pantalla, que muestra
+  solo tres vistas: Jugadores, Inscripción y Datos (sin casas, cuotas ni
+  papeles). El "pagado" es de un toque: `PUT viajes/:id/jugadores/:jid/pagado`
+  con `{ pagado }` registra un pago en `viaje_pagos` por lo que falta de la
+  inscripción (concepto "Inscripción") o borra los pagos del chico; solo vale
+  para encuentros. Al crear un encuentro nace solo su partido en la sección
+  Partidos (`eventos`, tipo partido, con dos bloques vacíos y sin rival: los
+  entrenadores los cargan por bloque; las notas del encuentro se copian solo
+  al crearlo) atado por `viajes.evento_id`; editar
+  fecha, hora o club del encuentro lo actualiza, y borrarlo (administrar)
+  borra también el partido salvo que ya tenga plantel, asistencia o un bloque
+  cerrado. Como `viajes` es ruta ajena al boletín, esas escrituras invalidan
+  los guardados a mano (`invalidarTodos`). El listado de eventos trae
+  `encuentro` (el nombre) para etiquetar el partido como tal. Los managers
+  crean encuentros, pero siguen sin ver nada de `eventos`/`partido`.
 - **Manifiesto para bus** (`src/manifiestoPDF.js`): el listado formal que pide
   la empresa de transporte, con el DNI de todos los que viajan. Se emite desde
   Partidos → Armar bloques → "Manifiesto", **un PDF por bloque** (cada bloque

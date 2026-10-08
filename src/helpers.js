@@ -330,8 +330,12 @@ export function suspensionEvento(ev) {
 
 export function etiquetaPartido(ev) {
   const rivales = (ev.bloques || []).filter((b) => b.rival).map((b) => `B${b.numero} vs ${b.rival}`)
-  if (rivales.length) return `Partido · ${rivales.join(' / ')}`
-  return `Partido${ev.rival ? ` vs ${ev.rival}` : ''}`
+  // El partido de un encuentro cargado desde Viajes lleva el nombre del
+  // encuentro (sin repetir "Encuentro" si el nombre ya empieza así)
+  const base = !ev.encuentro ? 'Partido'
+    : /^encuentro/i.test(ev.encuentro) ? ev.encuentro : `Encuentro · ${ev.encuentro}`
+  if (rivales.length) return `${base} · ${rivales.join(' / ')}`
+  return ev.encuentro ? base : `Partido${ev.rival ? ` vs ${ev.rival}` : ''}`
 }
 
 export const ROLES_STAFF = [
@@ -383,18 +387,25 @@ export function papelesCompletos(vj) {
 // Próximo, en curso o ya hecho, según las fechas del viaje
 export function estadoViaje(v, hoy = new Date().toISOString().slice(0, 10)) {
   const fin = v.fecha_regreso || v.fecha_salida
-  if (fin < hoy) return { clave: 'pasado', texto: 'Realizado' }
-  if (v.fecha_salida <= hoy) return { clave: 'en_curso', texto: 'En curso' }
+  const encuentro = esEncuentro(v)
+  if (fin < hoy) return { clave: 'pasado', texto: encuentro ? 'Jugado' : 'Realizado' }
+  if (v.fecha_salida <= hoy) return { clave: 'en_curso', texto: encuentro ? 'Es hoy' : 'En curso' }
   const dias = Math.round((new Date(v.fecha_salida + 'T00:00:00') - new Date(hoy + 'T00:00:00')) / 86400000)
   return {
     clave: 'proximo',
-    texto: dias === 0 ? 'Sale hoy' : dias === 1 ? 'Sale mañana' : `Faltan ${dias} días`,
+    texto: dias === 1 ? (encuentro ? 'Es mañana' : 'Sale mañana') : `Faltan ${dias} días`,
   }
 }
 
-// "12/10 al 14/10/2026" o "12/10/2026" cuando es de un día
+// "12/10 al 14/10/2026" o "12/10/2026" cuando es de un día (un encuentro
+// suma la hora: "12/10/2026 · 10:00")
 export function fechasViaje(v) {
-  if (!v.fecha_regreso || v.fecha_regreso === v.fecha_salida) return fechaCorta(v.fecha_salida)
+  if (!v.fecha_regreso || v.fecha_regreso === v.fecha_salida) {
+    return fechaCorta(v.fecha_salida) + (v.hora ? ` · ${v.hora.slice(0, 5)}` : '')
+  }
   const [, m, d] = v.fecha_salida.split('-')
   return `${d}/${m} al ${fechaCorta(v.fecha_regreso)}`
 }
+
+// Un viaje de la tabla `viajes` puede ser una gira o un encuentro de un día
+export const esEncuentro = (v) => v?.tipo === 'encuentro'

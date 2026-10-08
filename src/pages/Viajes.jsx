@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
 import { irA, leerHash, suscribir } from '../navegacion.js'
 import {
-  abrevPuestos, descargarCSV, edad, estadoViaje, etiquetaMedioPago, fechaCorta,
+  abrevPuestos, descargarCSV, edad, esEncuentro, estadoViaje, etiquetaMedioPago, fechaCorta,
   fechasViaje, fichaMedica, nombreCompleto, nombreStaff, papelesCompletos, pesos,
   MEDIOS_PAGO, PAPELES_VIAJE,
 } from '../helpers.js'
@@ -12,13 +12,27 @@ import {
 } from '../viajePDF.js'
 import { Telefono } from '../telefono.jsx'
 
-// Giras a otras provincias. La posición vive en el hash:
-// #/viajes (listado) y #/viajes/<id>/<vista> (un viaje, en una de sus vistas).
-const VISTAS = [
+// Giras a otras provincias y encuentros de un día en otro club (los dos
+// viven en la tabla `viajes`, ver server/viajes.js). La posición vive en el
+// hash: #/viajes (listado) y #/viajes/<id>/<vista> (uno, en una de sus vistas).
+const VISTAS_GIRA = [
   { id: 'jugadores', label: 'Jugadores' },
   { id: 'alojamiento', label: 'Alojados' },
   { id: 'managers', label: 'Managers' },
   { id: 'datos', label: 'Datos' },
+]
+// El encuentro no tiene casas ni papeles: solo quiénes van y quién pagó
+const VISTAS_ENCUENTRO = [
+  { id: 'jugadores', label: 'Jugadores' },
+  { id: 'inscripcion', label: 'Inscripción' },
+  { id: 'datos', label: 'Datos' },
+]
+const vistasDe = (v) => (esEncuentro(v) ? VISTAS_ENCUENTRO : VISTAS_GIRA)
+
+const FILTROS = [
+  { id: 'todos', label: 'Todos' },
+  { id: 'gira', label: 'Giras' },
+  { id: 'encuentro', label: 'Encuentros' },
 ]
 
 const hoy = () => new Date().toISOString().slice(0, 10)
@@ -34,7 +48,8 @@ function nombreCasa(g) {
 export default function Viajes({ yo }) {
   const [viajes, setViajes] = useState(null)
   const [staff, setStaff] = useState([])
-  const [creando, setCreando] = useState(false)
+  const [creando, setCreando] = useState(null) // 'gira' | 'encuentro' | null
+  const [filtro, setFiltro] = useState('todos')
   const [viajeId, setViajeId] = useState(() => leerHash()[1] || null)
 
   useEffect(() => suscribir(() => {
@@ -65,23 +80,41 @@ export default function Viajes({ yo }) {
   if (!viajes) return <div className="vacio">Cargando…</div>
 
   const dia = hoy()
-  const proximos = viajes.filter((v) => (v.fecha_regreso || v.fecha_salida) >= dia)
+  const visibles = filtro === 'todos' ? viajes : viajes.filter((v) => v.tipo === filtro)
+  const proximos = visibles.filter((v) => (v.fecha_regreso || v.fecha_salida) >= dia)
     .sort((a, b) => a.fecha_salida.localeCompare(b.fecha_salida))
-  const pasados = viajes.filter((v) => (v.fecha_regreso || v.fecha_salida) < dia)
+  const pasados = visibles.filter((v) => (v.fecha_regreso || v.fecha_salida) < dia)
 
   return (
     <div className="contenido">
       <div className="fila entre">
-        <h2>Viajes</h2>
-        <button className="btn" onClick={() => setCreando(true)}>+ Nuevo viaje</button>
+        <h2>Viajes y encuentros</h2>
+        <div className="fila" style={{ gap: 6 }}>
+          <button className="btn sec chico" onClick={() => setCreando('encuentro')}>+ Encuentro</button>
+          <button className="btn chico" onClick={() => setCreando('gira')}>+ Gira</button>
+        </div>
       </div>
       <p className="suave">
-        Giras de la división a otras provincias: quiénes viajan, en qué casa de
-        familia se aloja cada grupo y lo que siguen los managers (pagos y papeles).
+        Giras a otras provincias (quiénes viajan, en qué casa se aloja cada
+        grupo, pagos y papeles) y encuentros de un día en otro club, con la
+        inscripción de cada chico.
       </p>
 
       {!viajes.length && (
-        <div className="vacio">Todavía no hay viajes cargados. Creá el primero.</div>
+        <div className="vacio">Todavía no hay viajes ni encuentros cargados. Creá el primero.</div>
+      )}
+
+      {viajes.length > 0 && (
+        <div className="seg">
+          {FILTROS.map((f) => (
+            <button key={f.id} className={filtro === f.id ? 'activo' : ''} onClick={() => setFiltro(f.id)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {viajes.length > 0 && !visibles.length && (
+        <div className="vacio">No hay {filtro === 'gira' ? 'giras' : 'encuentros'} cargados.</div>
       )}
 
       {proximos.length > 0 && <h3>Próximos y en curso</h3>}
@@ -92,10 +125,11 @@ export default function Viajes({ yo }) {
 
       {creando && (
         <FormViaje
+          tipo={creando}
           staff={staff}
-          onCerrar={() => setCreando(false)}
+          onCerrar={() => setCreando(null)}
           onGuardado={(d) => {
-            setCreando(false)
+            setCreando(null)
             cargar().catch(() => {})
             irA('viajes', d.viaje.id)
           }}
@@ -105,43 +139,74 @@ export default function Viajes({ yo }) {
   )
 }
 
+// "Club anfitrión · Localidad · fecha" (en la gira, destino primero)
+function lugarYFecha(v) {
+  const partes = esEncuentro(v) ? [v.club_anfitrion, v.destino] : [v.destino, v.club_anfitrion]
+  const lugar = partes.filter(Boolean).join(' · ')
+  return `${lugar}${lugar ? ' · ' : ''}${fechasViaje(v)}`
+}
+
 function TarjetaViaje({ v }) {
   const estado = estadoViaje(v)
+  const encuentro = esEncuentro(v)
   // Precio en cero o sin cargar: todavía no hay nada que cobrar
   const esperado = v.precio ? v.precio * v.jugadores : null
   return (
     <button className="tarjeta viaje-item" onClick={() => irA('viajes', v.id)}>
       <div className="fila entre" style={{ flexWrap: 'nowrap' }}>
         <div className="crece" style={{ minWidth: 0 }}>
-          <div className="viaje-nombre">{v.nombre}</div>
-          <div className="mini">
-            {[v.destino, v.club_anfitrion].filter(Boolean).join(' · ')}
-            {(v.destino || v.club_anfitrion) ? ' · ' : ''}{fechasViaje(v)}
+          <div className="viaje-nombre">
+            <span className={`badge tipo-${v.tipo}`} style={{ marginRight: 6 }}>
+              {encuentro ? 'Encuentro' : 'Gira'}
+            </span>
+            {v.nombre}
           </div>
+          <div className="mini">{lugarYFecha(v)}</div>
         </div>
         <span className={`badge viaje-${estado.clave}`}>{estado.texto}</span>
       </div>
-      <div className="mini viaje-resumen">
-        👥 {v.jugadores} {v.jugadores === 1 ? 'jugador' : 'jugadores'}
-        {' · '}🏠 {v.grupos} {v.grupos === 1 ? 'casa' : 'casas'}
-        {v.sin_alojar > 0 && v.jugadores > 0 && <span className="pendiente"> · {v.sin_alojar} sin alojar</span>}
-        {v.papeles_pendientes > 0 && <span className="pendiente"> · {v.papeles_pendientes} con papeles pendientes</span>}
-        {esperado != null && (
-          <span> · 💰 {pesos(v.cobrado)} de {pesos(esperado)}</span>
-        )}
-      </div>
+      {encuentro ? (
+        <div className="mini viaje-resumen">
+          👥 {v.jugadores} {v.jugadores === 1 ? 'jugador' : 'jugadores'}
+          {esperado != null && (
+            <>
+              {' · '}
+              {v.pagaron < v.jugadores
+                ? <span className="pendiente">{v.jugadores - v.pagaron} sin pagar</span>
+                : <span className="ok">todos pagaron</span>}
+              {' · '}💰 {pesos(v.cobrado)} de {pesos(esperado)}
+            </>
+          )}
+          {esperado == null && v.jugadores > 0 && <span className="pendiente"> · sin inscripción cargada</span>}
+        </div>
+      ) : (
+        <div className="mini viaje-resumen">
+          👥 {v.jugadores} {v.jugadores === 1 ? 'jugador' : 'jugadores'}
+          {' · '}🏠 {v.grupos} {v.grupos === 1 ? 'casa' : 'casas'}
+          {v.sin_alojar > 0 && v.jugadores > 0 && <span className="pendiente"> · {v.sin_alojar} sin alojar</span>}
+          {v.papeles_pendientes > 0 && <span className="pendiente"> · {v.papeles_pendientes} con papeles pendientes</span>}
+          {esperado != null && (
+            <span> · 💰 {pesos(v.cobrado)} de {pesos(esperado)}</span>
+          )}
+        </div>
+      )}
     </button>
   )
 }
 
 // ---------- alta y edición del viaje ----------
-function FormViaje({ viaje = null, staffElegido = [], staff, onCerrar, onGuardado }) {
+// `tipo` decide el formulario: la gira pide salida y regreso, precio y
+// cuotas; el encuentro, un día con su hora y la inscripción por jugador. Al
+// editar, el tipo es el del viaje y no se cambia.
+function FormViaje({ viaje = null, tipo = viaje?.tipo || 'gira', staffElegido = [], staff, onCerrar, onGuardado }) {
+  const encuentro = tipo === 'encuentro'
   const [f, setF] = useState(() => ({
     nombre: viaje?.nombre || '',
     destino: viaje?.destino || '',
     club_anfitrion: viaje?.club_anfitrion || '',
     fecha_salida: viaje?.fecha_salida || hoy(),
     fecha_regreso: viaje?.fecha_regreso || '',
+    hora: viaje?.hora?.slice(0, 5) || '',
     precio: viaje?.precio == null ? '' : String(viaje.precio),
     cuotas: viaje?.cuotas == null ? '' : String(viaje.cuotas),
     notas: viaje?.notas || '',
@@ -173,83 +238,133 @@ function FormViaje({ viaje = null, staffElegido = [], staff, onCerrar, onGuardad
     try {
       const cuerpo = {
         ...f,
+        tipo,
         precio: f.precio === '' ? null : Number(f.precio),
-        cuotas: f.cuotas === '' ? null : Number(f.cuotas),
-        fecha_regreso: f.fecha_regreso || null,
+        cuotas: f.cuotas === '' || encuentro ? null : Number(f.cuotas),
+        fecha_regreso: encuentro ? null : f.fecha_regreso || null,
+        hora: encuentro ? f.hora || null : null,
       }
       const d = viaje
         ? await api(`viajes/${viaje.id}`, { method: 'PUT', body: cuerpo })
         : await api('viajes', { method: 'POST', body: cuerpo })
       onGuardado(d)
     } catch (err) {
-      setError(err.error === 'faltan_datos' ? 'Falta el nombre del viaje.'
+      setError(err.error === 'faltan_datos' ? `Falta el nombre ${encuentro ? 'del encuentro' : 'del viaje'}.`
         : err.error === 'fecha_invalida' ? 'Revisá las fechas.'
+        : err.error === 'hora_invalida' ? 'Revisá la hora.'
         : 'No se pudo guardar.')
       setGuardando(false)
     }
   }
 
+  const titulo = encuentro
+    ? (viaje ? 'Editar encuentro' : 'Nuevo encuentro')
+    : (viaje ? 'Editar gira' : 'Nueva gira')
+
   return (
     <div className="modal-fondo" onClick={onCerrar}>
       <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={guardar}>
         <div className="fila entre" style={{ marginBottom: 8 }}>
-          <h3>{viaje ? 'Editar viaje' : 'Nuevo viaje'}</h3>
+          <h3>{titulo}</h3>
           <button type="button" className="btn sec chico" onClick={onCerrar}>Cerrar</button>
         </div>
+        {encuentro && !viaje && (
+          <p className="mini" style={{ marginTop: -4, marginBottom: 10 }}>
+            Al crearlo se carga solo un partido en la sección Partidos, para que
+            los entrenadores armen los bloques.
+          </p>
+        )}
         <div className="campo">
           <label>Nombre *</label>
-          <input autoFocus required placeholder="Gira a Salta 2026" value={f.nombre}
-                 onChange={(e) => editar({ nombre: e.target.value })} />
+          <input autoFocus required placeholder={encuentro ? 'Encuentro en Los Tarcos' : 'Gira a Salta 2026'}
+                 value={f.nombre} onChange={(e) => editar({ nombre: e.target.value })} />
         </div>
-        <div className="grid2">
-          <div className="campo">
-            <label>Destino</label>
-            <input placeholder="Salta" value={f.destino}
-                   onChange={(e) => editar({ destino: e.target.value })} />
+        {encuentro ? (
+          <div className="grid2">
+            <div className="campo">
+              <label>Club donde se juega</label>
+              <input placeholder="Los Tarcos" value={f.club_anfitrion}
+                     onChange={(e) => editar({ club_anfitrion: e.target.value })} />
+            </div>
+            <div className="campo">
+              <label>Localidad</label>
+              <input placeholder="Tucumán" value={f.destino}
+                     onChange={(e) => editar({ destino: e.target.value })} />
+            </div>
           </div>
-          <div className="campo">
-            <label>Club anfitrión</label>
-            <input placeholder="Jockey Club" value={f.club_anfitrion}
-                   onChange={(e) => editar({ club_anfitrion: e.target.value })} />
+        ) : (
+          <div className="grid2">
+            <div className="campo">
+              <label>Destino</label>
+              <input placeholder="Salta" value={f.destino}
+                     onChange={(e) => editar({ destino: e.target.value })} />
+            </div>
+            <div className="campo">
+              <label>Club anfitrión</label>
+              <input placeholder="Jockey Club" value={f.club_anfitrion}
+                     onChange={(e) => editar({ club_anfitrion: e.target.value })} />
+            </div>
           </div>
-        </div>
-        <div className="grid2">
-          <div className="campo">
-            <label>Salida *</label>
-            <input type="date" required value={f.fecha_salida}
-                   onChange={(e) => editar({ fecha_salida: e.target.value })} />
+        )}
+        {encuentro ? (
+          <div className="grid2">
+            <div className="campo">
+              <label>Fecha *</label>
+              <input type="date" required value={f.fecha_salida}
+                     onChange={(e) => editar({ fecha_salida: e.target.value })} />
+            </div>
+            <div className="campo">
+              <label>Hora</label>
+              <input type="time" value={f.hora} onChange={(e) => editar({ hora: e.target.value })} />
+            </div>
           </div>
-          <div className="campo">
-            <label>Regreso</label>
-            <input type="date" min={f.fecha_salida} value={f.fecha_regreso}
-                   onChange={(e) => editar({ fecha_regreso: e.target.value })} />
+        ) : (
+          <div className="grid2">
+            <div className="campo">
+              <label>Salida *</label>
+              <input type="date" required value={f.fecha_salida}
+                     onChange={(e) => editar({ fecha_salida: e.target.value })} />
+            </div>
+            <div className="campo">
+              <label>Regreso</label>
+              <input type="date" min={f.fecha_salida} value={f.fecha_regreso}
+                     onChange={(e) => editar({ fecha_regreso: e.target.value })} />
+            </div>
           </div>
-        </div>
-        <div className="grid2">
+        )}
+        {encuentro ? (
           <div className="campo">
-            <label>Precio por jugador ($)</label>
+            <label>Inscripción por jugador ($)</label>
             <input type="number" min="0" step="0.01" inputMode="decimal" placeholder="0"
                    value={f.precio} onChange={(e) => editar({ precio: e.target.value })} />
           </div>
-          <div className="campo">
-            <label>Cuotas</label>
-            <input type="number" min="1" max="24" step="1" inputMode="numeric" placeholder="1"
-                   value={f.cuotas} onChange={(e) => editar({ cuotas: e.target.value })} />
+        ) : (
+          <div className="grid2">
+            <div className="campo">
+              <label>Precio por jugador ($)</label>
+              <input type="number" min="0" step="0.01" inputMode="decimal" placeholder="0"
+                     value={f.precio} onChange={(e) => editar({ precio: e.target.value })} />
+            </div>
+            <div className="campo">
+              <label>Cuotas</label>
+              <input type="number" min="1" max="24" step="1" inputMode="numeric" placeholder="1"
+                     value={f.cuotas} onChange={(e) => editar({ cuotas: e.target.value })} />
+            </div>
           </div>
-        </div>
-        {f.precio !== '' && Number(f.cuotas) > 1 && (
+        )}
+        {!encuentro && f.precio !== '' && Number(f.cuotas) > 1 && (
           <p className="mini" style={{ marginTop: -6, marginBottom: 10 }}>
             {f.cuotas} cuotas de {pesos(Number(f.precio) / Number(f.cuotas))}
           </p>
         )}
         <div className="campo">
           <label>Notas</label>
-          <textarea placeholder="Horario de salida, qué llevar, transporte…" value={f.notas}
-                    onChange={(e) => editar({ notas: e.target.value })} />
+          <textarea placeholder={encuentro ? 'Horario de llegada, qué llevar, cómo se viaja…' : 'Horario de salida, qué llevar, transporte…'}
+                    value={f.notas} onChange={(e) => editar({ notas: e.target.value })} />
         </div>
         {candidatos.length > 0 && (
           <div className="campo">
-            <label>Staff que viaja</label>
+            <label>{encuentro ? 'Staff que va' : 'Staff que viaja'}</label>
             <div className="fila">
               {candidatos.map((s) => (
                 <button
@@ -266,7 +381,7 @@ function FormViaje({ viaje = null, staffElegido = [], staff, onCerrar, onGuardad
         )}
         {error && <div className="error" style={{ marginBottom: 10 }}>{error}</div>}
         <button className="btn" style={{ width: '100%' }} disabled={guardando}>
-          {guardando ? 'Guardando…' : viaje ? 'Guardar cambios' : 'Crear viaje'}
+          {guardando ? 'Guardando…' : viaje ? 'Guardar cambios' : encuentro ? 'Crear encuentro' : 'Crear gira'}
         </button>
       </form>
     </div>
@@ -280,6 +395,7 @@ function DetalleViaje({ id, yo, staff, onVolver, onCambio }) {
   const [editando, setEditando] = useState(false)
   const [vistaHash, setVistaHash] = useState(() => leerHash()[2] || 'jugadores')
   useEffect(() => suscribir(() => setVistaHash(leerHash()[2] || 'jugadores')), [])
+  const VISTAS = vistasDe(datos?.viaje)
   const vista = VISTAS.some((v) => v.id === vistaHash) ? vistaHash : 'jugadores'
   const setVista = (v) => irA('viajes', id, v === 'jugadores' ? null : v)
 
@@ -328,11 +444,13 @@ function DetalleViaje({ id, yo, staff, onVolver, onCambio }) {
   if (!datos) return <div className="vacio">Cargando…</div>
 
   const { viaje, jugadores, grupos, pagos } = datos
+  const encuentro = esEncuentro(viaje)
   const estado = estadoViaje(viaje)
   const sinAlojar = jugadores.filter((j) => !j.grupo_id)
   const conPapeles = jugadores.filter(papelesCompletos)
   const cobrado = pagos.reduce((s, p) => s + p.monto, 0)
   const esperado = viaje.precio ? viaje.precio * jugadores.length : null
+  const pagaron = viaje.precio ? jugadores.filter((j) => j.pagado >= viaje.precio) : []
 
   return (
     <div className="contenido">
@@ -342,32 +460,46 @@ function DetalleViaje({ id, yo, staff, onVolver, onCambio }) {
       </div>
 
       <div className="tarjeta">
-        <h2>{viaje.nombre}</h2>
-        <div className="suave">
-          {[viaje.destino, viaje.club_anfitrion].filter(Boolean).join(' · ')}
-          {(viaje.destino || viaje.club_anfitrion) ? ' · ' : ''}{fechasViaje(viaje)}
-        </div>
+        <h2>
+          <span className={`badge tipo-${viaje.tipo}`} style={{ marginRight: 8, verticalAlign: 'middle' }}>
+            {encuentro ? 'Encuentro' : 'Gira'}
+          </span>
+          {viaje.nombre}
+        </h2>
+        <div className="suave">{lugarYFecha(viaje)}</div>
         <div className="stat-grid no-imprimir" style={{ marginTop: 10 }}>
           <div className="stat">
             <div className="valor">{jugadores.length}</div>
-            <div className="etiqueta">viajan</div>
+            <div className="etiqueta">{encuentro ? 'van' : 'viajan'}</div>
           </div>
-          <div className="stat">
-            <div className="valor">{grupos.length}</div>
-            <div className="etiqueta">casas</div>
-          </div>
-          <div className="stat">
-            <div className={`valor${sinAlojar.length && jugadores.length ? ' alerta' : ''}`}>
-              {sinAlojar.length}
+          {encuentro && esperado != null && (
+            <div className="stat">
+              <div className={`valor${pagaron.length < jugadores.length ? ' alerta' : ''}`}>
+                {pagaron.length}/{jugadores.length}
+              </div>
+              <div className="etiqueta">pagaron</div>
             </div>
-            <div className="etiqueta">sin alojar</div>
-          </div>
-          <div className="stat">
-            <div className={`valor${conPapeles.length < jugadores.length ? ' alerta' : ''}`}>
-              {conPapeles.length}/{jugadores.length}
-            </div>
-            <div className="etiqueta">papeles ok</div>
-          </div>
+          )}
+          {!encuentro && (
+            <>
+              <div className="stat">
+                <div className="valor">{grupos.length}</div>
+                <div className="etiqueta">casas</div>
+              </div>
+              <div className="stat">
+                <div className={`valor${sinAlojar.length && jugadores.length ? ' alerta' : ''}`}>
+                  {sinAlojar.length}
+                </div>
+                <div className="etiqueta">sin alojar</div>
+              </div>
+              <div className="stat">
+                <div className={`valor${conPapeles.length < jugadores.length ? ' alerta' : ''}`}>
+                  {conPapeles.length}/{jugadores.length}
+                </div>
+                <div className="etiqueta">papeles ok</div>
+              </div>
+            </>
+          )}
           {esperado != null && (
             <div className="stat">
               <div className={`valor${cobrado < esperado ? ' alerta' : ''}`}>
@@ -396,13 +528,19 @@ function DetalleViaje({ id, yo, staff, onVolver, onCambio }) {
       {vista === 'managers' && (
         <VistaManagers datos={datos} yo={yo} mutar={mutar} actualizarJugador={actualizarJugador} />
       )}
+      {vista === 'inscripcion' && (
+        <VistaInscripcion datos={datos} mutar={mutar} />
+      )}
       {vista === 'datos' && (
         <VistaDatos
           datos={datos}
           yo={yo}
           onEditar={() => setEditando(true)}
           onBorrar={async () => {
-            if (!confirm(`¿Borrar el viaje "${viaje.nombre}" con sus jugadores, casas y pagos?`)) return
+            const pregunta = encuentro
+              ? `¿Borrar el encuentro "${viaje.nombre}" con su lista de jugadores y los pagos? El partido de la sección Partidos se borra también, salvo que los entrenadores ya hayan cargado algo en él.`
+              : `¿Borrar el viaje "${viaje.nombre}" con sus jugadores, casas y pagos?`
+            if (!confirm(pregunta)) return
             await api(`viajes/${id}`, { method: 'DELETE' })
             onCambio()
             onVolver()
@@ -426,23 +564,31 @@ function DetalleViaje({ id, yo, staff, onVolver, onCambio }) {
 // ---------- vista: quiénes viajan ----------
 function VistaJugadores({ datos, mutar }) {
   const { viaje, jugadores, grupos } = datos
+  const encuentro = esEncuentro(viaje)
   const [eligiendo, setEligiendo] = useState(false)
   const casa = (j) => grupos.find((g) => g.id === j.grupo_id)
 
   function descargar() {
-    const filas = [[
-      'Apellido', 'Nombre', 'DNI', 'Fecha nac.', 'Edad', 'Tutor', 'Tel. tutor', 'Casa', 'Familia',
-      ...PAPELES_VIAJE.map((p) => p.label), 'Pagado', 'Falta', 'Observaciones',
-    ]]
+    const filas = encuentro
+      ? [['Apellido', 'Nombre', 'DNI', 'Fecha nac.', 'Edad', 'Tutor', 'Tel. tutor', 'Pagó', 'Pagado']]
+      : [[
+        'Apellido', 'Nombre', 'DNI', 'Fecha nac.', 'Edad', 'Tutor', 'Tel. tutor', 'Casa', 'Familia',
+        ...PAPELES_VIAJE.map((p) => p.label), 'Pagado', 'Falta', 'Observaciones',
+      ]]
     for (const j of jugadores) {
       const g = casa(j)
-      filas.push([
+      const base = [
         j.apellido, j.nombre, j.dni || '', fechaCorta(j.fecha_nacimiento), edad(j.fecha_nacimiento) ?? '',
-        j.tutor_nombre || '', j.tutor_telefono || '', g ? `Casa ${g.numero}` : '', g?.familia_nombre || '',
-        ...PAPELES_VIAJE.map((p) => (j[p.clave] ? 'Sí' : 'No')),
-        j.pagado, !viaje.precio ? '' : Math.max(0, viaje.precio - j.pagado),
-        j.observaciones || '',
-      ])
+        j.tutor_nombre || '', j.tutor_telefono || '',
+      ]
+      filas.push(encuentro
+        ? [...base, viaje.precio && j.pagado >= viaje.precio ? 'Sí' : 'No', j.pagado]
+        : [
+          ...base, g ? `Casa ${g.numero}` : '', g?.familia_nombre || '',
+          ...PAPELES_VIAJE.map((p) => (j[p.clave] ? 'Sí' : 'No')),
+          j.pagado, !viaje.precio ? '' : Math.max(0, viaje.precio - j.pagado),
+          j.observaciones || '',
+        ])
     }
     descargarCSV(`${viaje.nombre} - jugadores.csv`, filas)
   }
@@ -450,7 +596,7 @@ function VistaJugadores({ datos, mutar }) {
   return (
     <>
       <div className="fila entre no-imprimir">
-        <h3>Viajan {jugadores.length} {jugadores.length === 1 ? 'jugador' : 'jugadores'}</h3>
+        <h3>{encuentro ? 'Van' : 'Viajan'} {jugadores.length} {jugadores.length === 1 ? 'jugador' : 'jugadores'}</h3>
         <div className="fila" style={{ gap: 6 }}>
           {jugadores.length > 0 && (
             <button className="btn sec chico" onClick={descargar}>⬇ CSV</button>
@@ -463,13 +609,14 @@ function VistaJugadores({ datos, mutar }) {
 
       {!jugadores.length && (
         <div className="vacio">
-          Todavía no hay jugadores en este viaje. Elegí quiénes van.
+          Todavía no hay jugadores en este {encuentro ? 'encuentro' : 'viaje'}. Elegí quiénes van.
         </div>
       )}
 
       {jugadores.map((j) => {
         const g = casa(j)
         const ficha = fichaMedica(j)
+        const pago = !viaje.precio ? null : j.pagado >= viaje.precio
         return (
           <div key={j.jugador_id} className="jugador-item compacto">
             <div className="avatar">{iniciales(j)}</div>
@@ -477,8 +624,8 @@ function VistaJugadores({ datos, mutar }) {
               <div className="nombre-jugador">{nombreCompleto(j)}</div>
               <div className="mini">
                 {[abrevPuestos(j), edad(j.fecha_nacimiento) != null ? `${edad(j.fecha_nacimiento)} años` : null]
-                  .filter(Boolean).map((t) => `${t} · `).join('')}
-                {g ? nombreCasa(g) : <span className="pendiente">sin alojar</span>}
+                  .filter(Boolean).map((t, i, arr) => `${t}${encuentro && i === arr.length - 1 ? '' : ' · '}`).join('')}
+                {!encuentro && (g ? nombreCasa(g) : <span className="pendiente">sin alojar</span>)}
               </div>
               {j.tutor_telefono && (
                 <div className="mini">
@@ -490,9 +637,13 @@ function VistaJugadores({ datos, mutar }) {
               <span className={`badge ${ficha.clase}`} title={ficha.texto}>
                 {ficha.clase === 'medica-ok' ? 'Ficha ✓' : ficha.clase === 'medica-pronto' ? 'Ficha vence' : 'Sin ficha'}
               </span>
-              {papelesCompletos(j)
-                ? <span className="badge activo">Papeles ✓</span>
-                : <span className="badge medica-no">Papeles</span>}
+              {encuentro
+                ? pago != null && (pago
+                  ? <span className="badge activo">Pagó ✓</span>
+                  : <span className="badge medica-no">Sin pagar</span>)
+                : papelesCompletos(j)
+                  ? <span className="badge activo">Papeles ✓</span>
+                  : <span className="badge medica-no">Papeles</span>}
             </div>
           </div>
         )
@@ -987,6 +1138,117 @@ function VistaManagers({ datos, yo, mutar, actualizarJugador }) {
   )
 }
 
+// ---------- vista: inscripción del encuentro (quién pagó) ----------
+// Un botón grande por chico: un toque lo marca como pagado por el valor de la
+// inscripción, otro lo desmarca. Los montos salen de los pagos de siempre.
+function VistaInscripcion({ datos, mutar }) {
+  const { viaje, jugadores, pagos } = datos
+  const [filtro, setFiltro] = useState('todos')
+  const [cargando, setCargando] = useState(null) // jugador_id en vuelo
+  const precio = viaje.precio || null
+  const cobrado = pagos.reduce((s, p) => s + p.monto, 0)
+  const esperado = precio ? precio * jugadores.length : null
+  const pago = (j) => precio != null && j.pagado >= precio
+  const sinPagar = jugadores.filter((j) => !pago(j))
+  const visibles = filtro === 'pendientes' ? sinPagar : jugadores
+
+  async function alternar(j) {
+    if (cargando) return
+    setCargando(j.jugador_id)
+    try {
+      await mutar(`viajes/${viaje.id}/jugadores/${j.jugador_id}/pagado`, {
+        method: 'PUT', body: { pagado: !pago(j) },
+      })
+    } catch {
+      alert('No se pudo registrar el pago. Probá de nuevo.')
+    } finally {
+      setCargando(null)
+    }
+  }
+
+  return (
+    <>
+      <div className="tarjeta">
+        <h3>Inscripción</h3>
+        {precio == null ? (
+          <p className="mini" style={{ marginTop: 4 }}>
+            Sin valor cargado: cargalo desde Datos → Editar para poder marcar quién pagó.
+          </p>
+        ) : (
+          <>
+            <div className="mini" style={{ marginTop: 4 }}>{pesos(precio)} por jugador</div>
+            <div className="stat-grid dinero" style={{ marginTop: 10 }}>
+              <div className="stat">
+                <div className="valor">{pesos(cobrado)}</div>
+                <div className="etiqueta">cobrado</div>
+              </div>
+              <div className="stat">
+                <div className={`valor${esperado - cobrado > 0 ? ' alerta' : ''}`}>{pesos(Math.max(0, esperado - cobrado))}</div>
+                <div className="etiqueta">falta</div>
+              </div>
+              <div className="stat">
+                <div className="valor">{pesos(esperado)}</div>
+                <div className="etiqueta">total</div>
+              </div>
+            </div>
+            <BarraPago pagado={cobrado} total={esperado} />
+          </>
+        )}
+      </div>
+
+      {jugadores.length > 0 && (
+        <div className="seg">
+          <button className={filtro === 'todos' ? 'activo' : ''} onClick={() => setFiltro('todos')}>
+            Todos ({jugadores.length})
+          </button>
+          <button className={filtro === 'pendientes' ? 'activo' : ''} onClick={() => setFiltro('pendientes')}>
+            Sin pagar ({sinPagar.length})
+          </button>
+        </div>
+      )}
+
+      {!jugadores.length && (
+        <div className="vacio">Primero elegí quiénes van, desde la vista Jugadores.</div>
+      )}
+      {jugadores.length > 0 && !visibles.length && (
+        <div className="vacio">🎉 Pagaron todos.</div>
+      )}
+
+      {visibles.map((j) => (
+        <div key={j.jugador_id} className="jugador-item compacto">
+          <div className="avatar">{iniciales(j)}</div>
+          <div className="crece" style={{ minWidth: 0 }}>
+            <div className="nombre-jugador">{nombreCompleto(j)}</div>
+            <div className="mini">
+              {precio == null
+                ? (j.pagado > 0 ? `Pagó ${pesos(j.pagado)}` : 'Sin inscripción cargada')
+                : pago(j)
+                  ? <span className="ok">Pagó {pesos(j.pagado)}</span>
+                  : j.pagado > 0
+                    ? <>Pagó {pesos(j.pagado)} · <span className="pendiente">falta {pesos(precio - j.pagado)}</span></>
+                    : <span className="pendiente">Sin pagar</span>}
+            </div>
+            {j.tutor_telefono && (
+              <div className="mini">
+                {j.tutor_nombre ? `${j.tutor_nombre} · ` : ''}<Telefono numero={j.tutor_telefono} />
+              </div>
+            )}
+          </div>
+          <button
+            className={`papel pago-toque${pago(j) ? ' activo' : ''}`}
+            disabled={precio == null || cargando === j.jugador_id}
+            title={precio == null ? 'Cargá el valor de la inscripción' : pago(j) ? 'Desmarcar el pago' : 'Marcar como pagado'}
+            onClick={() => alternar(j)}
+          >
+            <span className="papel-marca">{pago(j) ? '✓' : '$'}</span>
+            Pagó
+          </button>
+        </div>
+      ))}
+    </>
+  )
+}
+
 function BarraPago({ pagado, total }) {
   if (!total) return null
   const pct = Math.min(100, Math.round((pagado / total) * 100))
@@ -1189,27 +1451,49 @@ function FormPago({ j, viaje, cargando, onGuardar }) {
 // ---------- vista: datos del viaje ----------
 function VistaDatos({ datos, yo, onEditar, onBorrar }) {
   const { viaje, staff } = datos
+  const encuentro = esEncuentro(viaje)
   return (
     <>
       <div className="tarjeta">
         <div className="fila entre">
-          <h3>Datos del viaje</h3>
+          <h3>Datos del {encuentro ? 'encuentro' : 'viaje'}</h3>
           <button className="btn chico" onClick={onEditar}>Editar</button>
         </div>
-        <dl className="datos-viaje">
-          <dt>Destino</dt><dd>{viaje.destino || '—'}</dd>
-          <dt>Club anfitrión</dt><dd>{viaje.club_anfitrion || '—'}</dd>
-          <dt>Salida</dt><dd>{fechaCorta(viaje.fecha_salida)}</dd>
-          <dt>Regreso</dt><dd>{viaje.fecha_regreso ? fechaCorta(viaje.fecha_regreso) : '—'}</dd>
-          <dt>Precio</dt>
-          <dd>
-            {!viaje.precio ? 'Sin cargar' : pesos(viaje.precio)}
-            {!!viaje.precio && viaje.cuotas > 1 && ` en ${viaje.cuotas} cuotas de ${pesos(viaje.precio / viaje.cuotas)}`}
-          </dd>
-          <dt>Staff que viaja</dt>
-          <dd>{staff.length ? staff.map(nombreStaff).join(', ') : '—'}</dd>
-          <dt>Notas</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{viaje.notas || '—'}</dd>
-        </dl>
+        {encuentro ? (
+          <dl className="datos-viaje">
+            <dt>Club</dt><dd>{viaje.club_anfitrion || '—'}</dd>
+            <dt>Localidad</dt><dd>{viaje.destino || '—'}</dd>
+            <dt>Fecha</dt><dd>{fechaCorta(viaje.fecha_salida)}</dd>
+            <dt>Hora</dt><dd>{viaje.hora ? viaje.hora.slice(0, 5) : '—'}</dd>
+            <dt>Inscripción</dt><dd>{!viaje.precio ? 'Sin cargar' : `${pesos(viaje.precio)} por jugador`}</dd>
+            <dt>Staff que va</dt>
+            <dd>{staff.length ? staff.map(nombreStaff).join(', ') : '—'}</dd>
+            <dt>Notas</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{viaje.notas || '—'}</dd>
+            <dt>Partido</dt>
+            <dd>
+              {viaje.evento_id
+                ? (yo.alcance === 'completo'
+                  ? <button className="btn sec chico" onClick={() => irA('partidos', viaje.evento_id)}>Ver en Partidos →</button>
+                  : 'Cargado en la sección Partidos (los entrenadores arman ahí los bloques).')
+                : 'Los entrenadores borraron el partido de este encuentro.'}
+            </dd>
+          </dl>
+        ) : (
+          <dl className="datos-viaje">
+            <dt>Destino</dt><dd>{viaje.destino || '—'}</dd>
+            <dt>Club anfitrión</dt><dd>{viaje.club_anfitrion || '—'}</dd>
+            <dt>Salida</dt><dd>{fechaCorta(viaje.fecha_salida)}</dd>
+            <dt>Regreso</dt><dd>{viaje.fecha_regreso ? fechaCorta(viaje.fecha_regreso) : '—'}</dd>
+            <dt>Precio</dt>
+            <dd>
+              {!viaje.precio ? 'Sin cargar' : pesos(viaje.precio)}
+              {!!viaje.precio && viaje.cuotas > 1 && ` en ${viaje.cuotas} cuotas de ${pesos(viaje.precio / viaje.cuotas)}`}
+            </dd>
+            <dt>Staff que viaja</dt>
+            <dd>{staff.length ? staff.map(nombreStaff).join(', ') : '—'}</dd>
+            <dt>Notas</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{viaje.notas || '—'}</dd>
+          </dl>
+        )}
         <div className="mini" style={{ marginTop: 8 }}>
           Creado por {viaje.creado_por || '—'}
         </div>
@@ -1218,9 +1502,11 @@ function VistaDatos({ datos, yo, onEditar, onBorrar }) {
         <div className="tarjeta">
           <h3>Zona de riesgo</h3>
           <p className="mini" style={{ margin: '4px 0 8px' }}>
-            Borra el viaje con su lista de jugadores, las casas y todos los pagos registrados.
+            {encuentro
+              ? 'Borra el encuentro con su lista de jugadores y los pagos registrados. El partido de la sección Partidos se borra también, salvo que ya tenga algo cargado.'
+              : 'Borra el viaje con su lista de jugadores, las casas y todos los pagos registrados.'}
           </p>
-          <button className="btn peligro chico" onClick={onBorrar}>Borrar viaje</button>
+          <button className="btn peligro chico" onClick={onBorrar}>Borrar {encuentro ? 'encuentro' : 'viaje'}</button>
         </div>
       )}
     </>

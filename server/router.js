@@ -1806,8 +1806,12 @@ async function enrutar(metodo, p, b, req, url) {
   // ---------- eventos y asistencia ----------
   if (p[0] === 'eventos') {
     if (metodo === 'GET' && !p[1]) {
+      // `encuentro` es el nombre del encuentro que creó este partido desde
+      // Viajes (server/viajes.js), para etiquetarlo distinto de un partido común
       const eventos = await query(
-        `select ${COLS_EVENTO} from eventos order by fecha desc, created_at desc`)
+        `select ${COLS_EVENTO},
+           (select v.nombre from viajes v where v.evento_id = eventos.id) as encuentro
+         from eventos order by fecha desc, created_at desc`)
       // Datos de los bloques de cada partido (rival/lugar/convocatoria propios)
       const bloques = await query(
         `select ${COLS_BLOQUE} from bloques order by numero`)

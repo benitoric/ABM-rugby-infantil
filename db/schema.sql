@@ -392,8 +392,14 @@ create table if not exists boletines_guardados (
 -- afuera). De cada viaje se lleva quiénes van, cómo se reparten para dormir
 -- en casas de familia del club anfitrión y la parte administrativa que
 -- siguen los managers: qué pagó cada uno y qué papeles ya entregó.
+--
+-- Un encuentro es la versión de un día: se juega en otro club contra varios
+-- rivales, con una inscripción por jugador. Usa la misma tabla (tipo
+-- 'encuentro'): quiénes van y qué pagó cada uno salen de viaje_jugadores y
+-- viaje_pagos igual que en una gira, pero no tiene casas, cuotas ni papeles.
 create table if not exists viajes (
   id uuid primary key default gen_random_uuid(),
+  tipo text not null default 'gira' check (tipo in ('gira','encuentro')),
   nombre text not null,
   -- Ciudad o provincia a la que se viaja, y club que recibe
   destino text,
@@ -405,6 +411,11 @@ create table if not exists viajes (
   precio numeric(12,2) check (precio is null or precio >= 0),
   cuotas int check (cuotas is null or cuotas between 1 and 24),
   notas text,
+  -- Solo encuentros: hora de inicio y el partido que se crea solo en la
+  -- sección Partidos al cargarlo (ahí los entrenadores arman los bloques).
+  -- Si los entrenadores borran el partido, el encuentro queda sin él.
+  hora time,
+  evento_id uuid unique references eventos(id) on delete set null,
   creado_por text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
