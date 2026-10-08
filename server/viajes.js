@@ -245,6 +245,10 @@ export async function enrutarViajes({ metodo, p, b, yo, admin }) {
   if (metodo === 'PUT' && !p[2]) {
     const [actual] = await query('select tipo from viajes where id = $1', [viajeId])
     if (!actual) throw { codigo: 404, error: 'no_existe' }
+    // Los datos de un encuentro (fecha, hora, club, inscripción) los cambia
+    // solo quien administra: mueven el partido y lo que cobra cada familia.
+    // Los managers lo crean y marcan los pagos, pero no lo editan.
+    if (actual.tipo === 'encuentro' && !admin) throw { codigo: 403, error: 'solo_administrador' }
     const d = datosViaje(b, actual.tipo)
     const [v] = await query(
       `update viajes set nombre=$1, destino=$2, club_anfitrion=$3, fecha_salida=$4,

@@ -123,7 +123,10 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   al crearlo) atado por `viajes.evento_id`; editar
   fecha, hora o club del encuentro lo actualiza, y borrarlo (administrar)
   borra también el partido salvo que ya tenga plantel, asistencia o un bloque
-  cerrado. Como `viajes` es ruta ajena al boletín, esas escrituras invalidan
+  cerrado. Editar los datos del encuentro (`PUT viajes/:id`) también queda
+  para quien administra (403 `solo_administrador` para el resto): los
+  managers lo crean y marcan los pagos. Como `viajes` es ruta ajena al
+  boletín, esas escrituras invalidan
   los guardados a mano (`invalidarTodos`). El listado de eventos trae
   `encuentro` (el nombre) para etiquetar el partido como tal. Los managers
   crean encuentros, pero siguen sin ver nada de `eventos`/`partido`.
