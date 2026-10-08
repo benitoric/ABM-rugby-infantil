@@ -242,6 +242,51 @@ async function main() {
   r = await pedir('viajes', { token: M })
   esperar('manager lista los viajes', r.codigo === 200 && r.datos.length === 1, r)
 
+  // Encuentros: el manager lo carga, nace su partido en la sección Partidos
+  // (que el manager no ve) y marca de un toque quién pagó la inscripción
+  r = await pedir('viajes', { method: 'POST', token: M, body: {
+    tipo: 'encuentro', nombre: 'Encuentro en Los Tarcos', club_anfitrion: 'Los Tarcos',
+    fecha_salida: '2026-11-07', hora: '10:00', precio: 800, fecha_regreso: '2026-11-09', cuotas: 3,
+  } })
+  esperar('manager crea un encuentro', r.codigo === 200 && r.datos.viaje?.tipo === 'encuentro' && !!r.datos.viaje.evento_id, r)
+  esperar('el encuentro no tiene regreso ni cuotas',
+    r.datos.viaje?.fecha_regreso === null && r.datos.viaje?.cuotas === null, r.datos.viaje)
+  const encuentro = r.datos.viaje
+  r = await pedir('eventos', { token: T })
+  let partido = r.datos.find((e) => e.id === encuentro.evento_id)
+  esperar('el encuentro creó su partido con dos bloques',
+    partido?.tipo === 'partido' && partido.fecha === '2026-11-07' && partido.hora?.startsWith('10:00')
+      && partido.lugar === 'Los Tarcos' && partido.encuentro === 'Encuentro en Los Tarcos'
+      && partido.bloques?.length === 2 && !partido.rival, partido)
+  r = await pedir(`viajes/${encuentro.id}/jugadores`, { method: 'PUT', token: M, body: { jugador_ids: [jugador.id] } })
+  esperar('manager elige quiénes van al encuentro', r.codigo === 200, r)
+  r = await pedir(`viajes/${encuentro.id}/jugadores/${jugador.id}/pagado`, { method: 'PUT', token: M, body: { pagado: true } })
+  esperar('manager marca pagado de un toque',
+    r.codigo === 200 && r.datos.jugadores[0].pagado === 800 && r.datos.pagos[0]?.concepto === 'Inscripción', r)
+  r = await pedir(`viajes/${encuentro.id}/jugadores/${jugador.id}/pagado`, { method: 'PUT', token: M, body: { pagado: true } })
+  esperar('marcarlo dos veces no cobra dos veces', r.codigo === 200 && r.datos.pagos.length === 1, r)
+  r = await pedir('viajes', { token: M })
+  esperar('el listado cuenta quiénes pagaron',
+    r.datos.find((v) => v.id === encuentro.id)?.pagaron === 1, r.datos)
+  r = await pedir(`viajes/${encuentro.id}/jugadores/${jugador.id}/pagado`, { method: 'PUT', token: M, body: { pagado: false } })
+  esperar('manager desmarca pagado', r.codigo === 200 && r.datos.jugadores[0].pagado === 0 && !r.datos.pagos.length, r)
+  r = await pedir(`viajes/${viaje.id}/jugadores/${jugador.id}/pagado`, { method: 'PUT', token: M, body: { pagado: true } })
+  esperar('el pagado de un toque es solo para encuentros', r.codigo === 400 && r.datos.error === 'solo_encuentros', r)
+  r = await pedir(`viajes/${encuentro.id}`, { method: 'PUT', token: M, body: {
+    ...encuentro, tipo: 'gira', fecha_salida: '2026-11-14', hora: '11:00', club_anfitrion: 'Cardenales',
+  } })
+  esperar('manager edita el encuentro (y el tipo no cambia)', r.codigo === 200 && r.datos.viaje.tipo === 'encuentro', r)
+  r = await pedir('eventos', { token: T })
+  partido = r.datos.find((e) => e.id === encuentro.evento_id)
+  esperar('el partido sigue los cambios del encuentro',
+    partido?.fecha === '2026-11-14' && partido.hora?.startsWith('11:00') && partido.lugar === 'Cardenales', partido)
+  r = await pedir(`viajes/${encuentro.id}`, { method: 'DELETE', token: M })
+  esperar('manager no borra el encuentro', r.codigo === 403, r)
+  r = await pedir(`viajes/${encuentro.id}`, { method: 'DELETE', token: T })
+  esperar('el dueño borra el encuentro y su partido vacío', r.codigo === 200 && r.datos.partido_borrado === true, r)
+  r = await pedir('eventos', { token: T })
+  esperar('el partido del encuentro se fue con él', !r.datos.some((e) => e.id === encuentro.evento_id), r.datos.length)
+
   r = await pedir('push/clave', { token: M })
   esperar('manager pide la clave de avisos', r.codigo === 200 && r.datos.clave, r)
   r = await pedir('push/suscripciones', { token: M })

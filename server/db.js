@@ -73,9 +73,12 @@ export async function migracionesAplicadas(pool) {
          and column_name = 'ficha_medica') as sobra_ficha_medica,
        exists (select 1 from information_schema.columns
        where table_schema = 'public' and table_name = 'viaje_grupos'
-         and column_name = 'familia_contacto') as existe_contacto`)
+         and column_name = 'familia_contacto') as existe_contacto,
+       exists (select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'viajes'
+         and column_name = 'evento_id') as existe_encuentros`)
   if (!col.existe || !col.existe_alta || !col.existe_dni_devuelto || col.sobra_ficha_medica
-      || !col.existe_contacto) return false
+      || !col.existe_contacto || !col.existe_encuentros) return false
   const { rows: [t] } = await pool.query(
     `select to_regclass('public.evento_plantel') is not null
         and to_regclass('public.plan_tecnico') is not null
@@ -432,7 +435,16 @@ export async function migrar(pool) {
   )`)
   await pool.query(`create index if not exists viaje_pagos_viaje_idx
     on viaje_pagos (viaje_id, jugador_id)`)
+  // Encuentros de un día: comparten la tabla de viajes (ver db/schema.sql)
+  await pool.query(`alter table viajes add column if not exists tipo text not null default 'gira'`)
+  await pool.query('alter table viajes drop constraint if exists viajes_tipo_check')
+  await pool.query(`alter table viajes add constraint viajes_tipo_check
+    check (tipo in ('gira','encuentro'))`)
+  await pool.query('alter table viajes add column if not exists hora time')
+  await pool.query(`alter table viajes add column if not exists evento_id uuid unique
+    references eventos(id) on delete set null`)
 }
+
 
 // Arranca el historial de capitanes con la planilla que se venía llevando
 // aparte. Corre una sola vez: con la tabla ya cargada no toca nada.

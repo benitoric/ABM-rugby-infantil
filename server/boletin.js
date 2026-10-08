@@ -211,8 +211,15 @@ export async function invalidarGuardados(metodo, p, b) {
       return
     }
   }
+  await invalidarTodos()
+}
+
+// Para las escrituras que no pasan por el router con su propia ruta (un
+// encuentro crea o cambia un partido desde `viajes`, que es ruta ajena)
+export async function invalidarTodos() {
   await query('delete from boletines_guardados')
 }
+
 
 // Arma de cero los boletines de todos los jugadores activos de un mes. Cada
 // dato sale en una sola consulta para todos los chicos (agrupada por
