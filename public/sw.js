@@ -32,3 +32,28 @@ self.addEventListener('notificationclick', (e) => {
     return self.clients.openWindow(destino)
   })())
 })
+
+// El sistema de push del teléfono renueva la suscripción cada tanto por su
+// cuenta (Chrome lo hace seguido). Si no se la vuelve a registrar, el celular
+// deja de recibir avisos sin que nadie se entere. Acá se saca una suscripción
+// nueva con la misma clave de la app y se le avisa al servidor cuál reemplaza:
+// la vieja hace de credencial, porque solo este celular la conocía.
+self.addEventListener('pushsubscriptionchange', (e) => {
+  e.waitUntil(renovarSuscripcion(e.oldSubscription, e.newSubscription))
+})
+
+async function renovarSuscripcion(vieja, nueva) {
+  const clave = vieja?.options?.applicationServerKey
+  if (!nueva && clave) {
+    nueva = await self.registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: clave,
+    })
+  }
+  if (!nueva || !vieja?.endpoint) return
+  await fetch('./api/index?ruta=push%2Frenovar', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ anterior: vieja.endpoint, nueva: nueva.toJSON() }),
+  })
+}

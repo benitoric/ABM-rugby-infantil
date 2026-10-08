@@ -1463,3 +1463,6 @@ details.tarjeta summary {
 .badge.tipo-gira { background: #e6eaf3; color: var(--primario); }
 .pago-toque { flex: 0 0 auto; min-height: 44px; padding: 8px 12px; font-size: 0.85rem; }
 .pago-toque:disabled { opacity: 0.5; }
+=======
+/* Avisos push que el celular dio de baja: llamado a reactivarlos */
+.aviso-push-perdido { border-left: 4px solid var(--warn); }

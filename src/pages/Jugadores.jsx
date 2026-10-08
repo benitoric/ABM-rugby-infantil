@@ -9,6 +9,7 @@ import { promediosResumen, valoresConsolidados, GRUPOS } from '../evaluacion.js'
 import { base64ABlob } from '../archivos.js'
 import { irA, leerHash, reponer, suscribir } from '../navegacion.js'
 import { ultimosMeses } from '../boletin.js'
+import { AvisosPerdidos } from './Avisos.jsx'
 import Boletin from './Boletin.jsx'
 import Ficha from './Ficha.jsx'
 
@@ -309,6 +310,8 @@ export default function Jugadores({ yo }) {
           <button className="btn" onClick={() => setEditando({ ...VACIO })}>+ Nuevo</button>
         </div>
       </div>
+
+      <AvisosPerdidos />
 
       {faltadores.length > 0 && (
         <div className="tarjeta aviso-faltas">
