@@ -1807,10 +1807,13 @@ async function enrutar(metodo, p, b, req, url) {
   if (p[0] === 'eventos') {
     if (metodo === 'GET' && !p[1]) {
       // `encuentro` es el nombre del encuentro que creó este partido desde
-      // Viajes (server/viajes.js), para etiquetarlo distinto de un partido común
+      // Viajes (server/viajes.js), para etiquetarlo distinto de un partido
+      // común; `encuentro_id` lleva a la pantalla del encuentro, que es desde
+      // donde se arma su convocatoria
       const eventos = await query(
         `select ${COLS_EVENTO},
-           (select v.nombre from viajes v where v.evento_id = eventos.id) as encuentro
+           (select v.nombre from viajes v where v.evento_id = eventos.id) as encuentro,
+           (select v.id from viajes v where v.evento_id = eventos.id) as encuentro_id
          from eventos order by fecha desc, created_at desc`)
       // Datos de los bloques de cada partido (rival/lugar/convocatoria propios)
       const bloques = await query(
@@ -1920,6 +1923,11 @@ async function enrutar(metodo, p, b, req, url) {
           'select jugador_id, estado, condicion from asistencias where evento_id = $1', [p[1]])
       }
       if (metodo === 'PUT') {
+        // La convocatoria del partido de un encuentro se arma solo desde el
+        // encuentro (la lista de quiénes van, en Viajes): acá no se toca, para
+        // que haya un único lugar de control.
+        const [deEncuentro] = await query('select 1 from viajes where evento_id = $1', [p[1]])
+        if (deEncuentro) throw { codigo: 409, error: 'convocatoria_del_encuentro' }
         // b.marcas: [{jugador_id, estado|null, condicion?}] — estado null borra
         // la marca; condicion (golpe o lesión en el entrenamiento) solo se toca
         // si viene en el objeto.

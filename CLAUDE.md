@@ -121,7 +121,11 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   en la convocatoria del partido, pagos aparte (`sincronizarConvocatoria`:
   una fila "presente" en `asistencias`, como si lo marcara un entrenador); al
   sacarlos de la lista se les saca la marca "va", y solo se tocan los que
-  cambiaron. Al crear un encuentro nace solo su partido en la sección
+  cambiaron. Es el único lugar de control: `PUT eventos/:id/asistencias`
+  sobre el partido de un encuentro devuelve 409 `convocatoria_del_encuentro`,
+  y la solapa Convocatoria de Partidos lo muestra en solo lectura con un
+  acceso al encuentro (`encuentro_id` en el listado de eventos). Al crear un
+  encuentro nace solo su partido en la sección
   Partidos (`eventos`, tipo partido, con dos bloques vacíos y sin rival: los
   entrenadores los cargan por bloque; las notas del encuentro se copian solo
   al crearlo) atado por `viajes.evento_id`; editar

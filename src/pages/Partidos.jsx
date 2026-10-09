@@ -1406,14 +1406,29 @@ function Convocatoria({
       />
 
       <h3>Convocatoria</h3>
-      <p className="mini">
-        Marcá quién avisó que va. Los lesionados no se convocan, y la asistencia
-        real se toma el día del partido en "Tomar asistencia".
-        {partido.encuentro && ' Los que están en la lista del encuentro quedan marcados solos.'}
-      </p>
+      {/* El partido de un encuentro: la lista de quiénes van se arma desde el
+          encuentro (Viajes y encuentros) y acá solo se mira */}
+      {partido.encuentro_id ? (
+        <div className="tarjeta" style={{ marginBottom: 8 }}>
+          <p className="mini" style={{ margin: '0 0 8px' }}>
+            Este partido es del encuentro <b>{partido.encuentro}</b>: quiénes van se
+            marca desde la lista del encuentro, no desde acá, para llevar un solo control.
+          </p>
+          <button className="btn chico" onClick={() => irA('viajes', partido.encuentro_id)}>
+            Ir al encuentro →
+          </button>
+        </div>
+      ) : (
+        <p className="mini">
+          Marcá quién avisó que va. Los lesionados no se convocan, y la asistencia
+          real se toma el día del partido en "Tomar asistencia".
+        </p>
+      )}
       <div className="fila" style={{ gap: 12 }}>
         <span className="mini"><b style={{ color: 'var(--ok)' }}>Van: {van.length}</b></span>
-        <span className="mini"><b style={{ color: 'var(--bad)' }}>No van: {noVan.length}</b></span>
+        {!partido.encuentro_id && (
+          <span className="mini"><b style={{ color: 'var(--bad)' }}>No van: {noVan.length}</b></span>
+        )}
         <span className="mini"><b style={{ color: 'var(--warn)' }}>Sin responder: {sinResponder}</b></span>
       </div>
 
@@ -1425,18 +1440,24 @@ function Convocatoria({
               <div style={{ fontWeight: 600 }}>{nombreCompleto(j)}</div>
               <div className="mini">{abrevPuestos(j) || tipoJugador(j) || 'sin puesto'}</div>
             </div>
-            <div className="seg" style={{ flex: '0 0 auto' }}>
-              {[['presente', 'Va'], ['ausente', 'No va']].map(([valor, label]) => (
-                <button
-                  key={valor}
-                  className={estado === valor ? 'activo' : ''}
-                  // tocar la opción marcada la saca: vuelve a "sin responder"
-                  onClick={() => onConfirmar(j.id, estado === valor ? null : valor)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {partido.encuentro_id ? (
+              estado === 'presente'
+                ? <span className="badge activo">Va</span>
+                : <span className="badge inactivo">Sin responder</span>
+            ) : (
+              <div className="seg" style={{ flex: '0 0 auto' }}>
+                {[['presente', 'Va'], ['ausente', 'No va']].map(([valor, label]) => (
+                  <button
+                    key={valor}
+                    className={estado === valor ? 'activo' : ''}
+                    // tocar la opción marcada la saca: vuelve a "sin responder"
+                    onClick={() => onConfirmar(j.id, estado === valor ? null : valor)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )
       })}

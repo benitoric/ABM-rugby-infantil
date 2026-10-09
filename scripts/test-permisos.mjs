@@ -281,6 +281,17 @@ async function main() {
   esperar('fuera de la lista, vuelve a "sin responder"', !r.datos.some((a) => a.jugador_id === jugador.id), r.datos)
   r = await pedir(`viajes/${encuentro.id}/jugadores`, { method: 'PUT', token: M, body: { jugador_ids: [jugador.id] } })
   esperar('manager lo vuelve a poner en la lista', r.codigo === 200 && r.datos.jugadores.length === 1, r)
+  // La convocatoria del partido de un encuentro no se toca desde Partidos
+  r = await pedir(`eventos/${encuentro.evento_id}/asistencias`, { method: 'PUT', token: T, body: { marcas: [{ jugador_id: jugador.id, estado: null }] } })
+  esperar('la convocatoria del partido del encuentro no se edita desde Partidos',
+    r.codigo === 409 && r.datos.error === 'convocatoria_del_encuentro', r)
+  r = await pedir(`eventos/${encuentro.evento_id}/asistencias`, { token: T })
+  esperar('la marca "va" del encuentro sigue', r.datos.some((a) => a.jugador_id === jugador.id && a.estado === 'presente'), r.datos)
+  r = await pedir('eventos', { token: T })
+  esperar('el listado de eventos trae el id del encuentro',
+    r.datos.find((e) => e.id === encuentro.evento_id)?.encuentro_id === encuentro.id, r.datos.length)
+  r = await pedir(`eventos/${evento.id}/asistencias`, { method: 'PUT', token: T, body: { marcas: [{ jugador_id: jugador.id, estado: 'presente' }] } })
+  esperar('la asistencia de un evento común sigue igual', r.codigo === 200, r)
   r = await pedir(`viajes/${viaje.id}/jugadores/${jugador.id}/pagado`, { method: 'PUT', token: M, body: { pagado: true } })
   esperar('el pagado de un toque es solo para encuentros', r.codigo === 400 && r.datos.error === 'solo_encuentros', r)
   const cambios = { ...encuentro, tipo: 'gira', fecha_salida: '2026-11-14', hora: '11:00', club_anfitrion: 'Cardenales' }
