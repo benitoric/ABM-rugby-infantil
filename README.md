@@ -68,7 +68,8 @@ pantalla de inicio" del teléfono y queda como una app más).
   su contraseña. Las sesiones usan JWT (60 días).
 - **Roles**: entrenadores, preparadores físicos y la cabeza de división ven
   toda la app. Los managers (principal y asistente) solo entran a lo
-  administrativo: Padrón (contacto, DNI, ficha médica), Viajes y sus avisos;
+  administrativo: Padrón (contacto, DNI, ficha médica), la convocatoria de
+  los partidos (marcar quién va), Viajes y sus avisos;
   la API les cierra todo lo demás (asistencia, evaluaciones, entrenamientos,
   partidos, lesiones, tests, boletines).
 

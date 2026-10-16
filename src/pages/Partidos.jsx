@@ -39,7 +39,7 @@ function posicionGuardada() {
 
 // El último partido cargado, que es donde arranca el selector: el de created_at
 // más nuevo, no el de fecha más próxima (se puede cargar un partido viejo).
-function ultimoCreado(ps) {
+export function ultimoCreado(ps) {
   return [...ps].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0]
 }
 
@@ -1351,9 +1351,12 @@ function Frescura({ fecha, refrescando, onRefrescar }) {
 // Convocatoria: la primera parada del partido. Acá se carga el partido (o se
 // corrige), y se marca quién avisó que va. Es la confirmación de la semana:
 // la asistencia real se toma después, en la cancha.
-function Convocatoria({
-  partido, jugadores, confirmacion, staff, confirmacionStaff, sugerencias,
-  onConfirmar, onConfirmarStaff, onActualizado, onBorrado,
+// Con `soloConvocar` (la pantalla de los managers) queda nada más la lista
+// de "va / no va" de los jugadores: sin editar, borrar ni suspender el
+// partido y sin la convocatoria del staff.
+export function Convocatoria({
+  partido, jugadores, confirmacion, staff = [], confirmacionStaff = {}, sugerencias = null,
+  onConfirmar, onConfirmarStaff, onActualizado, onBorrado, soloConvocar = false,
 }) {
   const [editando, setEditando] = useState(false)
   const [evento, setEvento] = useState(partido)
@@ -1388,10 +1391,12 @@ function Convocatoria({
             ))}
             {evento.notas && <p className="mini" style={{ marginTop: 6 }}>📝 {evento.notas}</p>}
           </div>
-          <div className="fila">
-            <button className="btn sec chico" onClick={() => setEditando(true)}>Editar</button>
-            <button className="btn peligro chico" onClick={borrar}>Borrar</button>
-          </div>
+          {!soloConvocar && (
+            <div className="fila">
+              <button className="btn sec chico" onClick={() => setEditando(true)}>Editar</button>
+              <button className="btn peligro chico" onClick={borrar}>Borrar</button>
+            </div>
+          )}
         </div>
         {susp.estado && (
           <p className="aviso" style={{ marginTop: 8 }}>
@@ -1400,10 +1405,12 @@ function Convocatoria({
         )}
       </div>
 
-      <PanelSuspension
-        evento={evento}
-        onCambio={(ev) => { setEvento(ev); onActualizado(ev) }}
-      />
+      {!soloConvocar && (
+        <PanelSuspension
+          evento={evento}
+          onCambio={(ev) => { setEvento(ev); onActualizado(ev) }}
+        />
+      )}
 
       <h3>Convocatoria</h3>
       {/* El partido de un encuentro: la lista de quiénes van se arma desde el
@@ -1420,8 +1427,8 @@ function Convocatoria({
         </div>
       ) : (
         <p className="mini">
-          Marcá quién avisó que va. Los lesionados no se convocan, y la asistencia
-          real se toma el día del partido en "Tomar asistencia".
+          Marcá quién avisó que va. Los lesionados no se convocan
+          {soloConvocar ? '.' : ', y la asistencia real se toma el día del partido en "Tomar asistencia".'}
         </p>
       )}
       <div className="fila" style={{ gap: 12 }}>
@@ -1468,7 +1475,7 @@ function Convocatoria({
         </p>
       )}
 
-      {staff.length > 0 && (
+      {!soloConvocar && staff.length > 0 && (
         <>
           <h3 style={{ marginTop: 12 }}>Staff</h3>
           <p className="mini">Quién avisó que va al partido.</p>
@@ -1497,7 +1504,7 @@ function Convocatoria({
         </>
       )}
 
-      {editando && (
+      {editando && !soloConvocar && (
         <FormEvento
           evento={evento}
           sugerencias={sugerencias}

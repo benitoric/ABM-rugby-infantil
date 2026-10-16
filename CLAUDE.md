@@ -27,8 +27,8 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   seguimientos, boletines ni las observaciones de la ficha. El router aplica
   una **lista blanca** (`rutaAdministrativa`) justo después de `autenticar`:
   al alcance administrativo solo le pasan `me`, `viajes/*`, `padron/*`,
-  `documentos/*`, `push/*` y `GET staff` (sin `tiene_clave`); el resto
-  devuelve 403 `solo_entrenadores`. Una ruta nueva nace cerrada para ellos:
+  `convocatoria/*`, `documentos/*`, `push/*` y `GET staff` (sin
+  `tiene_clave`); el resto devuelve 403 `solo_entrenadores`. Una ruta nueva nace cerrada para ellos:
   si tiene que abrirse, se agrega a la lista y se prueba en
   `scripts/test-permisos.mjs` (`npm run test:permisos`, base en memoria).
   El control es en la API, no en las pestañas: el frontend solo arma las
@@ -43,6 +43,17 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   La pantalla de Viajes elige quiénes viajan con `viajes/plantel` (nombre,
   estado y puestos), nunca con `GET jugadores`, que trae asistencia y
   evaluaciones.
+- **Convocatoria para managers** (`convocatoria/...` en el router,
+  `src/pages/PartidosManagers.jsx`): en el menú Partidos los managers ven
+  solo la solapa Convocatoria, para marcar "va / no va" de la semana. La API
+  devuelve la lista de partidos (sin crónica ni valoración de los bloques),
+  el plantel convocable con lo justo y las marcas; nada de bloques armados,
+  asistencia del día ni tiempos, y no deja suspender, editar ni borrar el
+  partido. La marcación comparte `marcarConvocatoria` con la ruta de los
+  entrenadores, descartando la condición de golpe o lesión, y el partido de
+  un encuentro también devuelve 409 `convocatoria_del_encuentro` (se mira
+  con el acceso al encuentro). El componente `Convocatoria` de
+  `Partidos.jsx` se reutiliza con `soloConvocar`.
 - **Deploy**: Vercel (auto-deploy en cada push a `main`). Variables de entorno
   requeridas: `DATABASE_URL` (Neon) y `JWT_SECRET`; opcional `CRON_SECRET`,
   que exige que la tarea diaria venga de Vercel.

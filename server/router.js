@@ -75,6 +75,43 @@ async function congelarPlantel(eventoId, tipo) {
     [eventoId])
 }
 
+// Marcas de la convocatoria de un evento (tabla asistencias: quién avisó que
+// va y quién que no). marcas: [{jugador_id, estado|null, condicion?}]; estado
+// null borra la marca y condicion (golpe o lesión en el entrenamiento) solo se
+// toca si viene en el objeto. La usan la ruta de los entrenadores y la de la
+// convocatoria que marcan los managers.
+async function marcarConvocatoria(eventoId, marcas) {
+  for (const m of marcas || []) {
+    if (m.estado === null) {
+      await query('delete from asistencias where evento_id = $1 and jugador_id = $2',
+        [eventoId, m.jugador_id])
+      continue
+    }
+    if (!['presente', 'ausente'].includes(m.estado)) {
+      throw { codigo: 400, error: 'estado_invalido' }
+    }
+    if (!('condicion' in m)) {
+      await query(
+        `insert into asistencias (evento_id, jugador_id, estado) values ($1,$2,$3)
+         on conflict (evento_id, jugador_id) do update set estado = excluded.estado`,
+        [eventoId, m.jugador_id, m.estado])
+      continue
+    }
+    const pedida = m.condicion || null
+    if (pedida && !['golpeado', 'lesionado'].includes(pedida)) {
+      throw { codigo: 400, error: 'condicion_invalida' }
+    }
+    // Golpeado o lesionado solo tiene sentido en alguien que estuvo
+    const cond = m.estado === 'presente' ? pedida : null
+    await query(
+      `insert into asistencias (evento_id, jugador_id, estado, condicion) values ($1,$2,$3,$4)
+       on conflict (evento_id, jugador_id)
+       do update set estado = excluded.estado, condicion = excluded.condicion`,
+      [eventoId, m.jugador_id, m.estado, cond])
+  }
+  await congelarPlantel(eventoId, 'entrenamiento')
+}
+
 // Atajo para las consultas que ya tienen el evento en un alias
 const sqlLesionadoEnEvento = (idJugador, ev) => sqlLesionadoEnFecha(idJugador, `${ev}.fecha`)
 const COLS_SEGUIMIENTO = `id, jugador_id, fecha::text as fecha, area, valoracion, comentario, autor_email`
@@ -1931,35 +1968,7 @@ async function enrutar(metodo, p, b, req, url) {
         // b.marcas: [{jugador_id, estado|null, condicion?}] — estado null borra
         // la marca; condicion (golpe o lesión en el entrenamiento) solo se toca
         // si viene en el objeto.
-        for (const m of b.marcas || []) {
-          if (m.estado === null) {
-            await query('delete from asistencias where evento_id = $1 and jugador_id = $2',
-              [p[1], m.jugador_id])
-            continue
-          }
-          if (!['presente', 'ausente'].includes(m.estado)) {
-            throw { codigo: 400, error: 'estado_invalido' }
-          }
-          if (!('condicion' in m)) {
-            await query(
-              `insert into asistencias (evento_id, jugador_id, estado) values ($1,$2,$3)
-               on conflict (evento_id, jugador_id) do update set estado = excluded.estado`,
-              [p[1], m.jugador_id, m.estado])
-            continue
-          }
-          const pedida = m.condicion || null
-          if (pedida && !['golpeado', 'lesionado'].includes(pedida)) {
-            throw { codigo: 400, error: 'condicion_invalida' }
-          }
-          // Golpeado o lesionado solo tiene sentido en alguien que estuvo
-          const cond = m.estado === 'presente' ? pedida : null
-          await query(
-            `insert into asistencias (evento_id, jugador_id, estado, condicion) values ($1,$2,$3,$4)
-             on conflict (evento_id, jugador_id)
-             do update set estado = excluded.estado, condicion = excluded.condicion`,
-            [p[1], m.jugador_id, m.estado, cond])
-        }
-        await congelarPlantel(p[1], 'entrenamiento')
+        await marcarConvocatoria(p[1], b.marcas)
         return { ok: true }
       }
     }
@@ -2632,6 +2641,63 @@ async function enrutar(metodo, p, b, req, url) {
   if (p[0] === 'padron') {
     const { enrutarPadron } = await import('./padron.js')
     return enrutarPadron({ metodo, p, b })
+  }
+
+  // ---------- convocatoria de los partidos (lo que marcan los managers) ----------
+  // Solo la solapa Convocatoria del menú Partidos: la lista de partidos, el
+  // plantel convocable y las marcas "va / no va" de la semana. Nada más del
+  // partido (bloques armados, asistencia del día, tiempos, crónica) sale por
+  // acá, y la suspensión, la edición y el borrado del evento tampoco entran.
+  if (p[0] === 'convocatoria') {
+    const colsBloque = `id, evento_id, numero, nombre, rival, lugar,
+      hora_convocatoria::text as hora_convocatoria,
+      suspendido, motivo_suspension, nota_suspension`
+    // `encuentro` / `encuentro_id`: el partido de un encuentro se convoca
+    // desde el encuentro (Viajes y encuentros), acá queda en solo lectura
+    const colsEncuentro = `(select v.nombre from viajes v where v.evento_id = eventos.id) as encuentro,
+      (select v.id from viajes v where v.evento_id = eventos.id) as encuentro_id`
+    if (metodo === 'GET' && !p[1]) {
+      const partidos = await query(
+        `select ${COLS_EVENTO}, ${colsEncuentro} from eventos where tipo = 'partido'
+         order by fecha desc, created_at desc`)
+      const bloques = await query(
+        `select ${colsBloque} from bloques
+         where evento_id in (select id from eventos where tipo = 'partido')
+         order by numero`)
+      for (const ev of partidos) ev.bloques = bloques.filter((bl) => bl.evento_id === ev.id)
+      return partidos
+    }
+    if (p[1] && !p[2]) {
+      const [partido] = await query(
+        `select ${COLS_EVENTO}, ${colsEncuentro} from eventos
+         where id = $1 and tipo = 'partido'`, [p[1]])
+      if (!partido) throw { codigo: 404, error: 'no_existe' }
+      if (metodo === 'PUT') {
+        // El partido de un encuentro se convoca solo desde el encuentro
+        if (partido.encuentro_id) throw { codigo: 409, error: 'convocatoria_del_encuentro' }
+        // Solo "va / no va" (o borrar la marca): la condición de golpe o
+        // lesión es de los entrenadores y se descarta aunque venga.
+        const marcas = (Array.isArray(b?.marcas) ? b.marcas : []).map((m) => ({
+          jugador_id: m?.jugador_id,
+          estado: m?.estado ?? null,
+        }))
+        await marcarConvocatoria(partido.id, marcas)
+        return { ok: true }
+      }
+      if (metodo === 'GET') {
+        partido.bloques = await query(
+          `select ${colsBloque} from bloques where evento_id = $1 order by numero`, [partido.id])
+        // El plantel convocable, con lo justo para reconocer a cada chico:
+        // sin asistencia, evaluaciones ni nada de la ficha
+        const jugadores = await query(
+          `select id, nombre, apellido, estado, posicion, puestos, puesto_principal
+           from jugadores where estado <> 'inactivo' order by apellido, nombre`)
+        const confirmaciones = await query(
+          'select jugador_id, estado from asistencias where evento_id = $1', [partido.id])
+        return { partido, jugadores, confirmaciones }
+      }
+    }
+    throw { codigo: 404, error: 'no_existe' }
   }
 
   // ---------- staff ----------

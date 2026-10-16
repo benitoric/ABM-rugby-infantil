@@ -8,6 +8,7 @@ import Partidos from './pages/Partidos.jsx'
 import Viajes from './pages/Viajes.jsx'
 import Staff from './pages/Staff.jsx'
 import Padron from './pages/Padron.jsx'
+import PartidosManagers from './pages/PartidosManagers.jsx'
 import Avisos from './pages/Avisos.jsx'
 import { VERSION } from './version.js'
 import { useVersionNueva } from './actualizacion.js'
@@ -25,6 +26,7 @@ const TABS_COMPLETO = [
 // Esto es cosmética: la API les cierra todo lo demás (server/permisos.js).
 const TABS_ADMINISTRATIVO = [
   { id: 'padron', label: 'Padrón', ico: '🗂️' },
+  { id: 'partidos', label: 'Partidos', ico: '🏉' },
   { id: 'viajes', label: 'Viajes y encuentros', ico: '🚌' },
   { id: 'avisos', label: 'Avisos', ico: '🔔' },
 ]
@@ -107,7 +109,8 @@ export default function App() {
 
       {tab === 'jugadores' && <Jugadores yo={staff} />}
       {tab === 'entrenamientos' && <Entrenamientos yo={staff} />}
-      {tab === 'partidos' && <Partidos />}
+      {/* Partidos: a los managers solo les queda la convocatoria */}
+      {tab === 'partidos' && (staff.alcance === 'completo' ? <Partidos /> : <PartidosManagers />)}
       {tab === 'viajes' && <Viajes yo={staff} />}
       {tab === 'staff' && <Staff yo={staff} />}
       {tab === 'padron' && <Padron />}

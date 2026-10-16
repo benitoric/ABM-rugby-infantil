@@ -85,6 +85,11 @@ async function main() {
   r = await pedir('eventos', { method: 'POST', token: T, body: { tipo: 'entrenamiento', fecha: '2026-03-10' } })
   esperar('el dueño crea un evento', r.codigo === 200, r)
   const evento = r.datos
+  r = await pedir('eventos', { method: 'POST', token: T, body: {
+    tipo: 'partido', fecha: '2026-11-07', bloques: [{ rival: 'Los Tarcos' }, { rival: 'Natación' }],
+  } })
+  esperar('el dueño crea un partido', r.codigo === 200 && r.datos.bloques?.length === 2, r)
+  const partidoComun = r.datos
   r = await pedir('evaluaciones', { method: 'POST', token: T, body: {
     jugador_id: jugador.id, fecha: '2026-03-01', valores: { pase: 3 },
   } })
@@ -117,6 +122,14 @@ async function main() {
     ['GET', `eventos/${evento.id}/tests`],
     ['GET', `eventos/${evento.id}/asistencias-partido`],
     ['GET', `eventos/${evento.id}/asistencias-staff`],
+    ['PUT', `eventos/${partidoComun.id}`, { suspendido: true, motivo_suspension: 'clima' }],
+    ['DELETE', `eventos/${partidoComun.id}`],
+    ['GET', `eventos/${partidoComun.id}/asistencias`],
+    ['PUT', `eventos/${partidoComun.id}/asistencias`, { marcas: [] }],
+    ['GET', `eventos/${partidoComun.id}/asistencias-partido`],
+    ['GET', `eventos/${partidoComun.id}/asistencias-staff`],
+    ['GET', `partido/${partidoComun.id}`],
+    ['GET', `partido/${partidoComun.id}/estado`],
     ['GET', `partido/${evento.id}`],
     ['GET', `partido/${evento.id}/estado`],
     ['POST', 'partido/asignar', {}],
@@ -287,6 +300,16 @@ async function main() {
     r.codigo === 409 && r.datos.error === 'convocatoria_del_encuentro', r)
   r = await pedir(`eventos/${encuentro.evento_id}/asistencias`, { token: T })
   esperar('la marca "va" del encuentro sigue', r.datos.some((a) => a.jugador_id === jugador.id && a.estado === 'presente'), r.datos)
+  // Para el manager, la convocatoria del partido del encuentro se mira pero no se marca
+  r = await pedir(`convocatoria/${encuentro.evento_id}`, { token: M })
+  esperar('manager ve la convocatoria del partido del encuentro, con el acceso al encuentro',
+    r.codigo === 200 && r.datos.partido?.encuentro_id === encuentro.id && r.datos.confirmaciones.length === 1, r)
+  r = await pedir(`convocatoria/${encuentro.evento_id}`, { method: 'PUT', token: M, body: { marcas: [{ jugador_id: jugador.id, estado: 'ausente' }] } })
+  esperar('manager no marca la convocatoria del partido del encuentro',
+    r.codigo === 409 && r.datos.error === 'convocatoria_del_encuentro', r)
+  r = await pedir('convocatoria', { token: M })
+  esperar('la lista de convocatoria del manager trae el id del encuentro',
+    r.datos.find((e) => e.id === encuentro.evento_id)?.encuentro_id === encuentro.id, r.datos.length)
   r = await pedir('eventos', { token: T })
   esperar('el listado de eventos trae el id del encuentro',
     r.datos.find((e) => e.id === encuentro.evento_id)?.encuentro_id === encuentro.id, r.datos.length)
@@ -317,9 +340,55 @@ async function main() {
   r = await pedir('push/suscripciones', { token: M })
   esperar('manager ve sus suscripciones', r.codigo === 200, r)
 
+  // Convocatoria de los partidos: lista, plantel y "va / no va"
+  r = await pedir('convocatoria', { token: M })
+  const enLista = r.datos.find((e) => e.id === partidoComun.id)
+  esperar('manager GET convocatoria', r.codigo === 200 && !!enLista, r)
+  esperar('la lista de convocatoria no trae entrenamientos', r.datos.every((e) => e.tipo === 'partido'), r.datos)
+  esperar('la lista trae los bloques con su rival', enLista?.bloques?.[0]?.rival === 'Los Tarcos', enLista)
+  esperar('los bloques de la convocatoria no traen crónica ni valoración',
+    !('cronica' in enLista.bloques[0]) && !('valoracion' in enLista.bloques[0]), Object.keys(enLista.bloques[0]))
+  r = await pedir(`convocatoria/${partidoComun.id}`, { token: M })
+  esperar('manager GET convocatoria/:id', r.codigo === 200 && r.datos.jugadores?.length === 1 && Array.isArray(r.datos.confirmaciones), r)
+  esperar('el plantel de la convocatoria no trae nada reservado',
+    r.datos.jugadores.every((j) => reservadas.every((k) => !(k in j))), Object.keys(r.datos.jugadores[0] || {}))
+  esperar('la convocatoria no trae bloques armados ni asistencia del día',
+    !('asignaciones' in r.datos) && !('asistencias_dia' in r.datos) && !('tiempos' in r.datos), Object.keys(r.datos))
+  r = await pedir(`convocatoria/${evento.id}`, { token: M })
+  esperar('la convocatoria de un entrenamiento no existe para el manager', r.codigo === 404, r)
+  r = await pedir(`convocatoria/${partidoComun.id}`, { method: 'PUT', token: M, body: {
+    marcas: [{ jugador_id: jugador.id, estado: 'presente', condicion: 'lesionado' }],
+  } })
+  esperar('manager marca que va', r.codigo === 200, r)
+  r = await pedir(`eventos/${partidoComun.id}/asistencias`, { token: E })
+  esperar('la marca quedó en la convocatoria del partido',
+    r.datos.length === 1 && r.datos[0].estado === 'presente', r.datos)
+  esperar('la condición que mandó el manager se descartó', r.datos[0].condicion == null, r.datos[0])
+  r = await pedir(`convocatoria/${partidoComun.id}`, { method: 'PUT', token: M, body: {
+    marcas: [{ jugador_id: jugador.id, estado: 'ausente' }],
+  } })
+  esperar('manager marca que no va', r.codigo === 200, r)
+  r = await pedir(`convocatoria/${partidoComun.id}`, { token: M })
+  esperar('la convocatoria devuelve la marca nueva', r.datos.confirmaciones[0]?.estado === 'ausente', r.datos.confirmaciones)
+  r = await pedir(`convocatoria/${partidoComun.id}`, { method: 'PUT', token: M, body: {
+    marcas: [{ jugador_id: jugador.id, estado: 'tal vez' }],
+  } })
+  esperar('un estado inválido se rechaza', r.codigo === 400, r)
+  r = await pedir(`convocatoria/${partidoComun.id}`, { method: 'PUT', token: M, body: {
+    marcas: [{ jugador_id: jugador.id, estado: null }],
+  } })
+  esperar('manager borra la marca', r.codigo === 200, r)
+  r = await pedir(`convocatoria/${partidoComun.id}`, { token: M })
+  esperar('sin marca queda sin responder', r.datos.confirmaciones.length === 0, r.datos.confirmaciones)
+  r = await pedir(`convocatoria/${partidoComun.id}/estado`, { token: M })
+  esperar('convocatoria con más tramos → 404', r.codigo === 404, r)
+  r = await pedir('convocatoria', { token: T })
+  esperar('el partido sigue sin suspender ni borrar',
+    r.datos.find((e) => e.id === partidoComun.id)?.suspendido === false, r.datos)
+
   // ---------- el entrenador sigue viendo todo, pero no maneja el staff ----------
   console.log('Entrenador:')
-  for (const ruta of ['jugadores', 'eventos', 'stats/asistencia', 'boletin', 'asignaciones', 'padron', 'viajes', 'viajes/plantel']) {
+  for (const ruta of ['jugadores', 'eventos', 'stats/asistencia', 'boletin', 'asignaciones', 'padron', 'viajes', 'viajes/plantel', 'convocatoria']) {
     r = await pedir(ruta, { token: E })
     esperar(`entrenador GET ${ruta} → 200`, r.codigo === 200, r)
   }

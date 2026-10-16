@@ -5,7 +5,8 @@
 //    Ven y cargan todo.
 //  - "administrativo": los managers (principal y asistente), que suelen ser
 //    padres. Solo entran a lo administrativo: viajes, padrón (datos de
-//    contacto, DNI y ficha médica), la lista del staff y sus propios avisos.
+//    contacto, DNI y ficha médica), la convocatoria de los partidos (marcar
+//    quién va), la lista del staff y sus propios avisos.
 //    Nunca ven asistencia, evaluaciones, entrenamientos, partidos, lesiones,
 //    tests físicos ni boletines.
 //
@@ -72,6 +73,10 @@ export function rutaAdministrativa(metodo, p) {
       return true
     // Padrón: datos administrativos de los chicos (sin nada deportivo)
     case 'padron':
+      return true
+    // Convocatoria de los partidos: la lista de partidos y el "va / no va"
+    // de la semana. Nada más del partido (ni suspenderlo).
+    case 'convocatoria':
       return true
     // Escaneos del DNI: se ven y se cargan desde el padrón
     case 'documentos':
