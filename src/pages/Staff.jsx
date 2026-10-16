@@ -97,8 +97,9 @@ export default function Staff({ yo }) {
       <p className="suave">
         Entrenadores, preparadores físicos y la cabeza de división ven toda la
         app. Los managers (principal y asistente) entran solo a lo
-        administrativo: Padrón, Viajes y sus avisos; no ven asistencia,
-        evaluaciones, entrenamientos ni partidos.
+        administrativo: Padrón, la convocatoria de los partidos, Viajes y sus
+        avisos; no ven asistencia, evaluaciones, entrenamientos ni el resto de
+        los partidos.
         {yo.admin && (
           <> Para sumar a alguien: agregá su email con su rol y pedile que ingrese
           con ese email; en el primer ingreso la app le pide crear su contraseña.</>
