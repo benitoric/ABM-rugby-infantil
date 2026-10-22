@@ -89,6 +89,18 @@ export default function Staff({ yo }) {
     cargar()
   }
 
+  async function blanquearClave(fila) {
+    if (!confirm(
+      `¿Blanquear la clave de ${fila.email}?\n\nEn su próximo ingreso la app le va a pedir crear una contraseña nueva, como en el primer ingreso.`
+    )) return
+    await api(`staff/${fila.email}`, {
+      method: 'PUT',
+      body: { blanquear_clave: true },
+    })
+    alert(`Listo: pedile a ${nombreStaff(fila)} que ingrese con su email y cree su contraseña nueva.`)
+    cargar()
+  }
+
   return (
     <div className="contenido">
       <Avisos />
@@ -209,6 +221,11 @@ export default function Staff({ yo }) {
               </select>
               {s.email !== yo.email && (
                 <>
+                  {s.tiene_clave && (
+                    <button className="btn sec chico" onClick={() => blanquearClave(s)}>
+                      Blanquear clave
+                    </button>
+                  )}
                   <button className="btn sec chico" onClick={() => alternarActivo(s)}>
                     {s.activo ? 'Suspender' : 'Reactivar'}
                   </button>
