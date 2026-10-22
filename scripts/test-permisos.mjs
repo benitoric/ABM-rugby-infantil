@@ -400,6 +400,8 @@ async function main() {
   esperar('entrenador no cambia roles', r.codigo === 403 && r.datos.error === 'solo_cabeza', r)
   r = await pedir(`staff/${MANAGER}`, { method: 'DELETE', token: E })
   esperar('entrenador no quita gente', r.codigo === 403 && r.datos.error === 'solo_cabeza', r)
+  r = await pedir(`staff/${MANAGER}`, { method: 'PUT', token: E, body: { blanquear_clave: true } })
+  esperar('entrenador no blanquea claves', r.codigo === 403 && r.datos.error === 'solo_cabeza', r)
   r = await pedir(`viajes/${viaje.id}`, { method: 'DELETE', token: E })
   esperar('entrenador no borra un viaje entero', r.codigo === 403, r)
 
@@ -415,6 +417,22 @@ async function main() {
   esperar('con el mismo token, ya no los ve', r.codigo === 403, r)
   r = await pedir('me', { token: M })
   esperar('manager asistente: alcance administrativo', r.datos.alcance === 'administrativo', r.datos)
+
+  // ---------- blanqueo de clave: vuelve al flujo del primer ingreso ----------
+  console.log('Blanqueo de clave:')
+  r = await pedir(`staff/${ENTRENADOR}`, { method: 'PUT', token: T, body: { blanquear_clave: true } })
+  esperar('el dueño blanquea la clave del entrenador', r.codigo === 200, r)
+  r = await pedir('staff', { token: T })
+  esperar('la lista lo muestra sin clave',
+    r.datos.find((s) => s.email === ENTRENADOR)?.tiene_clave === false, r.datos)
+  r = await pedir('auth/login', { method: 'POST', body: { email: ENTRENADOR, password: CLAVE } })
+  esperar('su próximo login pide crear contraseña', r.codigo === 409 && r.datos.error === 'necesita_clave', r)
+  r = await pedir('jugadores', { token: E })
+  esperar('su sesión abierta sigue andando', r.codigo === 200, r)
+  r = await pedir('auth/setup', { method: 'POST', body: { email: ENTRENADOR, password: 'clave-nueva' } })
+  esperar('y crea una contraseña nueva', r.codigo === 200, r)
+  r = await pedir('auth/login', { method: 'POST', body: { email: ENTRENADOR, password: 'clave-nueva' } })
+  esperar('con la que ya puede ingresar', r.codigo === 200, r)
 
   servidor.close()
   console.log(`\n${pruebas - fallas}/${pruebas} pruebas pasaron`)

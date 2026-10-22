@@ -2759,6 +2759,14 @@ async function enrutar(metodo, p, b, req, url) {
           [b.dni?.trim() || null, p[1]])
         tocados += r.length
       }
+      // Blanquear la clave: la persona vuelve al estado de recién invitada y
+      // en su próximo ingreso la app le pide crear una contraseña nueva. Las
+      // sesiones ya abiertas no se cortan (autenticar no mira el hash).
+      if (b.blanquear_clave) {
+        const r = await query(
+          'update staff set password_hash = null where email = $1 returning email', [p[1]])
+        tocados += r.length
+      }
       if (!tocados) throw { codigo: 404, error: 'no_existe' }
       return { ok: true }
     }
