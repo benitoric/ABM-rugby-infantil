@@ -84,6 +84,19 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   pantalla de inicio muestra una tarjeta para reactivarlos cuando el celular
   tenía el permiso dado y ya no tiene suscripción válida. `/api/health`
   informa cuántos celulares hay suscriptos y cuándo salió el último aviso.
+- **Seguimiento de las evaluaciones** (`server/evaluacion-proceso.js`): al
+  repartir nace un proceso (`procesos_evaluacion`) con la foto del reparto
+  —a quién le tocó evaluar y revisar cuántos— y las asignaciones llevan su
+  `proceso_id`. Las pendientes se siguen borrando al cargarse; el avance de
+  cada uno es la foto menos lo que le falta (una revisión queda pendiente
+  mientras exista la fila, en la etapa que sea). Hay un solo proceso abierto;
+  repartir de nuevo le suma jugadores, cancelar lo marca cancelado y se cierra
+  solo cuando no queda nada. La cabeza de división y el dueño reciben push al
+  lanzarse (salvo quien repartió), cuando alguien termina de evaluar o de
+  revisar, al completarse todo, y un resumen diario (desde `cron/cumpleanos`,
+  que ahora corre `tareaDiaria`) los días con cargas; cada aviso sale una vez
+  (`avisos_enviados`). `GET asignaciones` devuelve `proceso` solo a quien
+  administra, y la tarjeta de Jugadores lo muestra solo a ellos.
 - **Boletín mensual**: hoja A4 por jugador (`server/boletin.js` arma los
   números, `src/boletin.js` dibuja el PDF con el generador propio) con la
   asistencia del mes, la comparación contra la división, el ranking y las

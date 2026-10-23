@@ -1467,3 +1467,17 @@ details.tarjeta summary {
 .pago-toque:disabled { opacity: 0.5; }
 /* Avisos push que el celular dio de baja: llamado a reactivarlos */
 .aviso-push-perdido { border-left: 4px solid var(--warn); }
+
+/* Seguimiento del proceso de evaluación (cabeza de división y dueño) */
+.proceso-eval { border-left: 4px solid var(--primario); }
+.proceso-eval.cerrado { border-left-color: var(--ok); }
+.barra-avance {
+  height: 10px;
+  background: #eef1f6;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.barra-avance span { display: block; height: 100%; background: var(--primario); transition: width 0.3s; }
+.barra-avance.chica { height: 6px; margin: 3px 0 2px; }
+.proceso-eval.cerrado .barra-avance span { background: var(--ok); }
+.avance-staff { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--borde); }

@@ -99,8 +99,25 @@ create table if not exists asignaciones_evaluacion (
   etapa text not null default 'evaluar' check (etapa in ('evaluar','revisar')),
   evaluacion_id uuid references evaluaciones(id) on delete cascade,
   asignado_por text,
+  -- Proceso de evaluación al que pertenece (ver procesos_evaluacion)
+  proceso_id uuid,
   created_at timestamptz not null default now(),
   primary key (jugador_id)
+);
+
+-- Un proceso de evaluación: nace al repartir y guarda la foto del reparto
+-- (a quién le tocó evaluar y revisar cuántos: { email: { evaluar, revisar } }).
+-- Como las asignaciones pendientes se borran al cargarse, el avance de cada
+-- uno es la foto menos lo que le falta. Se cierra solo cuando no queda nada
+-- pendiente; hay un solo proceso abierto a la vez.
+create table if not exists procesos_evaluacion (
+  id uuid primary key default gen_random_uuid(),
+  lanzado_en timestamptz not null default now(),
+  lanzado_por text,
+  reparto jsonb not null default '{}',
+  total int not null default 0,
+  cerrado_en timestamptz,
+  cancelado_en timestamptz
 );
 
 create table if not exists lesiones (
