@@ -86,6 +86,58 @@ function cuandoCumple(faltan) {
   return `en ${faltan} días`
 }
 
+// Cómo viene el proceso de evaluación, para la cabeza de división y el
+// administrador: cuánto cargó cada uno de lo que le tocó.
+function ProcesoEvaluacion({ p }) {
+  const nombre = (s) => [s.nombre, s.apellido].filter(Boolean).join(' ') || s.staff_email
+  const tareas = p.a_evaluar + p.a_revisar
+  const hechas = p.evaluados + p.revisados
+  const pct = tareas ? Math.round((100 * hechas) / tareas) : 0
+  const cuando = (iso) => {
+    if (!iso) return 'sin cargas todavía'
+    const dias = Math.floor((Date.now() - new Date(iso)) / 86400000)
+    return dias === 0 ? 'cargó hoy' : dias === 1 ? 'cargó ayer' : `últ. carga hace ${dias} días`
+  }
+  const diasProceso = Math.max(1, Math.ceil(
+    (new Date(p.cerrado_en || Date.now()) - new Date(p.lanzado_en)) / 86400000))
+  return (
+    <div className={`tarjeta proceso-eval ${p.cerrado_en ? 'cerrado' : ''}`}>
+      <h3>{p.cerrado_en ? '🏁 Evaluación completa' : '📋 Proceso de evaluación'}</h3>
+      <p className="mini" style={{ margin: '4px 0 8px' }}>
+        {p.cerrado_en
+          ? `Terminó el ${fechaCorta(p.cerrado_en.slice(0, 10))}, ${diasProceso === 1 ? 'al día' : `a los ${diasProceso} días`} de lanzado.`
+          : `Lanzado el ${fechaCorta(p.lanzado_en.slice(0, 10))} por ${p.lanzado_por} · ${p.total} ${p.total === 1 ? 'jugador' : 'jugadores'}.`}
+      </p>
+      <div className="fila entre mini" style={{ marginBottom: 3 }}>
+        <span>Evaluados <b>{p.evaluados} de {p.a_evaluar}</b>{p.a_revisar > 0 && <> · Revisados <b>{p.revisados} de {p.a_revisar}</b></>}</span>
+        <b>{pct}%</b>
+      </div>
+      <div className="barra-avance"><span style={{ width: `${pct}%` }} /></div>
+      {p.por_staff.map((s) => {
+        const totalS = s.evaluar_total + s.revisar_total
+        const hechasS = s.evaluar_hechas + s.revisar_hechas
+        const listo = totalS > 0 && hechasS >= totalS
+        return (
+          <div key={s.staff_email} className="avance-staff">
+            <div className="fila entre" style={{ flexWrap: 'nowrap', gap: 8 }}>
+              <span className="crece" style={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                {listo ? '✅ ' : ''}{nombre(s)}
+              </span>
+              <span className="mini" style={{ whiteSpace: 'nowrap' }}>
+                {s.evaluar_total > 0 && <>evaluó <b>{s.evaluar_hechas}/{s.evaluar_total}</b></>}
+                {s.evaluar_total > 0 && s.revisar_total > 0 && ' · '}
+                {s.revisar_total > 0 && <>revisó <b>{s.revisar_hechas}/{s.revisar_total}</b></>}
+              </span>
+            </div>
+            <div className="barra-avance chica"><span style={{ width: `${totalS ? Math.round((100 * hechasS) / totalS) : 0}%` }} /></div>
+            <div className="mini">{listo ? 'terminó lo suyo' : cuando(s.ultima_carga)}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // Cuánto falta para el alta estimada de una lesión abierta
 function estadoAlta(l) {
   const d = l.dias_para_alta
@@ -433,6 +485,8 @@ export default function Jugadores({ yo }) {
           ))}
         </div>
       )}
+
+      {yo?.admin && asign?.proceso && <ProcesoEvaluacion p={asign.proceso} />}
 
       {(asign?.sin_repartir > 0 || asign?.por_evaluador?.length > 0) && (
         <div className="tarjeta">

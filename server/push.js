@@ -56,6 +56,18 @@ export async function suscripcionesDeEntrenadores() {
     [EMAIL_DUENIO, ROLES_COMPLETOS])
 }
 
+// Los celulares de la cabeza de división y del dueño: para los avisos de
+// seguimiento (cómo avanza un proceso de evaluación). `excepto` deja afuera a
+// quien provocó el aviso, que ya está enterado.
+export async function suscripcionesDeAdministradores(excepto = null) {
+  return query(`select ps.endpoint, ps.p256dh, ps.auth
+                from push_suscripciones ps
+                join staff s on s.email = ps.staff_email
+                where s.activo and (s.email = $1 or s.rol = 'Cabeza de división')
+                  and ($2::text is null or s.email <> $2)`,
+    [EMAIL_DUENIO, excepto])
+}
+
 // Manda el mismo aviso a varias suscripciones. Devuelve cuántas lo recibieron.
 // El payload viaja cifrado y lo abre el service worker (public/sw.js):
 // { titulo, cuerpo, url }

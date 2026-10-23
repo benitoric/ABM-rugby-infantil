@@ -83,7 +83,8 @@ export async function migracionesAplicadas(pool) {
     `select to_regclass('public.evento_plantel') is not null
         and to_regclass('public.plan_tecnico') is not null
         and to_regclass('public.viaje_pagos') is not null
-        and to_regclass('public.boletines_guardados') is not null as existe`)
+        and to_regclass('public.boletines_guardados') is not null
+        and to_regclass('public.procesos_evaluacion') is not null as existe`)
   if (!t.existe) return false
   const { rows: [t2] } = await pool.query(
     `select not exists (
@@ -443,6 +444,18 @@ export async function migrar(pool) {
   await pool.query('alter table viajes add column if not exists hora time')
   await pool.query(`alter table viajes add column if not exists evento_id uuid unique
     references eventos(id) on delete set null`)
+  // Seguimiento de los procesos de evaluación (ver db/schema.sql). Que exista
+  // la tabla es el testigo más nuevo.
+  await pool.query('alter table asignaciones_evaluacion add column if not exists proceso_id uuid')
+  await pool.query(`create table if not exists procesos_evaluacion (
+    id uuid primary key default gen_random_uuid(),
+    lanzado_en timestamptz not null default now(),
+    lanzado_por text,
+    reparto jsonb not null default '{}',
+    total int not null default 0,
+    cerrado_en timestamptz,
+    cancelado_en timestamptz
+  )`)
 }
 
 

@@ -854,13 +854,15 @@ async function enrutar(metodo, p, b, req, url) {
   // La dispara Vercel según el horario de vercel.json. Si está configurado
   // CRON_SECRET, Vercel lo manda en el encabezado y acá se exige; sin él, el
   // registro de avisos enviados evita que llamarla de más duplique saludos.
-  if (p[0] === 'cron' && p[1] === 'cumpleanos') {
+  // `cron/cumpleanos` es el nombre con el que está registrada en Vercel; hoy
+  // corre todo lo diario (cumpleaños y resumen de evaluaciones).
+  if (p[0] === 'cron' && (p[1] === 'cumpleanos' || p[1] === 'diario')) {
     const secreto = process.env.CRON_SECRET
     if (secreto && req.headers.authorization !== `Bearer ${secreto}`) {
       throw { codigo: 401, error: 'no_autorizado' }
     }
-    const { avisarCumpleanos } = await import('./notificaciones.js')
-    return avisarCumpleanos()
+    const { tareaDiaria } = await import('./notificaciones.js')
+    return tareaDiaria()
   }
   // El día 1 de cada mes: avisa que ya están los boletines del mes cerrado
   if (p[0] === 'cron' && p[1] === 'boletines') {
@@ -1201,6 +1203,8 @@ async function enrutar(metodo, p, b, req, url) {
         [yo.email, JSON.stringify(valores), b.comentario_revisor?.trim() || null, p[1]])
       if (!filas.length) throw { codigo: 404, error: 'no_existe' }
       await query('delete from asignaciones_evaluacion where evaluacion_id = $1', [p[1]])
+      const { registrarAvance } = await import('./evaluacion-proceso.js')
+      await registrarAvance()
       return filas[0]
     }
     if (metodo === 'POST' && !p[1]) {
@@ -1222,11 +1226,15 @@ async function enrutar(metodo, p, b, req, url) {
       if (!paso.length) {
         await query('delete from asignaciones_evaluacion where jugador_id = $1', [b.jugador_id])
       }
+      const { registrarAvance } = await import('./evaluacion-proceso.js')
+      await registrarAvance()
       return filas[0]
     }
     if (metodo === 'DELETE' && p[1]) {
       if (!puedeAdministrar(yo)) throw { codigo: 403, error: 'solo_cabeza' }
       await query('delete from evaluaciones where id = $1', [p[1]])
+      const { registrarAvance } = await import('./evaluacion-proceso.js')
+      await registrarAvance()
       return { ok: true }
     }
   }
@@ -1266,7 +1274,14 @@ async function enrutar(metodo, p, b, req, url) {
          order by s.nombre, s.apellido`)
       const [{ n }] = await query(
         `select count(*)::int as n from jugadores j ${SIN_EVALUAR}`)
-      return { mias, revisar, por_evaluador: porEvaluador, sin_repartir: n }
+      // Seguimiento del proceso: cómo viene cada uno. Es para la cabeza de
+      // división y el dueño, que son quienes lo siguen.
+      let proceso = null
+      if (puedeAdministrar(yo)) {
+        const { estadoProceso } = await import('./evaluacion-proceso.js')
+        proceso = await estadoProceso()
+      }
+      return { mias, revisar, por_evaluador: porEvaluador, sin_repartir: n, proceso }
     }
 
     // Reparte al azar, en partes parejas, entre los entrenadores
@@ -1284,12 +1299,20 @@ async function enrutar(metodo, p, b, req, url) {
       // Se empieza en un evaluador al azar para que el resto no reciba
       // siempre uno menos cuando el reparto no es exacto.
       const inicio = Math.floor(Math.random() * evaluadores.length)
+      const hechas = []
       for (let i = 0; i < pendientes.length; i++) {
         const quien = evaluadores[(inicio + i) % evaluadores.length].email
-        await query(
+        const [fila] = await query(
           `insert into asignaciones_evaluacion (jugador_id, staff_email, revisor_email, asignado_por)
-           values ($1, $2, $3, $4) on conflict (jugador_id) do nothing`,
+           values ($1, $2, $3, $4) on conflict (jugador_id) do nothing
+           returning jugador_id, staff_email, revisor_email`,
           [pendientes[i].id, quien, revisorDe[quien] || null, yo.email])
+        if (fila) hechas.push(fila)
+      }
+      // Queda abierto (o se amplía) el proceso que sigue el avance de cada uno
+      if (hechas.length) {
+        const { registrarReparto } = await import('./evaluacion-proceso.js')
+        await registrarReparto({ asignaciones: hechas, lanzadoPor: yo.email })
       }
       return {
         asignados: pendientes.length,
@@ -1300,6 +1323,8 @@ async function enrutar(metodo, p, b, req, url) {
 
     if (metodo === 'DELETE' && !p[1]) {
       await query('delete from asignaciones_evaluacion')
+      const { cancelarProceso } = await import('./evaluacion-proceso.js')
+      await cancelarProceso()
       return { ok: true }
     }
   }

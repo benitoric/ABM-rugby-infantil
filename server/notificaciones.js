@@ -84,3 +84,18 @@ export async function avisarCumpleanos() {
   }
   return { fecha: hoy, cumplen: cumplen.length, avisados }
 }
+
+// Todo lo que corre una vez por día: los cumpleaños y, mientras haya un
+// proceso de evaluación abierto, el resumen de cómo avanza.
+export async function tareaDiaria() {
+  const cumpleanos = await avisarCumpleanos()
+  const { resumenDiario } = await import('./evaluacion-proceso.js')
+  let evaluaciones
+  try {
+    evaluaciones = await resumenDiario()
+  } catch (e) {
+    console.error('No salió el resumen de evaluaciones', e)
+    evaluaciones = { error: String(e?.message || e) }
+  }
+  return { cumpleanos, evaluaciones }
+}
