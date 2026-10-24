@@ -37,10 +37,55 @@ function posicionGuardada() {
   try { return (localStorage.getItem(CLAVE_PARTIDO) || '').split('/') } catch { return [] }
 }
 
-// El último partido cargado, que es donde arranca el selector: el de created_at
+// El último partido cargado, que es el que se abre al entrar: el de created_at
 // más nuevo, no el de fecha más próxima (se puede cargar un partido viejo).
 export function ultimoCreado(ps) {
   return [...ps].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0]
+}
+
+// La lista de partidos, del más nuevo al más viejo, con los detalles de cada
+// uno a la vista: rival, hora de convocatoria y lugar de cada bloque, las
+// suspensiones y los bloques que quedaron sin cerrar. Reemplaza al selector
+// desplegable, que no dejaba ver nada de esto. La usan los entrenadores y los
+// managers (con lo que cada API les devuelve del partido).
+export function ListaPartidos({ partidos, onElegir }) {
+  const hoy = new Date().toISOString().slice(0, 10)
+  const ultimo = partidos.length ? ultimoCreado(partidos).id : null
+  const orden = [...partidos].sort((a, b) =>
+    (b.fecha || '').localeCompare(a.fecha || '') ||
+    (b.created_at || '').localeCompare(a.created_at || ''))
+
+  return orden.map((p) => {
+    const susp = suspensionEvento(p)
+    const sinCerrar = p.fecha < hoy && !p.suspendido &&
+      (p.bloques || []).some((bl) => !bl.suspendido && !bl.cerrado_en)
+    return (
+      <button
+        key={p.id}
+        className="jugador-item"
+        style={susp.estado === 'total' ? { opacity: 0.7 } : undefined}
+        onClick={() => onElegir(p)}
+      >
+        <div className="avatar">🏉</div>
+        <div className="crece" style={{ minWidth: 0 }}>
+          <div className="fila" style={{ gap: 6, fontWeight: 600 }}>
+            <span>{etiquetaPartido(p)}</span>
+            {p.fecha === hoy && <span className="badge activo">hoy</span>}
+            {p.id === ultimo && <span className="badge inactivo">último cargado</span>}
+            {sinCerrar && <span className="badge susp-parcial" style={{ marginLeft: 0 }}>🔓 sin cerrar</span>}
+            {susp.estado && (
+              <span className={`badge susp-${susp.estado}`} style={{ marginLeft: 0 }}>⛔ {susp.texto}</span>
+            )}
+          </div>
+          <div className="mini">{fechaCorta(p.fecha)}</div>
+          {(p.bloques || []).map((bl) => (
+            <div key={bl.numero} className="mini">{lineaBloque(bl)}</div>
+          ))}
+        </div>
+        <span className="mini">→</span>
+      </button>
+    )
+  })
 }
 
 export default function Partidos() {
@@ -50,34 +95,35 @@ export default function Partidos() {
   const [creando, setCreando] = useState(false)
   const [sugerencias, recargarSugerencias] = useSugerencias()
 
-  // Trae la lista de partidos y devuelve cuál mostrar. Sin nada que mande
-  // (hash o partido recién creado) se para en el último creado.
+  // Trae la lista de partidos y decide cuál mostrar. Al entrar a la sección
+  // (sin nada en el hash) se abre el último cargado; con un partido en el
+  // hash (recarga, link directo o "atrás") se respeta ese; y si se pide la
+  // lista a propósito (preferido en null, después de borrar) no se abre nada.
   async function cargar(preferido) {
     const eventos = await api('eventos')
     const ps = eventos.filter((e) => e.tipo === 'partido')
     setPartidos(ps)
-    if (!ps.length) { setPartidoId(''); setCargando(false); return null }
-    // El del hash manda (recarga o link directo); si no, el último creado
     const [, hashId, hashVista] = leerHash()
     const elegido =
       (ps.some((x) => x.id === preferido) && preferido) ||
       (ps.some((x) => x.id === hashId) && hashId) ||
-      ultimoCreado(ps).id
-    reponer('partidos', elegido, elegido === hashId ? hashVista : null)
+      (preferido === undefined && !hashId && ps.length ? ultimoCreado(ps).id : '')
+    reponer('partidos', elegido || null, elegido && elegido === hashId ? hashVista : null)
     setPartidoId(elegido)
     setCargando(false)
-    return ps.find((x) => x.id === elegido)
+    return ps.find((x) => x.id === elegido) || null
   }
 
   useEffect(() => {
     cargar().catch(() => setCargando(false))
   }, [])
 
-  // Botón "atrás" o link directo: el partido sale del hash
+  // Botón "atrás", link directo o "← Partidos": el partido sale del hash, y
+  // sin partido en el hash se muestra la lista
   useEffect(() => suscribir(() => {
     const [seccion, id] = leerHash()
-    if (seccion !== 'partidos' || !id) return
-    if (partidos.some((x) => x.id === id)) setPartidoId(id)
+    if (seccion !== 'partidos') return
+    setPartidoId(id && partidos.some((x) => x.id === id) ? id : '')
   }), [partidos])
 
   // Alta de un partido: queda seleccionado el recién creado
@@ -97,22 +143,28 @@ export default function Partidos() {
 
   if (cargando) return <div className="vacio">Cargando…</div>
 
-  if (!partidos.length) {
+  const partido = partidos.find((p) => p.id === partidoId)
+
+  // La lista: sin partidos todavía, o cuando se vuelve desde uno abierto
+  if (!partido) {
     return (
       <div className="contenido">
         <div className="fila entre">
           <h2>Partidos</h2>
           <button className="btn" onClick={() => setCreando(true)}>+ Nuevo partido</button>
         </div>
-        <div className="vacio">
-          Todavía no hay partidos. Creá uno para armar la convocatoria.
-        </div>
+        {partidos.length === 0 ? (
+          <div className="vacio">
+            Todavía no hay partidos. Creá uno para armar la convocatoria.
+          </div>
+        ) : (
+          <ListaPartidos partidos={partidos} onElegir={(p) => irA('partidos', p.id)} />
+        )}
         {formNuevo}
+        {partidos.length > 0 && <RotacionAnual />}
       </div>
     )
   }
-
-  const partido = partidos.find((p) => p.id === partidoId)
 
   // Partidos ya jugados con bloques todavía abiertos: recordatorio de cierre
   const hoy = new Date().toISOString().slice(0, 10)
@@ -139,28 +191,18 @@ export default function Partidos() {
         </div>
       )}
 
-      {/* El alta va junto al selector: se ve desde cualquier solapa */}
-      <div className="fila no-imprimir" style={{ alignItems: 'flex-end' }}>
-        <div className="campo crece" style={{ marginBottom: 0 }}>
-          <label>Partido</label>
-          <select value={partidoId} onChange={(e) => irA('partidos', e.target.value)}>
-            {partidos.map((p) => (
-              <option key={p.id} value={p.id}>
-                {fechaCorta(p.fecha)} · {etiquetaPartido(p)}
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* La vuelta a la lista y el alta se ven desde cualquier solapa */}
+      <div className="fila entre no-imprimir">
+        <button className="btn sec chico" onClick={() => irA('partidos')}>← Partidos</button>
         <button className="btn" onClick={() => setCreando(true)}>+ Nuevo partido</button>
       </div>
-      {partido && (
-        <ArmadoPartido
-          key={partido.id}
-          partido={partido}
-          onActualizado={(ev) => cargar(ev.id)}
-          onBorrado={() => cargar()}
-        />
-      )}
+      <ArmadoPartido
+        key={partido.id}
+        partido={partido}
+        onActualizado={(ev) => cargar(ev.id)}
+        // Borrado: se vuelve a la lista, sin abrir otro partido en su lugar
+        onBorrado={() => cargar(null)}
+      />
       {formNuevo}
       <RotacionAnual />
     </div>

@@ -33,7 +33,11 @@ pantalla de inicio" del teléfono y queda como una app más).
    la pantalla de Entrenamientos resume lo mismo en un gráfico de barras,
    **Qué se viene entrenando**, con los minutos de cada aspecto y la lista de
    los que todavía no se trabajaron.
-4. **Partidos**: cada partido se crea y se convoca desde su pestaña
+4. **Partidos**: al entrar se abre el último partido cargado, y "← Partidos"
+   lleva a la lista de todos, del más próximo al más viejo, con los detalles
+   de cada uno a la vista (rival, hora de convocatoria y lugar de cada
+   bloque, suspensiones y bloques sin cerrar). Cada partido se crea y se
+   convoca desde su pestaña
    **Convocatoria** (quién avisa que va), y de ahí sigue el resto del día:
    asignación de los convocados a los bloques que presenta el club (normalmente
    2, pero al crear el partido se puede elegir de 1 a 6). La suspensión de un

@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { irA, leerHash, reponer, suscribir } from '../navegacion.js'
-import { etiquetaPartido, fechaCorta } from '../helpers.js'
-import { Convocatoria, ultimoCreado } from './Partidos.jsx'
+import { Convocatoria, ListaPartidos, ultimoCreado } from './Partidos.jsx'
 
 // Menú Partidos para los managers (alcance administrativo): solo la solapa
 // Convocatoria, para marcar quién avisó que va. Todo sale de `convocatoria/...`
@@ -16,7 +15,8 @@ export default function PartidosManagers() {
     api('convocatoria').then((ps) => {
       setPartidos(ps)
       if (!ps.length) return
-      // El del hash manda (recarga o link directo); si no, el último creado
+      // El del hash manda (recarga o link directo); si no, al entrar se abre
+      // el último cargado. La lista queda a un toque, en "← Partidos".
       const [, hashId] = leerHash()
       const elegido = (ps.some((x) => x.id === hashId) && hashId) || ultimoCreado(ps).id
       reponer('partidos', elegido)
@@ -24,38 +24,34 @@ export default function PartidosManagers() {
     }).catch(() => setPartidos([]))
   }, [])
 
-  // Botón "atrás" o link directo: el partido sale del hash
+  // Botón "atrás", link directo o "← Partidos": el partido sale del hash, y
+  // sin partido en el hash se muestra la lista
   useEffect(() => suscribir(() => {
     const [seccion, id] = leerHash()
-    if (seccion === 'partidos' && id) setPartidoId(id)
+    if (seccion === 'partidos') setPartidoId(id || '')
   }), [])
 
   if (!partidos) return <div className="vacio">Cargando…</div>
 
-  if (!partidos.length) {
+  const partido = partidos.find((p) => p.id === partidoId)
+
+  if (!partido) {
     return (
       <div className="contenido">
         <h2>Partidos</h2>
-        <div className="vacio">Todavía no hay partidos cargados.</div>
+        {partidos.length === 0
+          ? <div className="vacio">Todavía no hay partidos cargados.</div>
+          : <ListaPartidos partidos={partidos} onElegir={(p) => irA('partidos', p.id)} />}
       </div>
     )
   }
 
-  const partido = partidos.find((p) => p.id === partidoId)
-
   return (
     <div className="contenido">
-      <div className="campo">
-        <label>Partido</label>
-        <select value={partidoId} onChange={(e) => irA('partidos', e.target.value)}>
-          {partidos.map((p) => (
-            <option key={p.id} value={p.id}>
-              {fechaCorta(p.fecha)} · {etiquetaPartido(p)}
-            </option>
-          ))}
-        </select>
+      <div className="fila">
+        <button className="btn sec chico" onClick={() => irA('partidos')}>← Partidos</button>
       </div>
-      {partido && <ConvocatoriaManagers key={partido.id} partido={partido} />}
+      <ConvocatoriaManagers key={partido.id} partido={partido} />
     </div>
   )
 }

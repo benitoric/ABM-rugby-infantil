@@ -172,7 +172,11 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   pantalla de Staff.
 - **Navegación**: la posición en la app vive en el hash de la URL
   (`#/partidos/<id>/<vista>`) con respaldo en localStorage (`src/navegacion.js`),
-  para sobrevivir recargas y descartes de la PWA. La vista de partido se
+  para sobrevivir recargas y descartes de la PWA. `#/partidos` a secas es la
+  lista de partidos (`ListaPartidos`, compartida con la pantalla de los
+  managers); al entrar a la sección sin partido en el hash se abre el último
+  cargado y se repone el hash, y "← Partidos" o "atrás" vuelven a la lista.
+  La vista de partido se
   refresca sola (`GET partido/:id/estado` al volver a la app y cada 15 s),
   salteándose los refrescos mientras haya escrituras propias en vuelo.
   Los boletines también viven en el hash (`#/jugadores/boletines/<mes>/<id>`,
