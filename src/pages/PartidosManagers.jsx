@@ -16,7 +16,7 @@ export default function PartidosManagers() {
       setPartidos(ps)
       if (!ps.length) return
       // El del hash manda (recarga o link directo); si no, al entrar se abre
-      // el último cargado. La lista queda a un toque, en "← Partidos".
+      // el último cargado. La lista queda a un toque, en "Listado de partidos".
       const [, hashId] = leerHash()
       const elegido = (ps.some((x) => x.id === hashId) && hashId) || ultimoCreado(ps).id
       reponer('partidos', elegido)
@@ -24,7 +24,7 @@ export default function PartidosManagers() {
     }).catch(() => setPartidos([]))
   }, [])
 
-  // Botón "atrás", link directo o "← Partidos": el partido sale del hash, y
+  // Botón "atrás", link directo o "Listado de partidos": el partido sale del hash, y
   // sin partido en el hash se muestra la lista
   useEffect(() => suscribir(() => {
     const [seccion, id] = leerHash()
@@ -49,7 +49,7 @@ export default function PartidosManagers() {
   return (
     <div className="contenido">
       <div className="fila">
-        <button className="btn sec chico" onClick={() => irA('partidos')}>← Partidos</button>
+        <button className="btn sec" onClick={() => irA('partidos')}>☰ Listado de partidos</button>
       </div>
       <ConvocatoriaManagers key={partido.id} partido={partido} />
     </div>

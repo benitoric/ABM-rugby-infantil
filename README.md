@@ -33,7 +33,7 @@ pantalla de inicio" del teléfono y queda como una app más).
    la pantalla de Entrenamientos resume lo mismo en un gráfico de barras,
    **Qué se viene entrenando**, con los minutos de cada aspecto y la lista de
    los que todavía no se trabajaron.
-4. **Partidos**: al entrar se abre el último partido cargado, y "← Partidos"
+4. **Partidos**: al entrar se abre el último partido cargado, y "Listado de partidos"
    lleva a la lista de todos, del más próximo al más viejo, con los detalles
    de cada uno a la vista (rival, hora de convocatoria y lugar de cada
    bloque, suspensiones y bloques sin cerrar). Cada partido se crea y se
