@@ -175,7 +175,7 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   para sobrevivir recargas y descartes de la PWA. `#/partidos` a secas es la
   lista de partidos (`ListaPartidos`, compartida con la pantalla de los
   managers); al entrar a la sección sin partido en el hash se abre el último
-  cargado y se repone el hash, y "← Partidos" o "atrás" vuelven a la lista.
+  cargado y se repone el hash, y "Listado de partidos" o "atrás" vuelven a la lista.
   La vista de partido se
   refresca sola (`GET partido/:id/estado` al volver a la app y cada 15 s),
   salteándose los refrescos mientras haya escrituras propias en vuelo.

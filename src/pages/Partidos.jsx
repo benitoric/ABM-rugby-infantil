@@ -118,7 +118,7 @@ export default function Partidos() {
     cargar().catch(() => setCargando(false))
   }, [])
 
-  // Botón "atrás", link directo o "← Partidos": el partido sale del hash, y
+  // Botón "atrás", link directo o "Listado de partidos": el partido sale del hash, y
   // sin partido en el hash se muestra la lista
   useEffect(() => suscribir(() => {
     const [seccion, id] = leerHash()
@@ -193,7 +193,7 @@ export default function Partidos() {
 
       {/* La vuelta a la lista y el alta se ven desde cualquier solapa */}
       <div className="fila entre no-imprimir">
-        <button className="btn sec chico" onClick={() => irA('partidos')}>← Partidos</button>
+        <button className="btn sec" onClick={() => irA('partidos')}>☰ Listado de partidos</button>
         <button className="btn" onClick={() => setCreando(true)}>+ Nuevo partido</button>
       </div>
       <ArmadoPartido
