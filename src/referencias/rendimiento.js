@@ -9,6 +9,12 @@
 
 export const SALTO_VARONES = { fuente: null, centiles: {} }
 
+// Decisión del cuerpo técnico: la velocidad en 20 m se compara solo dentro
+// del grupo. No hay una tabla internacional por edad que valga la pena citar,
+// y antes que una referencia floja, ninguna.
 export const VELOCIDAD_VARONES = { fuente: null, centiles: {} }
 
+// El 10×20 m del club es el test de 20 m ida y vuelta (course navette), así
+// que acá van las normas internacionales de ese test en vueltas, por edad
+// (Tomkinson y otros, Br J Sports Med 2017), cuando se puedan cargar.
 export const RESISTENCIA_VARONES = { fuente: null, centiles: {} }
