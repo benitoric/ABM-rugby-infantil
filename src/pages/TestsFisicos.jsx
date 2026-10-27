@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
+import { actualizarCortes, useCortes } from '../cortes.js'
 import { fechaCompacta, fechaCorta, nombreCompleto } from '../helpers.js'
 import {
-  conUnidad, diferencia, formatearValor, imc, parsearValor, progreso, rangosSemaforo,
-  semaforo, semaforoSugerido, tieneCortes, SEMAFOROS, TESTS, TESTS_POR_VALUE,
+  admiteCortes, conUnidad, cortesValidos, diferencia, etiquetasDeCortes, formatearValor,
+  imc, parsearValor, progreso, rangosSemaforo, semaforo, semaforoSugerido, tieneCortes,
+  SEMAFOROS, TESTS, TESTS_POR_VALUE,
 } from '../tests.js'
 
 // Clave de una medición dentro del estado local de la pantalla de carga
@@ -34,7 +36,7 @@ function Semaforo({ valor, onCambiar, deshabilitado }) {
 
 // Una fila de carga: el número se guarda al salir del campo y el color al
 // tocarlo, sin botón de guardar (mismo criterio que la toma de asistencia).
-function FilaTest({ jugador, test, medicion, previa, onGuardar }) {
+function FilaTest({ jugador, test, cortes, medicion, previa, onGuardar }) {
   const t = TESTS_POR_VALUE[test]
   const [texto, setTexto] = useState(() => formatearValor(test, medicion?.valor))
   const [error, setError] = useState(false)
@@ -65,7 +67,7 @@ function FilaTest({ jugador, test, medicion, previa, onGuardar }) {
     if (colorAMano) {
       onGuardar(jugador.id, valor, medicion.semaforo, false)
     } else {
-      const sugerido = semaforoSugerido(test, valor)
+      const sugerido = semaforoSugerido(test, valor, cortes)
       onGuardar(jugador.id, valor, sugerido, !!sugerido)
     }
   }
@@ -112,27 +114,176 @@ function FilaTest({ jugador, test, medicion, previa, onGuardar }) {
   )
 }
 
-// Con qué criterio se pinta el color, a la vista mientras se carga: el PF
-// tiene que poder ver de dónde salió el verde antes de aceptarlo.
-function LeyendaCortes({ test }) {
-  const rangos = rangosSemaforo(test)
-  if (!rangos.length) {
-    return (
-      <p className="mini" style={{ marginTop: 6 }}>
-        Este test todavía no tiene tabla de referencia: el color va a mano.
-      </p>
-    )
-  }
+// Los tres rangos escritos, con sus colores
+function Rangos({ test, cortes }) {
+  const rangos = rangosSemaforo(test, cortes)
+  if (!rangos.length) return null
   return (
     <div className="cortes">
-      <span className="mini">El color se pone solo:</span>
       {rangos.map((r) => (
         <span key={r.semaforo} className={`badge semaforo-${r.semaforo}`}>
           {semaforo(r.semaforo).ico} {r.texto}
         </span>
       ))}
-      <span className="mini">Si no coincide con lo que viste, tocá otro color y manda el tuyo.</span>
     </div>
+  )
+}
+
+// Editor de los dos bordes. Mientras se tipea muestra cómo quedarían los tres
+// rangos, así el PF ve el efecto antes de guardar.
+function FormCortes({ test, cortes, onCerrar, onGuardado }) {
+  const actual = cortes?.[test]
+  const t = TESTS_POR_VALUE[test]
+  const etiquetas = etiquetasDeCortes(test)
+  const [verde, setVerde] = useState(actual ? formatearValor(test, actual.verde) : '')
+  const [amarillo, setAmarillo] = useState(actual ? formatearValor(test, actual.amarillo) : '')
+  const [error, setError] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  // La vista previa usa los mismos rangos que después se guardan
+  const propuesta = cortesValidos(test, parsearValor(test, verde), parsearValor(test, amarillo))
+  const previa = propuesta ? { [test]: propuesta } : null
+
+  async function guardar(e) {
+    e.preventDefault()
+    if (!propuesta) {
+      setError(t.mejor === 'mayor'
+        ? 'El borde del verde tiene que ser mayor que el del amarillo.'
+        : 'El borde del verde tiene que ser menor que el del amarillo.')
+      return
+    }
+    setGuardando(true)
+    setError('')
+    try {
+      const r = await api(`tests/cortes/${test}`, { method: 'PUT', body: propuesta })
+      onGuardado(r)
+    } catch {
+      setError('No se pudo guardar el criterio. Probá de nuevo.')
+      setGuardando(false)
+    }
+  }
+
+  async function quitar() {
+    if (!confirm(
+      `¿Sacarle el criterio a ${t.label}?\n\nLas mediciones conservan el color que ` +
+      'ya tienen, pero las nuevas se van a cargar sin color.'
+    )) return
+    setGuardando(true)
+    try {
+      onGuardado(await api(`tests/cortes/${test}`, { method: 'DELETE' }))
+    } catch {
+      setError('No se pudo sacar el criterio. Probá de nuevo.')
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <form className="form-cortes" onSubmit={guardar}>
+      <div className="grid2">
+        <div className="campo">
+          <label>{etiquetas.verde}</label>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={verde}
+            onChange={(e) => { setVerde(e.target.value); setError('') }}
+          />
+        </div>
+        <div className="campo">
+          <label>{etiquetas.amarillo}</label>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={amarillo}
+            onChange={(e) => { setAmarillo(e.target.value); setError('') }}
+          />
+        </div>
+      </div>
+      <p className="mini">
+        El rojo es todo lo que queda afuera. Al guardar se repintan las
+        mediciones que tengan el color puesto por el criterio anterior; las que
+        alguien eligió a mano quedan como están.
+      </p>
+      {previa && <Rangos test={test} cortes={previa} />}
+      {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
+      <div className="fila" style={{ marginTop: 10 }}>
+        <button className="btn crece" disabled={guardando}>
+          {guardando ? 'Guardando…' : 'Guardar criterio'}
+        </button>
+        <button type="button" className="btn sec" onClick={onCerrar}>Cancelar</button>
+      </div>
+      {actual && (
+        <button type="button" className="btn peligro chico" style={{ marginTop: 8 }}
+          disabled={guardando} onClick={quitar}>
+          Quitar criterio
+        </button>
+      )}
+    </form>
+  )
+}
+
+// Con qué criterio se pinta el color, a la vista mientras se carga: el PF
+// tiene que poder ver de dónde salió el verde antes de aceptarlo, y poder
+// cambiarlo sin salir de la pantalla.
+function LeyendaCortes({ test, cortes, onRecalculado }) {
+  const [editando, setEditando] = useState(false)
+  const [aviso, setAviso] = useState('')
+
+  // Al cambiar de test se cierra el editor: los bordes son de cada uno
+  useEffect(() => { setEditando(false); setAviso('') }, [test])
+
+  if (!admiteCortes(test)) {
+    return (
+      <p className="mini" style={{ marginTop: 6 }}>
+        El peso y la talla no llevan semáforo: no son una performance, y en
+        chicos se leen por percentil de edad. El color va a mano.
+      </p>
+    )
+  }
+
+  if (editando) {
+    return (
+      <FormCortes
+        test={test}
+        cortes={cortes}
+        onCerrar={() => setEditando(false)}
+        onGuardado={(r) => {
+          actualizarCortes(r.cortes)
+          setEditando(false)
+          setAviso(r.recalculadas
+            ? `Criterio guardado. Se repintaron ${r.recalculadas} ${r.recalculadas === 1 ? 'medición' : 'mediciones'} ya cargadas.`
+            : 'Criterio guardado.')
+          // Las mediciones de la pantalla quedaron con el color viejo: hay que
+          // volver a traerlas para que se vea el criterio nuevo aplicado
+          if (r.recalculadas) onRecalculado?.()
+        }}
+      />
+    )
+  }
+
+  const tiene = tieneCortes(test, cortes)
+  return (
+    <>
+      <div className="fila entre" style={{ marginTop: 8, gap: 8 }}>
+        <span className="mini crece">
+          {tiene
+            ? 'El color se pone solo con este criterio:'
+            : 'Este test todavía no tiene criterio: el color va a mano.'}
+        </span>
+        <button type="button" className="btn sec chico" onClick={() => setEditando(true)}>
+          {tiene ? 'Cambiar criterio' : 'Definir criterio'}
+        </button>
+      </div>
+      {tiene && (
+        <>
+          <Rangos test={test} cortes={cortes} />
+          <p className="mini" style={{ marginTop: 6 }}>
+            Si no coincide con lo que viste, tocá otro color y manda el tuyo.
+          </p>
+        </>
+      )}
+      {aviso && <div className="aviso" style={{ marginTop: 8 }}>{aviso}</div>}
+    </>
   )
 }
 
@@ -145,6 +296,7 @@ export default function TestsFisicos({ evento, onVolver }) {
   const [mediciones, setMediciones] = useState({})
   const [previas, setPrevias] = useState({})
   const [soloPresentes, setSoloPresentes] = useState(true)
+  const cortes = useCortes()
   const [cargando, setCargando] = useState(true)
   const [errorCarga, setErrorCarga] = useState(null)
   const [intento, setIntento] = useState(0)
@@ -244,7 +396,11 @@ export default function TestsFisicos({ evento, onVolver }) {
           ))}
         </div>
         <p className="mini" style={{ marginTop: 8 }}>{t.ayuda}</p>
-        <LeyendaCortes test={test} />
+        <LeyendaCortes
+          test={test}
+          cortes={cortes}
+          onRecalculado={() => setIntento((n) => n + 1)}
+        />
       </div>
 
       <div className="fila entre">
@@ -256,7 +412,7 @@ export default function TestsFisicos({ evento, onVolver }) {
         {soloPresentes ? 'Ver todo el plantel' : 'Ver solo los presentes de hoy'}
       </button>
 
-      {cargando && <div className="vacio">Cargando…</div>}
+      {(cargando || !cortes) && <div className="vacio">Cargando…</div>}
       {errorCarga && (
         <div className="vacio">
           <p>No se pudo cargar el listado{errorCarga.detalle ? `: ${errorCarga.detalle}` : '.'}</p>
@@ -273,11 +429,12 @@ export default function TestsFisicos({ evento, onVolver }) {
         </div>
       )}
 
-      {visibles.map((j) => (
+      {!cargando && cortes && visibles.map((j) => (
         <FilaTest
           key={j.id}
           jugador={j}
           test={test}
+          cortes={cortes}
           medicion={mediciones[clave(j.id, test)]}
           previa={previas[clave(j.id, test)]}
           onGuardar={guardar}
@@ -390,6 +547,7 @@ function TarjetaTest({ test, historial, onBorrar }) {
 // Formulario de carga suelta desde la ficha: el que faltó el día del test y
 // se lo miden aparte.
 function FormTest({ jugadorId, onCerrar, onGuardado }) {
+  const cortes = useCortes()
   const hoy = new Date().toISOString().slice(0, 10)
   const [fecha, setFecha] = useState(hoy)
   const [test, setTest] = useState(TESTS[0].value)
@@ -402,7 +560,7 @@ function FormTest({ jugadorId, onCerrar, onGuardado }) {
   const [guardando, setGuardando] = useState(false)
   const t = TESTS_POR_VALUE[test]
 
-  const sugerido = semaforoSugerido(test, parsearValor(test, texto))
+  const sugerido = semaforoSugerido(test, parsearValor(test, texto), cortes)
   const semFinal = semAMano ? sem : sugerido
 
   async function guardar(e) {
@@ -465,8 +623,12 @@ function FormTest({ jugadorId, onCerrar, onGuardado }) {
         {!semAMano && sugerido && (
           <span className="mini">Puesto por la tabla. Tocá otro color si no coincide.</span>
         )}
-        {!tieneCortes(test) && (
-          <span className="mini">Este test no tiene tabla: el color va a mano.</span>
+        {!tieneCortes(test, cortes) && (
+          <span className="mini">
+            {admiteCortes(test)
+              ? 'Este test no tiene criterio cargado: el color va a mano.'
+              : 'El peso y la talla no llevan semáforo: el color va a mano.'}
+          </span>
         )}
       </div>
       <div className="campo">

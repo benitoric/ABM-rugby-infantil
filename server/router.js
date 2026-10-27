@@ -7,7 +7,9 @@ import { perfil, puedeAdministrar, rutaAdministrativa, validarRol } from './perm
 import { promedioDeAreas, GRUPOS } from '../src/evaluacion.js'
 // Ídem con el catálogo de tests físicos: la lista de tests válidos y sus
 // unidades viven en un solo lado (src/tests.js tampoco toca el DOM)
-import { CLAVES_SEMAFORO, CLAVES_TEST } from '../src/tests.js'
+import {
+  cortesValidos, semaforoSugerido, CLAVES_SEMAFORO, CLAVES_TEST,
+} from '../src/tests.js'
 import {
   limpiarVariables, CLAVES_FISICAS, CLAVES_INTENSIDAD, MAX_MINUTOS,
 } from '../src/trabajoFisico.js'
@@ -175,6 +177,43 @@ function puntajesValidos(crudo) {
     if (Number.isInteger(n) && n >= 1 && n <= 5) valores[k] = n
   }
   return valores
+}
+
+// Los cortes como los espera src/tests.js: { test: { verde, amarillo } }
+async function leerCortes() {
+  const filas = await query(
+    `select test, verde::float8 as verde, amarillo::float8 as amarillo,
+            actualizado_en::text as actualizado_en, actualizado_por
+     from cortes_tests`)
+  return Object.fromEntries(filas.map((f) => [f.test, f]))
+}
+
+// Al cambiar los cortes, las mediciones que tienen el color puesto por la
+// tabla (y las que nunca tuvieron color) se repintan con el criterio nuevo.
+// Las que tienen un color elegido a mano quedan como están: esas son la
+// valoración de una persona, no una cuenta. El cálculo pasa por la misma
+// función que usa el frontend, así no hay dos criterios dando vueltas.
+async function recalcularSemaforos(test) {
+  const cortes = await leerCortes()
+  if (!cortes[test]) return 0
+  const filas = await query(
+    `select id, valor::float8 as valor, semaforo from tests_fisicos
+     where test = $1 and (semaforo_auto or semaforo is null)`, [test])
+  const porColor = {}
+  for (const f of filas) {
+    const nuevo = semaforoSugerido(test, f.valor, cortes)
+    if (!nuevo || nuevo === f.semaforo) continue
+    porColor[nuevo] = porColor[nuevo] || []
+    porColor[nuevo].push(f.id)
+  }
+  let total = 0
+  for (const [color, ids] of Object.entries(porColor)) {
+    await query(
+      `update tests_fisicos set semaforo = $1, semaforo_auto = true where id = any($2)`,
+      [color, ids])
+    total += ids.length
+  }
+  return total
 }
 
 // Una medición de test físico tal como se guarda: el test tiene que estar en
@@ -1163,6 +1202,31 @@ async function enrutar(metodo, p, b, req, url) {
   // Carga suelta desde la ficha, para el que faltó el día que se tomó el test
   // y se lo miden en otro momento. La carga en tanda vive en eventos/:id/tests.
   if (p[0] === 'tests') {
+    // Criterios del semáforo: los dos bordes con los que se pinta cada test.
+    // Los edita el cuerpo técnico (los managers no llegan hasta acá: la lista
+    // blanca de permisos no incluye 'tests').
+    if (p[1] === 'cortes') {
+      if (metodo === 'GET' && !p[2]) return leerCortes()
+      if (metodo === 'PUT' && p[2]) {
+        const cortes = cortesValidos(p[2], b?.verde, b?.amarillo)
+        if (!cortes) throw { codigo: 400, error: 'cortes_invalidos' }
+        await query(
+          `insert into cortes_tests (test, verde, amarillo, actualizado_en, actualizado_por)
+           values ($1,$2,$3, now(), $4)
+           on conflict (test) do update
+             set verde = excluded.verde, amarillo = excluded.amarillo,
+                 actualizado_en = now(), actualizado_por = excluded.actualizado_por`,
+          [p[2], cortes.verde, cortes.amarillo, yo.email])
+        return { cortes: await leerCortes(), recalculadas: await recalcularSemaforos(p[2]) }
+      }
+      // Sacarle los cortes a un test lo devuelve a "el color va a mano": las
+      // mediciones conservan el color que tengan, no se despintan solas.
+      if (metodo === 'DELETE' && p[2]) {
+        await query('delete from cortes_tests where test = $1', [p[2]])
+        return { cortes: await leerCortes(), recalculadas: 0 }
+      }
+      throw { codigo: 404, error: 'no_existe' }
+    }
     if (metodo === 'POST' && !p[1]) {
       if (!b?.jugador_id) throw { codigo: 400, error: 'faltan_datos' }
       const valor = medicionValida(b.test, b.valor)

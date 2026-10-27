@@ -1,6 +1,10 @@
 // Acceso a la base. En producción (Vercel) usa Postgres de Neon vía pg.
 // Con PGLITE=1 usa una base Postgres en memoria (para tests locales).
 
+// Los cortes con los que arranca el semáforo de los tests: el catálogo los
+// define una vez y la migración los siembra (ver src/tests.js)
+import { CORTES_POR_DEFECTO } from '../src/tests.js'
+
 let _query
 
 async function inicializar() {
@@ -87,7 +91,8 @@ export async function migracionesAplicadas(pool) {
         and to_regclass('public.plan_tecnico') is not null
         and to_regclass('public.viaje_pagos') is not null
         and to_regclass('public.boletines_guardados') is not null
-        and to_regclass('public.procesos_evaluacion') is not null as existe`)
+        and to_regclass('public.procesos_evaluacion') is not null
+        and to_regclass('public.cortes_tests') is not null as existe`)
   if (!t.existe) return false
   const { rows: [t2] } = await pool.query(
     `select not exists (
@@ -479,6 +484,23 @@ export async function migrar(pool) {
     where semaforo is null and test = 'velocidad_20m' and valor > 4.00 and valor <= 4.40`)
   await pool.query(`update tests_fisicos set semaforo = 'rojo', semaforo_auto = true
     where semaforo is null and test = 'velocidad_20m' and valor > 4.40`)
+  // Los cortes del semáforo pasan a ser configurables desde la pantalla de
+  // tests (ver db/schema.sql). Que exista la tabla es el testigo más nuevo.
+  await pool.query(`create table if not exists cortes_tests (
+    test text primary key check (test in
+      ('resistencia','salto_largo','velocidad_20m','peso','talla')),
+    verde numeric(7,2) not null check (verde > 0),
+    amarillo numeric(7,2) not null check (amarillo > 0),
+    actualizado_en timestamptz not null default now(),
+    actualizado_por text
+  )`)
+  // Se siembran los que ya venían andando, para que nada cambie de color solo
+  // por esta migración. De acá en más los edita el cuerpo técnico.
+  for (const [test, c] of Object.entries(CORTES_POR_DEFECTO)) {
+    await pool.query(
+      `insert into cortes_tests (test, verde, amarillo) values ($1, $2, $3)
+       on conflict (test) do nothing`, [test, c.verde, c.amarillo])
+  }
 }
 
 

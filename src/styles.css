@@ -1484,3 +1484,13 @@ details.tarjeta summary {
 
 /* Cortes del semáforo, a la vista mientras se cargan las mediciones */
 .cortes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+
+/* Editor de los criterios del semáforo */
+.form-cortes {
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+}
+.form-cortes .campo { margin-bottom: 6px; }
