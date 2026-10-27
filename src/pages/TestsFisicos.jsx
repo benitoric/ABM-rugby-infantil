@@ -4,8 +4,8 @@ import { actualizarCortes, useCortes } from '../cortes.js'
 import { fechaCompacta, fechaCorta, nombreCompleto } from '../helpers.js'
 import {
   admiteCortes, conUnidad, cortesValidos, diferencia, etiquetasDeCortes, formatearValor,
-  imc, parsearValor, progreso, rangosSemaforo, semaforo, semaforoSugerido, tieneCortes,
-  SEMAFOROS, TESTS, TESTS_POR_VALUE,
+  imc, parsearValor, progreso, rangosSemaforo, semaforo, semaforoSugerido, textoMedicion,
+  tieneCortes, velocidadMS, SEMAFOROS, TESTS, TESTS_POR_VALUE,
 } from '../tests.js'
 
 // Clave de una medición dentro del estado local de la pantalla de carga
@@ -80,10 +80,11 @@ function FilaTest({ jugador, test, cortes, medicion, previa, onGuardar }) {
     <div className={`fila-test${medicion ? ' cargada' : ''}`}>
       <div className="fila-test-nombre">
         <div style={{ fontWeight: 600 }}>{nombreCompleto(jugador)}</div>
-        {previa && (
+        {(previa || (test === 'velocidad_20m' && medicion)) && (
           <div className="mini">
-            ant. {conUnidad(test, previa.valor)} · {fechaCompacta(previa.fecha)}
-            {cambio?.texto && (
+            {test === 'velocidad_20m' && medicion && <>{velocidadMS(medicion.valor)?.toFixed(2)} m/s{previa ? ' · ' : ''}</>}
+            {previa && <>ant. {textoMedicion(test, previa.valor)} · {fechaCompacta(previa.fecha)}</>}
+            {previa && cambio?.texto && (
               <span className={`eval-delta ${cambio.como || ''}`}>
                 {' '}{cambio.texto}{cambio.como === 'sube' ? ' ▲' : cambio.como === 'baja' ? ' ▼' : ''}
               </span>
@@ -499,7 +500,7 @@ function TarjetaTest({ test, historial, onBorrar }) {
         <span className="mini">{fechaCorta(ultima.fecha)}</span>
       </div>
       <div className="fila" style={{ gap: 8, marginTop: 4, alignItems: 'baseline' }}>
-        <span className="test-valor">{conUnidad(test, ultima.valor)}</span>
+        <span className="test-valor">{textoMedicion(test, ultima.valor)}</span>
         {sem && <span className={`badge semaforo-${sem.value}`}>{sem.ico} {sem.label}</span>}
         {dif && (
           <span className={`eval-delta ${como || ''}`}>
@@ -526,7 +527,7 @@ function TarjetaTest({ test, historial, onBorrar }) {
               return (
                 <tr key={m.id}>
                   <td title={m.autor_email || ''}>{fechaCorta(m.fecha)}</td>
-                  <td>{conUnidad(test, m.valor)}</td>
+                  <td>{textoMedicion(test, m.valor)}</td>
                   <td>
                     {s ? `${s.ico} ${s.label}` : '—'}
                     {s && m.semaforo_auto && <span className="mini"> por tabla</span>}

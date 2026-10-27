@@ -8,6 +8,7 @@
 // el valor y la edad exacta del chico el día de la medición.
 
 import { diferencia, progreso, TESTS_POR_VALUE } from './tests.js'
+import { puestoPrincipal, tipoJugador, PUESTOS } from './helpers.js'
 import { compararConReferencia, imcDe, medianaReferencia } from './referencias.js'
 
 const DIAS_TALLA = 90
@@ -96,6 +97,9 @@ export function resumirTest(test, mediciones, { desde, hasta }) {
     filas.push({
       imc: test === 'peso' ? imcDe(ultima.valor, talla?.valor) : null,
       tallaUsada: talla,
+      // La línea (forward/back/mixto) y el puesto principal, como en la ficha
+      tipo: tipoJugador(ultima),
+      puesto: puestoPrincipal(ultima),
       jugador_id: ultima.jugador_id,
       nombre: ultima.nombre,
       apellido: ultima.apellido,
@@ -131,6 +135,27 @@ export function resumirTest(test, mediciones, { desde, hasta }) {
 
   const valores = filas.map((f) => f.valor)
   const grupo = estadisticas(valores)
+
+  // Estadísticas de un subconjunto, con el percentil mediano de referencia
+  // cuando hay con qué calcularlo
+  function resumenDe(suyas) {
+    const base = estadisticas(suyas.map((f) => f.valor))
+    const refs = suyas.filter((f) => f.referencia).map((f) => f.referencia.percentil)
+    return { ...base, percentilMediana: refs.length ? Math.round(estadisticas(refs).mediana) : null }
+  }
+
+  // Por línea: forwards, backs y los que juegan en las dos. Es la comparación
+  // que piden los entrenadores: un pilar y un wing no corren lo mismo.
+  const porLinea = [['Forward', 'Forwards'], ['Back', 'Backs'], ['Mixto', 'Mixtos']]
+    .map(([tipo, label]) => ({ tipo, label, ...resumenDe(filas.filter((f) => f.tipo === tipo)) }))
+    .filter((g) => g.n)
+  const sinLinea = filas.filter((f) => !f.tipo).length
+
+  // Por puesto principal, en el orden del catálogo (1 al 15)
+  const porPuesto = PUESTOS
+    .map((p) => ({ puesto: p.value, label: p.label, plural: p.plural, abrev: p.abrev, ...resumenDe(filas.filter((f) => f.puesto === p.value)) }))
+    .filter((g) => g.n)
+  const sinPuesto = filas.filter((f) => !f.puesto).length
 
   // Por edad cumplida: con pocos chicos por edad el promedio es orientativo,
   // pero es la única comparación justa entre un chico de 11 y uno de 12
@@ -186,6 +211,10 @@ export function resumirTest(test, mediciones, { desde, hasta }) {
     grupo,
     porEdad,
     sinEdad,
+    porLinea,
+    sinLinea,
+    porPuesto,
+    sinPuesto,
     semaforos,
     evolucion,
     comparacion,

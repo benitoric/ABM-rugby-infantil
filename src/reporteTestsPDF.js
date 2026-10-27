@@ -4,7 +4,8 @@
 import { fechaCorta, nombreCompleto } from './helpers.js'
 import { nuevoPDF, partirTexto } from './pdf.js'
 import { textoEdad } from './estadisticaTests.js'
-import { conUnidad, semaforo } from './tests.js'
+import { conUnidad, semaforo, textoMedicion } from './tests.js'
+import { PUESTOS } from './helpers.js'
 
 const AZUL = [26, 74, 158]
 const DORADO = [255, 210, 0]
@@ -76,8 +77,8 @@ export function generarReporteTestsPDF({ resumen, generadoPor }) {
   const g = resumen.grupo
   tarjetas([
     { valor: String(g.n), etiqueta: 'CHICOS MEDIDOS' },
-    { valor: conUnidad(t.value, g.promedio), etiqueta: 'PROMEDIO' },
-    { valor: conUnidad(t.value, g.mediana), etiqueta: 'MEDIANA' },
+    { valor: textoMedicion(t.value, g.promedio), etiqueta: 'PROMEDIO' },
+    { valor: textoMedicion(t.value, g.mediana), etiqueta: 'MEDIANA' },
     { valor: `${conUnidad(t.value, g.min)} – ${conUnidad(t.value, g.max)}`, etiqueta: 'RANGO' },
   ])
   const sem = resumen.semaforos
@@ -88,23 +89,38 @@ export function generarReporteTestsPDF({ resumen, generadoPor }) {
     parrafo(`Respecto de su medición anterior: ${e.mejoraron} mejoraron, ${e.empeoraron} empeoraron, ${e.iguales} iguales (${e.conAnterior} con medición previa).`)
   }
 
+  // Tabla de estadísticas por grupo: edad, línea o puesto
+  const conRef = !!resumen.comparacion
+  function tablaGrupos(columna, grupos) {
+    const cols = [M, M + 110, M + 160, M + 260, M + 360, M + 470]
+    espacio(16)
+    const heads = [columna, 'Chicos', 'Promedio', 'Mediana', 'Mín – máx', conRef ? 'Ref.' : '']
+    heads.forEach((h, i) => { if (h) doc.texto(h, cols[i], y, { tam: 8, negrita: true, color: SUAVE }) })
+    y += 13
+    for (const g of grupos) {
+      espacio(14)
+      const vals = [g.etiqueta, String(g.n), textoMedicion(t.value, g.promedio), textoMedicion(t.value, g.mediana),
+        `${conUnidad(t.value, g.min)} – ${conUnidad(t.value, g.max)}`,
+        conRef ? (g.percentilMediana != null ? `P${g.percentilMediana}` : '—') : '']
+      vals.forEach((v, i) => { if (v) doc.texto(v, cols[i], y, { tam: 9, color: TEXTO }) })
+      y += 13
+    }
+  }
+
   // --- por edad ---
   if (resumen.porEdad.length) {
     titulo('Por edad')
-    const cols = [M, M + 90, M + 160, M + 260, M + 360]
-    espacio(16)
-    for (const [i, h] of ['Edad', 'Chicos', 'Promedio', 'Mediana', 'Mín – máx'].entries()) {
-      doc.texto(h, cols[i], y, { tam: 8, negrita: true, color: SUAVE })
-    }
-    y += 13
-    for (const e of resumen.porEdad) {
-      espacio(14)
-      const vals = [`${e.edad} años`, String(e.n), conUnidad(t.value, e.promedio), conUnidad(t.value, e.mediana),
-        `${conUnidad(t.value, e.min)} – ${conUnidad(t.value, e.max)}`]
-      vals.forEach((v, i) => doc.texto(v, cols[i], y, { tam: 9, color: TEXTO }))
-      y += 13
-    }
+    tablaGrupos('Edad', resumen.porEdad.map((e) => ({ etiqueta: `${e.edad} años`, ...e })))
     if (resumen.sinEdad) parrafo(`${resumen.sinEdad} sin fecha de nacimiento cargada: fuera de las comparaciones por edad.`, { color: SUAVE, tam: 8 })
+    y += 6
+  }
+
+  // --- por línea y por puesto ---
+  if (resumen.porLinea.length || resumen.porPuesto.length) {
+    titulo('Por línea y por puesto')
+    if (resumen.porLinea.length) tablaGrupos('Línea', resumen.porLinea.map((g) => ({ etiqueta: g.label, ...g })))
+    if (resumen.porPuesto.length) { y += 6; tablaGrupos('Puesto', resumen.porPuesto.map((g) => ({ etiqueta: g.plural, ...g }))) }
+    if (resumen.sinLinea) parrafo(`${resumen.sinLinea} sin puestos cargados en la ficha.`, { color: SUAVE, tam: 8 })
     y += 6
   }
 
@@ -141,10 +157,12 @@ export function generarReporteTestsPDF({ resumen, generadoPor }) {
     espacio(15)
     const s = semaforo(f.semaforo)
     if (conPos) doc.texto(String(f.posicion), cols[0], y, { tam: 9, negrita: true, color: TEXTO })
-    doc.texto(nombreCompleto(f), cols[1], y, { tam: 9, color: TEXTO })
+    // Sin puesto principal va la línea entera: "Bac" no se entiende
+    const puesto = f.puesto ? PUESTOS.find((p) => p.value === f.puesto)?.abrev : f.tipo === 'Forward' ? 'Fwd' : f.tipo || ''
+    doc.texto(`${nombreCompleto(f)}${puesto ? ` · ${puesto}` : ''}`, cols[1], y, { tam: 9, color: TEXTO })
     // La columna es angosta: sin fecha de nacimiento va una raya, no la frase
     doc.texto(f.edadMeses == null ? '—' : textoEdad(f.edadMeses), cols[2], y, { tam: 8.5, color: SUAVE })
-    doc.texto(conUnidad(t.value, f.valor), cols[3], y, { tam: 9, negrita: true, color: s ? COLOR_SEM[s.value] : TEXTO })
+    doc.texto(textoMedicion(t.value, f.valor), cols[3], y, { tam: t.value === 'velocidad_20m' ? 8 : 9, negrita: true, color: s ? COLOR_SEM[s.value] : TEXTO })
     if (conImc) doc.texto(f.imc != null ? String(f.imc) : '—', cols[4], y, { tam: 8.5, color: TEXTO })
     doc.texto(f.diferencia ? `${f.diferencia}${f.progreso === 'sube' ? ' ▲' : f.progreso === 'baja' ? ' ▼' : ''}` : (f.anterior ? '=' : '—'),
       cols[5], y, { tam: 8.5, color: f.progreso === 'sube' ? COLOR_SEM.verde : f.progreso === 'baja' ? COLOR_SEM.rojo : SUAVE })

@@ -1532,7 +1532,8 @@ async function enrutar(metodo, p, b, req, url) {
       const mediciones = await query(
         `select t.id, t.jugador_id, t.fecha::text as fecha, t.test,
                 t.valor::float8 as valor, t.semaforo, t.semaforo_auto, t.nota,
-                j.nombre, j.apellido, j.fecha_nacimiento::text as fecha_nacimiento
+                j.nombre, j.apellido, j.fecha_nacimiento::text as fecha_nacimiento,
+                j.puestos, j.puesto_principal, j.posicion
          from tests_fisicos t
          join jugadores j on j.id = t.jugador_id
          where j.estado <> 'inactivo'
