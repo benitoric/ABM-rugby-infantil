@@ -1280,6 +1280,30 @@ details.tarjeta summary {
   .hoja-boletin .stat-grid { grid-template-columns: repeat(4, 1fr); }
   .boletin-dos { grid-template-columns: 1fr 1fr; }
 }
+/* Tests físicos del mes: la marca, la anterior y cómo viene */
+.boletin-tests { display: flex; flex-direction: column; font-size: 0.75rem; }
+.boletin-test {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid #eef1f6;
+  align-items: baseline;
+}
+.boletin-test small { display: block; font-size: 0.62rem; color: var(--texto-suave); font-weight: 400; }
+.boletin-test .nombre { font-weight: 600; }
+.boletin-test .valor { font-weight: 700; color: var(--primario); text-align: right; font-variant-numeric: tabular-nums; }
+.boletin-test .antes { color: var(--texto-suave); }
+.boletin-test .cambio { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.boletin-test .cambio.bien { color: var(--ok); }
+.boletin-test .cambio.ojo { color: var(--warn); }
+.boletin-test .cambio.neutro { color: var(--texto-suave); }
+.boletin-test .record { color: #7a6a25; font-weight: 700; }
+@media (min-width: 520px) {
+  .boletin-test { grid-template-columns: 1.3fr 0.8fr 1.1fr 1.2fr; }
+  .boletin-test .valor { text-align: left; }
+}
+
 /* Objetivos del mes que viene: invitación, no señalamiento */
 .boletin-objetivos { list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .boletin-objetivos li {

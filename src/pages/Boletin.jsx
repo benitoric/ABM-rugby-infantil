@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { compartirArchivo } from '../pdf.js'
 import {
-  contraElPromedio, diaCorto, generarBoletinPDF, mensajeDelMes, mesCorto,
-  mesSiguiente, nombreArchivoBoletin, nombreCortoDelMes, nombreDelJugador,
-  puestosDelJugador, textoLesion, tituloDelMes, ultimosMeses,
+  anteriorDelTest, contraElPromedio, diaCorto, evolucionDelTest, generarBoletinPDF,
+  mensajeDelMes, mesCorto, mesSiguiente, nombreArchivoBoletin, nombreCortoDelMes,
+  nombreDelJugador, nombreDelTest, puestosDelJugador, textoLesion, tituloDelMes,
+  ultimosMeses, valorDelTest,
 } from '../boletin.js'
 
-// Boletín mensual de desempeño, escrito para el propio jugador. Solo
-// asistencia y rugby jugado: nunca muestra nada de las evaluaciones.
+// Boletín mensual de desempeño, escrito para el propio jugador. Asistencia,
+// rugby jugado y tests físicos del mes: nunca muestra nada de las evaluaciones.
 // La posición (mes y chico elegido) la maneja Jugadores desde el hash: acá
 // llega por props y se pide cambiarla con onMes / onVer.
 export default function Boletin({ jugadorId = null, mes, verDe = null, yo, onMes, onVer, onVolver }) {
@@ -264,6 +265,32 @@ function Hoja({ b, mes, division }) {
           ]} />
         </div>
       </div>
+
+      {b.tests?.length > 0 && (
+        <>
+          <h4 className="boletin-titulo">Tus tests físicos</h4>
+          <div className="boletin-tests">
+            {b.tests.map((t) => {
+              const { texto, tono } = evolucionDelTest(t)
+              return (
+                <div key={t.test} className="boletin-test">
+                  <span className="nombre">{nombreDelTest(t)}<small>{diaCorto(t.fecha)}</small></span>
+                  <span className="valor">{valorDelTest(t)}</span>
+                  <span className="antes">
+                    {t.anterior
+                      ? <>antes {anteriorDelTest(t)}<small>{diaCorto(t.anterior.fecha)}</small></>
+                      : <small>sin medición anterior</small>}
+                  </span>
+                  <span className={`cambio ${tono}`}>
+                    {texto}
+                    {t.record && <small className="record">★ Tu mejor marca hasta ahora</small>}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
 
       <h4 className="boletin-titulo">Día por día</h4>
       <div className="boletin-agenda">

@@ -1,8 +1,8 @@
 // Datos del boletín mensual de desempeño de cada jugador.
 //
-// Todo lo que sale acá es asistencia y rugby jugado: el boletín no muestra
-// NADA de las evaluaciones periódicas ni de los tests físicos. Es material que
-// lee el propio chico.
+// Todo lo que sale acá es asistencia, rugby jugado y los tests físicos del
+// mes (la medición, no la valoración del PF): el boletín no muestra NADA de
+// las evaluaciones periódicas. Es material que lee el propio chico.
 //
 // Reglas del cálculo, iguales para todos:
 // - Cuentan los eventos del mes ya ocurridos, no suspendidos y con la
@@ -22,6 +22,7 @@
 import { query } from './db.js'
 import { sqlLesionadoEnFecha, sqlEnPlantel } from './asistencia-sql.js'
 import { AREAS_EVAL, bandaEtaria, valoresConsolidados } from '../src/evaluacion.js'
+import { CLAVES_TEST, TESTS_POR_VALUE } from '../src/tests.js'
 import { textoDesafio, textoObjetivo } from '../src/objetivos.js'
 
 // Cuántas cosas para practicar salen en la hoja
@@ -146,6 +147,9 @@ function ranking(resumen) {
 
 // Zona del club: el "hoy" de la validez del guardado y de las fechas
 const ZONA = 'America/Argentina/Tucuman'
+// Forma del JSON guardado. Se sube cuando cambia lo que lleva un boletín, así
+// los meses armados con la forma vieja se rearman en vez de servirse a medias.
+const VERSION_GUARDADO = 2
 
 // Los boletines de un mes se arman una vez y quedan guardados en
 // `boletines_guardados` (una fila por mes con el JSON completo): abrir el mes
@@ -169,7 +173,8 @@ async function leerGuardado(mes) {
        and (generado_en at time zone $2)::date = (now() at time zone $2)::date`,
     [mes, ZONA])
   if (!fila) return null
-  return typeof fila.datos === 'string' ? JSON.parse(fila.datos) : fila.datos
+  const datos = typeof fila.datos === 'string' ? JSON.parse(fila.datos) : fila.datos
+  return datos.version === VERSION_GUARDADO ? datos : null
 }
 
 async function armarYGuardar(mes) {
@@ -184,11 +189,12 @@ async function armarYGuardar(mes) {
 
 // Rutas cuyas escrituras no tocan ninguna de las tablas que lee el boletín
 // (eventos, asistencias, plantel, bloques, tiempos, capitanías, lesiones,
-// evaluaciones y los datos del jugador). Una ruta nueva nace invalidando:
-// solo se suma acá si está claro que no cambia nada de lo que sale en la hoja.
+// tests físicos, evaluaciones y los datos del jugador). Una ruta nueva nace
+// invalidando: solo se suma acá si está claro que no cambia nada de lo que
+// sale en la hoja.
 const RUTAS_AJENAS = new Set([
   'auth', 'health', 'cron', 'me', 'push', 'documentos', 'staff', 'viajes',
-  'boletin', 'tests', 'seguimientos', 'aspectos-tecnicos', 'asignaciones',
+  'boletin', 'seguimientos', 'aspectos-tecnicos', 'asignaciones',
   'sugerencias', 'stats',
 ])
 // Rutas que escriben sobre un evento puntual (p[1] es su id): alcanza con
@@ -202,6 +208,12 @@ const RUTAS_DE_EVENTO = new Set(['eventos', 'partido'])
 // alcanza a todos los meses desde el suyo en adelante (nunca a los previos).
 export async function invalidarGuardados(metodo, p, b) {
   if (metodo === 'GET' || !p[0] || RUTAS_AJENAS.has(p[0])) return
+  // Un test nuevo solo alcanza a los meses desde su fecha (la evolución de un
+  // mes mira las mediciones anteriores, nunca las posteriores)
+  if (p[0] === 'tests' && metodo === 'POST' && !p[1] && /^\d{4}-\d{2}-\d{2}$/.test(b?.fecha || '')) {
+    await query('delete from boletines_guardados where mes >= $1', [b.fecha.slice(0, 7)])
+    return
+  }
   // Un evento borrado o con la fecha cambiada pudo estar en otro mes: cae todo
   if (RUTAS_DE_EVENTO.has(p[0]) && p[1] && metodo !== 'DELETE' && !b?.fecha) {
     const [ev] = await query(
@@ -282,10 +294,12 @@ async function armar(mes) {
     camisetas: detalle.camisetas[j.id] || [],
     capitanias: detalle.capitanias[j.id] || { mes: 0, anio: 0 },
     lesiones: detalle.lesiones[j.id] || [],
+    tests: detalle.tests[j.id] || [],
     objetivos: objetivosDe(j, hasta, detalle.evaluaciones[j.id]),
   }))
 
   return {
+    version: VERSION_GUARDADO,
     mes,
     division: {
       eventos: eventosDelMes.length,
@@ -421,6 +435,28 @@ async function detalleDelMes(inicioMes, hasta) {
      order by fecha`,
     rango)
 
+  // Tests físicos del mes: la última medición de cada test en el mes, con la
+  // anterior (de cuando sea) para ver la evolución y la mejor y peor de todas
+  // las previas para saber si fue su mejor marca. Solo el número: el semáforo
+  // es la valoración del PF y no sale en la hoja.
+  const tests = await query(
+    `select jugador_id, test, fecha, valor, valor_anterior, fecha_anterior, min_previo, max_previo
+     from (
+       select t.jugador_id, t.test, t.fecha::text as fecha, t.valor::float8 as valor,
+              lag(t.valor::float8) over w as valor_anterior,
+              lag(t.fecha::text) over w as fecha_anterior,
+              min(t.valor::float8) over (w rows between unbounded preceding and 1 preceding) as min_previo,
+              max(t.valor::float8) over (w rows between unbounded preceding and 1 preceding) as max_previo,
+              row_number() over (partition by t.jugador_id, t.test order by t.fecha desc) as orden
+       from tests_fisicos t
+       join jugadores j on j.id = t.jugador_id and j.estado <> 'inactivo'
+       where t.fecha < $2::date
+       window w as (partition by t.jugador_id, t.test order by t.fecha)
+     ) m
+     where orden = 1 and fecha >= $1
+     order by jugador_id, test`,
+    rango)
+
   // La última evaluación vigente de cada uno, solo para elegir los objetivos
   const evaluaciones = await query(
     `select distinct on (jugador_id) jugador_id, valores, valores_revisor
@@ -434,7 +470,12 @@ async function detalleDelMes(inicioMes, hasta) {
   for (const { jugador_id, evento_id, ...m } of marcas) {
     (marcasPorJugador[jugador_id] ||= {})[evento_id] = m
   }
+  const testsPorJugador = porJugador(tests, testDelMes)
+  for (const lista of Object.values(testsPorJugador)) {
+    lista.sort((a, b) => CLAVES_TEST.indexOf(a.test) - CLAVES_TEST.indexOf(b.test))
+  }
   return {
+    tests: testsPorJugador,
     marcas: marcasPorJugador,
     juego: Object.fromEntries(juego.map(({ jugador_id, ...j }) => [jugador_id, j])),
     tiemposPosibles: Object.fromEntries(posibles.map((p) => [p.jugador_id, p.tiempos_posibles])),
@@ -445,10 +486,27 @@ async function detalleDelMes(inicioMes, hasta) {
   }
 }
 
+// Una medición del mes tal como va a la hoja: el valor, la anterior para
+// compararse, y si superó todas las previas (solo en los tests con un lado
+// bueno: en peso y talla no hay récord)
+function testDelMes(f) {
+  const def = TESTS_POR_VALUE[f.test]
+  const hayPrevias = f.min_previo != null
+  const record = !!def?.mejor && hayPrevias &&
+    (def.mejor === 'menor' ? f.valor < f.min_previo : f.valor > f.max_previo)
+  return {
+    test: f.test,
+    fecha: f.fecha,
+    valor: f.valor,
+    anterior: f.valor_anterior == null ? null : { fecha: f.fecha_anterior, valor: f.valor_anterior },
+    record,
+  }
+}
+
 function boletinDe({
   jugador, mes, eventosDelMes, hayRanking, resumen, puesto, rankeados,
   anio, promedioAnio, puestoAnio, rankeadosAnio, evolucion, progreso, mejorProgreso,
-  marcas, juego, tiemposPosibles, camisetas, capitanias, lesiones, objetivos,
+  marcas, juego, tiemposPosibles, camisetas, capitanias, lesiones, tests, objetivos,
 }) {
   const id = jugador.id
 
@@ -519,6 +577,7 @@ function boletinDe({
       golpes: golpes.map((d) => ({ fecha: d.fecha, condicion: d.condicion })),
     },
     lesiones,
+    tests,
     dias,
     objetivos,
     distinciones: distincionesDe({
