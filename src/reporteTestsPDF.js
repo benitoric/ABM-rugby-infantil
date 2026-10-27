@@ -219,7 +219,7 @@ export function generarReporteTestsPDF({ resumen, generadoPor }) {
   const conImc = test === 'peso'
 
   // Una tabla de ranking: [#] Jugador · Puesto · Valor · [IMC] · Evolución · Ref.
-  function tablaRanking(filas, { secundarios = false } = {}) {
+  function tablaRanking(filas) {
     const cols = [M, M + 22, M + 200, M + 262, M + 345, M + 390, M + 470]
     espacio(16)
     const heads = [conPos ? '#' : '', 'Jugador', 'Puesto', t.abrev, conImc ? 'IMC' : '', 'Evolución', 'Ref.']
@@ -229,7 +229,7 @@ export function generarReporteTestsPDF({ resumen, generadoPor }) {
       espacio(15)
       const s = semaforo(f.semaforo)
       if (conPos) doc.texto(String(f.posicion), cols[0], y, { tam: 9, negrita: true, color: TEXTO })
-      doc.texto(`${nombreCompleto(f)}${secundarios && f.secundario ? ' (sec.)' : ''}`, cols[1], y, { tam: 9, color: TEXTO })
+      doc.texto(nombreCompleto(f), cols[1], y, { tam: 9, color: TEXTO })
       doc.texto(etiquetaPuesto(f), cols[2], y, { tam: 8.5, color: SUAVE })
       doc.texto(textoMedicion(test, f.valor), cols[3], y, { tam: test === 'velocidad_20m' ? 8 : 9, negrita: true, color: s ? COLOR_SEM[s.value] : TEXTO })
       if (conImc) doc.texto(f.imc != null ? String(f.imc) : '—', cols[4], y, { tam: 8.5, color: TEXTO })
@@ -250,11 +250,11 @@ export function generarReporteTestsPDF({ resumen, generadoPor }) {
   if (porPuesto.length) {
     y += 10
     titulo(conPos ? 'Ranking por puesto' : 'Listado por puesto')
-    parrafo('En cada puesto entran todos los que pueden jugar ahí, sea su puesto principal o uno secundario; "(sec.)" marca a los que tienen otro puesto como principal.', { color: SUAVE, tam: 8 })
+    parrafo(`En cada puesto entran los que lo tienen como puesto principal en su ficha.${resumen.sinPuesto ? ` ${resumen.sinPuesto} ${resumen.sinPuesto === 1 ? 'chico queda' : 'chicos quedan'} fuera por no tener puesto principal.` : ''}`, { color: SUAVE, tam: 8 })
     for (const grupo of porPuesto) {
       y += 4
       subtitulo(`${grupo.plural} (${grupo.filas.length})`)
-      tablaRanking(grupo.filas, { secundarios: true })
+      tablaRanking(grupo.filas)
     }
   }
 
