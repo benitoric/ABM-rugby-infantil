@@ -1,11 +1,13 @@
 // Boletín mensual de desempeño: textos y armado del PDF.
 //
-// La hoja está escrita para el propio jugador, de vos. No lleva nada de las
-// evaluaciones periódicas ni de los tests físicos: solo asistencia y rugby
-// jugado. Entra entera en una carilla A4.
+// La hoja está escrita para el propio jugador, de vos. Lleva asistencia,
+// rugby jugado y los tests físicos del mes con su evolución (la medición,
+// nunca el semáforo del PF); no lleva nada de las evaluaciones periódicas.
+// Entra entera en una carilla A4.
 
 import { anchoTexto, nuevoPDF, partirTexto } from './pdf.js'
 import { PUESTOS } from './helpers.js'
+import { TESTS_POR_VALUE, conUnidad, diferencia, progreso } from './tests.js'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
   'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
@@ -85,6 +87,25 @@ export function contraElPromedio(b, promedio) {
     : `${d} ${d === -1 ? 'punto' : 'puntos'} por debajo del promedio`
 }
 
+export const nombreDelTest = (t) => TESTS_POR_VALUE[t.test]?.label || t.test
+
+// Cómo le fue en un test contra su medición anterior, en una frase corta y
+// con el tono para pintarla: 'bien' (mejoró), 'ojo' (bajó) o 'neutro' (sin
+// con qué comparar, igual que antes, o peso y talla, que no tienen lado bueno)
+export function evolucionDelTest(t) {
+  if (!t.anterior) return { texto: 'primera medición', tono: 'neutro' }
+  const dif = diferencia(t.test, t.valor, t.anterior.valor)
+  if (!dif) return { texto: 'igual que antes', tono: 'neutro' }
+  const como = progreso(t.test, t.valor, t.anterior.valor)
+  if (!como) return { texto: dif, tono: 'neutro' }
+  return como === 'sube'
+    ? { texto: `${dif} · mejoraste`, tono: 'bien' }
+    : { texto: `${dif} · bajaste`, tono: 'ojo' }
+}
+
+export const valorDelTest = (t) => conUnidad(t.test, t.valor)
+export const anteriorDelTest = (t) => (t.anterior ? conUnidad(t.test, t.anterior.valor) : null)
+
 // Cierre de la hoja: sale de los números del mes, sin inventar nada
 export function mensajeDelMes(b, division) {
   const a = b.asistencia
@@ -92,6 +113,8 @@ export function mensajeDelMes(b, division) {
   if (b.lesiones.length && b.juego.partidos_jugados > 0) {
     partes.push('Volviste de la lesión y jugaste igual.')
   }
+  const records = (b.tests || []).filter((t) => t.record).map((t) => nombreDelTest(t).toLowerCase())
+  if (records.length) partes.push(`Superaste tu propia marca en ${records.join(' y ')}.`)
   if (a.total === 100) partes.push('Mes perfecto: no faltaste a nada.')
   else if (b.progreso != null && b.progreso > 0) {
     partes.push(`Mejoraste ${b.progreso} ${b.progreso === 1 ? 'punto' : 'puntos'} contra el mes pasado.`)
@@ -248,6 +271,13 @@ function hoja(doc, b, { mes, division, generadoPor }) {
   yB = lista(doc, xDer, yB, media, filasDePuntualidad(b))
   y = Math.max(yA, yB) + 14
 
+  // --- tests físicos del mes ---
+  if (b.tests?.length) {
+    y = titulo(doc, 'Tus tests físicos', M, y, ancho)
+    y = testsFisicos(doc, M, y, ancho, b.tests)
+    y += 14
+  }
+
   // --- día por día, en dos columnas ---
   y = titulo(doc, 'Día por día', M, y, ancho)
   const mitad = Math.ceil(b.dias.length / 2)
@@ -397,6 +427,40 @@ function filasDePuntualidad(b) {
       p.falto_avisando.length ? `${p.falto_avisando.length} · ${fechas(p.falto_avisando)}` : 'ninguna vez'],
     ['Golpes en el mes', p.golpes.length ? `${p.golpes.length} · ${fechas(p.golpes)}` : 'ninguno'],
   ]
+}
+
+// Una fila por test tomado en el mes: la marca, la anterior y cómo venís
+function testsFisicos(doc, x, y, ancho, tests) {
+  const xMes = x + ancho * 0.30
+  const xAntes = x + ancho * 0.50
+  doc.texto('TEST', x, y, { tam: 6.5, negrita: true, color: GRIS })
+  doc.texto('ESTE MES', xMes, y, { tam: 6.5, negrita: true, color: GRIS })
+  doc.texto('LA VEZ ANTERIOR', xAntes, y, { tam: 6.5, negrita: true, color: GRIS })
+  doc.texto('CÓMO VENÍS', x + ancho, y, { tam: 6.5, negrita: true, color: GRIS, alinear: 'der' })
+  doc.linea(x, y + 9, x + ancho, y + 9, BORDE, 0.6)
+  let yf = y + 18
+  for (const t of tests) {
+    const { texto, tono } = evolucionDelTest(t)
+    const color = tono === 'bien' ? VERDE : tono === 'ojo' ? AMBAR : GRIS
+    doc.texto(nombreDelTest(t), x, yf, { tam: 8, negrita: true, color: TINTA })
+    doc.texto(valorDelTest(t), xMes, yf, { tam: 8.5, negrita: true, color: AZUL })
+    doc.texto(`${diaCorto(t.fecha)}`, xMes, yf + 8, { tam: 6.5, color: GRIS })
+    if (t.anterior) {
+      doc.texto(anteriorDelTest(t), xAntes, yf, { tam: 8, color: TINTA })
+      doc.texto(diaCorto(t.anterior.fecha), xAntes, yf + 8, { tam: 6.5, color: GRIS })
+    } else {
+      doc.texto('—', xAntes, yf, { tam: 8, color: GRIS })
+    }
+    doc.texto(texto, x + ancho, yf, { tam: 8, negrita: true, color, alinear: 'der' })
+    if (t.record) {
+      doc.texto('¡Tu mejor marca hasta ahora!', x + ancho, yf + 8, {
+        tam: 6.5, negrita: true, color: DORADO_TEXTO, alinear: 'der',
+      })
+    }
+    yf += 17
+    doc.linea(x, yf - 4, x + ancho, yf - 4, LINEA_SUAVE, 0.5)
+  }
+  return yf - 4
 }
 
 function agenda(doc, x, y, ancho, dias) {
