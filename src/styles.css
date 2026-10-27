@@ -1518,3 +1518,7 @@ details.tarjeta summary {
   border-radius: 10px;
 }
 .form-cortes .campo { margin-bottom: 6px; }
+
+/* Ranking del reporte de tests: números alineados, nombre a la izquierda */
+.grafico-tabla.ranking td, .grafico-tabla.ranking th { white-space: nowrap; text-align: center; }
+.grafico-tabla.ranking td:nth-child(2), .grafico-tabla.ranking th:nth-child(2) { text-align: left; white-space: normal; }
