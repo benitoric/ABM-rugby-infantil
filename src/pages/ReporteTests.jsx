@@ -10,9 +10,9 @@ import { conUnidad, semaforo, TESTS, TESTS_POR_VALUE } from '../tests.js'
 
 // Por qué un test no tiene referencia externa, cuando no la tiene
 const SIN_REFERENCIA = {
-  resistencia: 'Las normas internacionales de resistencia son del test de 20 m ida y vuelta (course navette). Si el 10×20 m del club sigue ese protocolo, se le puede cargar esa tabla.',
-  salto_largo: 'Falta cargar la tabla de centiles por edad del salto en largo sin carrera.',
-  velocidad_20m: 'Falta cargar la tabla de centiles por edad del sprint de 20 m.',
+  resistencia: 'Pendiente de cargar la tabla internacional del test de 20 m ida y vuelta por edad (Tomkinson y otros, 2017). Mientras tanto, los números se leen dentro del grupo.',
+  salto_largo: 'Pendiente de cargar la tabla europea de centiles por edad del salto en largo sin carrera (Tomkinson y otros, 2018). Mientras tanto, los números se leen dentro del grupo.',
+  velocidad_20m: 'La velocidad en 20 m no tiene una referencia internacional por edad que valga la pena citar, así que se compara solo dentro del grupo: ranking, promedio por edad y evolución de cada chico.',
   peso: 'Falta cargar la referencia de crecimiento (IMC para la edad).',
   talla: 'Falta cargar la referencia de crecimiento (talla para la edad).',
 }
@@ -201,8 +201,8 @@ export default function ReporteTests({ yo, onVolver }) {
                 </p>
               </>
             ) : (
-              <div className="aviso">
-                <b>Sin referencia externa cargada para este test.</b> {SIN_REFERENCIA[test]}
+              <div className={test === 'velocidad_20m' ? 'mini' : 'aviso'}>
+                {test !== 'velocidad_20m' && <b>Sin referencia externa cargada para este test. </b>}{SIN_REFERENCIA[test]}
                 {fuente ? ' (Hay fuente cargada pero ningún chico tiene fecha de nacimiento o talla cercana.)' : ''}
               </div>
             )}
