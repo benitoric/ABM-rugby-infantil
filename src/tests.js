@@ -14,18 +14,16 @@ export const TESTS = [
     value: 'resistencia',
     label: 'Resistencia 10x20m',
     abrev: 'Resistencia',
-    // Se anota en minutos y segundos; se guarda siempre en segundos
-    formato: 'tiempo',
-    unidad: '',
-    decimales: 2,
-    mejor: 'menor',
-    ayuda: 'Tiempo total del circuito, en minutos y segundos (ej.: 3:05 o 3:05.40).',
+    // Se cuentan las vueltas completadas: más vueltas, mejor
+    unidad: 'vueltas',
+    decimales: 0,
+    mejor: 'mayor',
+    ayuda: 'Cantidad de vueltas completadas, en número entero (ej.: 42).',
   },
   {
     value: 'salto_largo',
     label: 'Salto en largo',
     abrev: 'Salto',
-    formato: 'numero',
     unidad: 'cm',
     decimales: 0,
     mejor: 'mayor',
@@ -35,7 +33,6 @@ export const TESTS = [
     value: 'velocidad_20m',
     label: 'Velocidad 20m',
     abrev: 'Velocidad',
-    formato: 'numero',
     unidad: 's',
     decimales: 2,
     mejor: 'menor',
@@ -47,7 +44,6 @@ export const TESTS = [
     value: 'peso',
     label: 'Peso',
     abrev: 'Peso',
-    formato: 'numero',
     unidad: 'kg',
     decimales: 1,
     mejor: null,
@@ -57,7 +53,6 @@ export const TESTS = [
     value: 'talla',
     label: 'Talla',
     abrev: 'Talla',
-    formato: 'numero',
     unidad: 'cm',
     decimales: 0,
     mejor: null,
@@ -110,20 +105,12 @@ export const CLAVES_SEMAFORO = SEMAFOROS.map((s) => s.value)
 export const semaforo = (v) => SEMAFOROS.find((s) => s.value === v) || null
 
 // Texto escrito por el PF → número guardado. Devuelve null si no se entiende.
-// En los tests de tiempo acepta mm:ss, mm:ss.cc y también los segundos
-// pelados (un circuito que se hizo en menos de un minuto).
+// Acepta coma o punto como decimal, y redondea a los decimales del test.
 export function parsearValor(test, texto) {
   const t = TESTS_POR_VALUE[test]
   if (!t) return null
   const crudo = String(texto ?? '').trim().replace(',', '.')
   if (!crudo) return null
-  if (t.formato === 'tiempo' && crudo.includes(':')) {
-    const [min, seg] = crudo.split(':')
-    const m = Number(min)
-    const s = Number(seg)
-    if (!Number.isFinite(m) || !Number.isFinite(s) || m < 0 || s < 0 || s >= 60) return null
-    return redondear(m * 60 + s, 2)
-  }
   const n = Number(crudo)
   if (!Number.isFinite(n) || n <= 0) return null
   return redondear(n, t.decimales)
@@ -133,15 +120,7 @@ export function parsearValor(test, texto) {
 export function formatearValor(test, valor) {
   const t = TESTS_POR_VALUE[test]
   if (valor == null || !t) return ''
-  const n = Number(valor)
-  if (t.formato === 'tiempo') {
-    const min = Math.floor(n / 60)
-    const seg = n - min * 60
-    const centesimas = Math.round((seg - Math.floor(seg)) * 100)
-    const base = `${min}:${String(Math.floor(seg)).padStart(2, '0')}`
-    return centesimas ? `${base}.${String(centesimas).padStart(2, '0')}` : base
-  }
-  return n.toFixed(t.decimales)
+  return Number(valor).toFixed(t.decimales)
 }
 
 // Valor con su unidad, para las tarjetas y el historial
@@ -168,12 +147,7 @@ export function diferencia(test, actual, anterior) {
   if (actual == null || anterior == null) return null
   const dif = redondear(Number(actual) - Number(anterior), 2)
   if (!dif) return null
-  const t = TESTS_POR_VALUE[test]
-  // En los tiempos la diferencia se lee mejor en segundos que en mm:ss
-  const abs = t?.formato === 'tiempo'
-    ? `${Math.abs(dif).toFixed(2)} s`
-    : conUnidad(test, Math.abs(dif))
-  return `${dif > 0 ? '+' : '−'}${abs}`
+  return `${dif > 0 ? '+' : '−'}${conUnidad(test, Math.abs(dif))}`
 }
 
 // IMC a partir del peso (kg) y la talla (cm) más recientes. Es un dato de

@@ -96,7 +96,7 @@ function FilaTest({ jugador, test, cortes, medicion, previa, onGuardar }) {
           className={error ? 'invalido' : ''}
           type="text"
           inputMode="decimal"
-          placeholder={t.formato === 'tiempo' ? 'm:ss' : '—'}
+          placeholder="—"
           aria-label={`${t.label} de ${nombreCompleto(jugador)}`}
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
@@ -608,7 +608,7 @@ function FormTest({ jugadorId, onCerrar, onGuardado }) {
           type="text"
           inputMode="decimal"
           required
-          placeholder={t.formato === 'tiempo' ? 'm:ss' : ''}
+          placeholder=""
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
         />

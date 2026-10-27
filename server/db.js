@@ -92,8 +92,14 @@ export async function migracionesAplicadas(pool) {
         and to_regclass('public.viaje_pagos') is not null
         and to_regclass('public.boletines_guardados') is not null
         and to_regclass('public.procesos_evaluacion') is not null
-        and to_regclass('public.cortes_tests') is not null as existe`)
+        and to_regclass('public.cortes_tests') is not null
+        and to_regclass('public.ajustes') is not null as existe`)
   if (!t.existe) return false
+  // Migraciones de datos, sin tabla ni columna que las delate: dejan su
+  // marca en `ajustes`
+  const { rows: [datos] } = await pool.query(
+    `select exists (select 1 from ajustes where clave = 'resistencia_en_vueltas') as hecha`)
+  if (!datos.hecha) return false
   const { rows: [t2] } = await pool.query(
     `select not exists (
        select 1 from eventos e
@@ -500,6 +506,24 @@ export async function migrar(pool) {
     await pool.query(
       `insert into cortes_tests (test, verde, amarillo) values ($1, $2, $3)
        on conflict (test) do nothing`, [test, c.verde, c.amarillo])
+  }
+  // La resistencia pasa a anotarse en vueltas; hasta acá se cargaba como
+  // tiempo en segundos. Lo cargado no se puede convertir (son cantidades
+  // distintas), así que se conserva pero con una nota que explica el número,
+  // sin el color automático (salía de un criterio en segundos) y sin ese
+  // criterio, que el PF vuelve a definir en vueltas. La marca en `ajustes` es
+  // el testigo de que esto ya corrió.
+  const { rows: [vueltas] } = await pool.query(
+    `select 1 from ajustes where clave = 'resistencia_en_vueltas'`)
+  if (!vueltas) {
+    await pool.query(`delete from cortes_tests where test = 'resistencia'`)
+    await pool.query(`update tests_fisicos set semaforo = null, semaforo_auto = false
+      where test = 'resistencia' and semaforo_auto`)
+    await pool.query(`update tests_fisicos
+      set nota = concat_ws(' · ', nota,
+        'Cargada como tiempo en segundos, antes de que la resistencia pasara a vueltas: revisar o borrar.')
+      where test = 'resistencia'`)
+    await pool.query(`insert into ajustes (clave, valor) values ('resistencia_en_vueltas', '1')`)
   }
 }
 
