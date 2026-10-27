@@ -130,6 +130,23 @@ export function conUnidad(test, valor) {
   return t.unidad ? `${formatearValor(test, valor)} ${t.unidad}` : formatearValor(test, valor)
 }
 
+// Velocidad media del sprint de 20 m, en m/s, a partir del tiempo en segundos
+export const DISTANCIA_SPRINT_M = 20
+export function velocidadMS(segundos) {
+  const s = Number(segundos)
+  if (!Number.isFinite(s) || s <= 0) return null
+  return Math.round((DISTANCIA_SPRINT_M / s) * 100) / 100
+}
+
+// Lo que se muestra al lado del registro: el valor con su unidad y, en la
+// velocidad, la velocidad media entre paréntesis
+export function textoMedicion(test, valor) {
+  const base = conUnidad(test, valor)
+  if (test !== 'velocidad_20m' || valor == null) return base
+  const ms = velocidadMS(valor)
+  return ms == null ? base : `${base} (${ms.toFixed(2)} m/s)`
+}
+
 // Cómo le fue respecto de la medición anterior: 'sube' (mejoró), 'baja'
 // (empeoró) o null cuando no hay con qué comparar o el test no tiene un lado
 // bueno (peso y talla).

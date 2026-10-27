@@ -6,7 +6,33 @@ import { fechaISO, rangoDePeriodo, PERIODOS } from '../estadisticaFisica.js'
 import { resumirTest, textoEdad } from '../estadisticaTests.js'
 import { fuenteDe } from '../referencias.js'
 import { generarReporteTestsPDF, nombreReporteTests } from '../reporteTestsPDF.js'
-import { conUnidad, semaforo, TESTS, TESTS_POR_VALUE } from '../tests.js'
+import { conUnidad, semaforo, textoMedicion, TESTS, TESTS_POR_VALUE } from '../tests.js'
+import { PUESTOS } from '../helpers.js'
+
+// Tabla de estadísticas por grupo (edad, línea o puesto), la misma forma en
+// los tres casos para que se lean igual
+function TablaGrupos({ test, filas, columna, conReferencia }) {
+  return (
+    <table className="grafico-tabla">
+      <thead>
+        <tr>
+          <th style={{ textAlign: 'left' }}>{columna}</th><th>Chicos</th><th>Promedio</th><th>Mediana</th><th>Mín – máx</th>
+          {conReferencia && <th>Ref.</th>}
+        </tr>
+      </thead>
+      <tbody>
+        {filas.map((g) => (
+          <tr key={g.clave}>
+            <td style={{ textAlign: 'left' }}>{g.etiqueta}</td><td>{g.n}</td>
+            <td>{textoMedicion(test, g.promedio)}</td><td>{textoMedicion(test, g.mediana)}</td>
+            <td>{conUnidad(test, g.min)} – {conUnidad(test, g.max)}</td>
+            {conReferencia && <td>{g.percentilMediana != null ? `P${g.percentilMediana}` : '—'}</td>}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
 
 // Por qué un test no tiene referencia externa, cuando no la tiene
 const SIN_REFERENCIA = {
@@ -70,10 +96,12 @@ export default function ReporteTests({ yo, onVolver }) {
 
   function bajarCSV() {
     descargarCSV(`tests-${test}-${rango.desde}-a-${rango.hasta}.csv`, [
-      ['Posición', 'Jugador', 'Edad al medir', 'Fecha', t.label, 'Semáforo', 'Anterior', 'Evolución', 'Percentil ref.', ...(test === 'peso' ? ['IMC'] : [])],
+      ['Posición', 'Jugador', 'Línea', 'Puesto', 'Edad al medir', 'Fecha', t.label, ...(test === 'velocidad_20m' ? ['m/s'] : []), 'Semáforo', 'Anterior', 'Evolución', 'Percentil ref.', ...(test === 'peso' ? ['IMC'] : [])],
       ...resumen.filas.map((f) => [
-        f.posicion ?? '', nombreCompleto(f), textoEdad(f.edadMeses), fechaCorta(f.fecha),
-        f.valor, semaforo(f.semaforo)?.label || '', f.anterior?.valor ?? '', f.diferencia || '',
+        f.posicion ?? '', nombreCompleto(f), f.tipo || '', PUESTOS.find((p) => p.value === f.puesto)?.label || '',
+        textoEdad(f.edadMeses), fechaCorta(f.fecha),
+        f.valor, ...(test === 'velocidad_20m' ? [Math.round((20 / f.valor) * 100) / 100] : []),
+        semaforo(f.semaforo)?.label || '', f.anterior?.valor ?? '', f.diferencia || '',
         f.referencia ? `P${f.referencia.percentil}` : '', ...(test === 'peso' ? [f.imc ?? ''] : []),
       ]),
     ])
@@ -139,8 +167,8 @@ export default function ReporteTests({ yo, onVolver }) {
         <>
           <div className="stat-grid">
             <div className="stat"><div className="valor">{resumen.grupo.n}</div><div className="etiqueta">Chicos medidos</div></div>
-            <div className="stat"><div className="valor">{conUnidad(test, resumen.grupo.promedio)}</div><div className="etiqueta">Promedio</div></div>
-            <div className="stat"><div className="valor">{conUnidad(test, resumen.grupo.mediana)}</div><div className="etiqueta">Mediana</div></div>
+            <div className="stat"><div className="valor" style={test === 'velocidad_20m' ? { fontSize: '1rem' } : undefined}>{textoMedicion(test, resumen.grupo.promedio)}</div><div className="etiqueta">Promedio</div></div>
+            <div className="stat"><div className="valor" style={test === 'velocidad_20m' ? { fontSize: '1rem' } : undefined}>{textoMedicion(test, resumen.grupo.mediana)}</div><div className="etiqueta">Mediana</div></div>
             <div className="stat">
               <div className="valor" style={{ fontSize: '1rem' }}>{conUnidad(test, resumen.grupo.min)} – {conUnidad(test, resumen.grupo.max)}</div>
               <div className="etiqueta">Rango</div>
@@ -153,22 +181,40 @@ export default function ReporteTests({ yo, onVolver }) {
               La comparación justa es entre chicos de la misma edad. Con pocos por
               edad, el promedio es orientativo.
             </p>
-            <table className="grafico-tabla">
-              <thead><tr><th>Edad</th><th>Chicos</th><th>Promedio</th><th>Mediana</th><th>Mín – máx</th></tr></thead>
-              <tbody>
-                {resumen.porEdad.map((e) => (
-                  <tr key={e.edad}>
-                    <td>{e.edad} años</td><td>{e.n}</td>
-                    <td>{conUnidad(test, e.promedio)}</td><td>{conUnidad(test, e.mediana)}</td>
-                    <td>{conUnidad(test, e.min)} – {conUnidad(test, e.max)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <TablaGrupos test={test} columna="Edad" conReferencia={!!resumen.comparacion}
+              filas={resumen.porEdad.map((e) => ({ clave: e.edad, etiqueta: `${e.edad} años`, ...e }))} />
             {resumen.sinEdad > 0 && (
               <p className="mini" style={{ marginTop: 6 }}>
                 {resumen.sinEdad} {resumen.sinEdad === 1 ? 'chico' : 'chicos'} sin fecha de nacimiento cargada: quedan fuera de las comparaciones por edad.
               </p>
+            )}
+          </div>
+
+          <div className="tarjeta">
+            <h3>Por línea y por puesto</h3>
+            <p className="mini" style={{ margin: '2px 0 8px' }}>
+              Forwards y backs, y después cada puesto principal. Con uno o dos
+              chicos por puesto el número es el de ellos, no una tendencia.
+            </p>
+            {resumen.porLinea.length > 0 && (
+              <TablaGrupos test={test} columna="Línea" conReferencia={!!resumen.comparacion}
+                filas={resumen.porLinea.map((g) => ({ clave: g.tipo, etiqueta: g.label, ...g }))} />
+            )}
+            {resumen.porPuesto.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <TablaGrupos test={test} columna="Puesto" conReferencia={!!resumen.comparacion}
+                  filas={resumen.porPuesto.map((g) => ({ clave: g.puesto, etiqueta: g.plural, ...g }))} />
+              </div>
+            )}
+            {(resumen.sinPuesto > 0 || resumen.sinLinea > 0) && (
+              <p className="mini" style={{ marginTop: 6 }}>
+                {resumen.sinLinea > 0 && `${resumen.sinLinea} sin puestos cargados en la ficha. `}
+                {resumen.sinPuesto > resumen.sinLinea && `${resumen.sinPuesto - resumen.sinLinea} con varios puestos y ninguno marcado como principal: entran en la línea pero no en el puesto. `}
+                Se cargan desde la ficha del jugador.
+              </p>
+            )}
+            {resumen.porLinea.length === 0 && resumen.porPuesto.length === 0 && (
+              <p className="mini">Ningún chico medido tiene puestos cargados en la ficha.</p>
             )}
           </div>
 
@@ -240,9 +286,15 @@ export default function ReporteTests({ yo, onVolver }) {
                   {resumen.filas.map((f) => (
                     <tr key={f.jugador_id}>
                       {t.mejor && <td><b>{f.posicion}</b></td>}
-                      <td style={{ textAlign: 'left' }}>{nombreCompleto(f)}<div className="mini">{fechaCorta(f.fecha)}</div></td>
+                      <td style={{ textAlign: 'left' }}>
+                        {nombreCompleto(f)}
+                        <div className="mini">
+                          {fechaCorta(f.fecha)}
+                          {f.puesto ? ` · ${PUESTOS.find((p) => p.value === f.puesto)?.abrev}` : f.tipo ? ` · ${f.tipo}` : ''}
+                        </div>
+                      </td>
                       <td>{textoEdad(f.edadMeses)}</td>
-                      <td><b>{conUnidad(test, f.valor)}</b></td>
+                      <td><b>{textoMedicion(test, f.valor)}</b></td>
                       {test === 'peso' && <td>{f.imc ?? '—'}</td>}
                       <td>{semaforo(f.semaforo)?.ico || ''}</td>
                       <td>
