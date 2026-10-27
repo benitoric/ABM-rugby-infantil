@@ -314,6 +314,10 @@ create table if not exists tests_fisicos (
   -- anota en minutos y segundos pero se guarda en segundos.
   valor numeric(7,2) not null check (valor > 0),
   semaforo text check (semaforo in ('verde','amarillo','rojo')),
+  -- El color lo propuso la tabla de cortes (ver src/tests.js) y no lo tocó
+  -- nadie. Sirve para dos cosas: mostrarle al PF de dónde salió, y recalcularlo
+  -- si corrige la medición sin pisarle un color que eligió él.
+  semaforo_auto boolean not null default false,
   nota text,
   autor_email text,
   created_at timestamptz not null default now(),

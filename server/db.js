@@ -76,9 +76,12 @@ export async function migracionesAplicadas(pool) {
          and column_name = 'familia_contacto') as existe_contacto,
        exists (select 1 from information_schema.columns
        where table_schema = 'public' and table_name = 'viajes'
-         and column_name = 'evento_id') as existe_encuentros`)
+         and column_name = 'evento_id') as existe_encuentros,
+       exists (select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'tests_fisicos'
+         and column_name = 'semaforo_auto') as existe_semaforo_auto`)
   if (!col.existe || !col.existe_alta || !col.existe_dni_devuelto || col.sobra_ficha_medica
-      || !col.existe_contacto || !col.existe_encuentros) return false
+      || !col.existe_contacto || !col.existe_encuentros || !col.existe_semaforo_auto) return false
   const { rows: [t] } = await pool.query(
     `select to_regclass('public.evento_plantel') is not null
         and to_regclass('public.plan_tecnico') is not null
@@ -456,6 +459,26 @@ export async function migrar(pool) {
     cerrado_en timestamptz,
     cancelado_en timestamptz
   )`)
+  // Semáforo automático de los tests físicos: queda registrado si el color lo
+  // puso la tabla de cortes o una persona (ver src/tests.js).
+  await pool.query(`alter table tests_fisicos
+    add column if not exists semaforo_auto boolean not null default false`)
+  // Las mediciones viejas de salto y velocidad que quedaron sin color reciben
+  // el que les toca por tabla: el criterio es retroactivo, así el historial no
+  // queda con huecos sin explicación. Las que ya tienen un color puesto a mano
+  // no se tocan, que para eso lo pusieron.
+  await pool.query(`update tests_fisicos set semaforo = 'verde', semaforo_auto = true
+    where semaforo is null and test = 'salto_largo' and valor >= 150`)
+  await pool.query(`update tests_fisicos set semaforo = 'amarillo', semaforo_auto = true
+    where semaforo is null and test = 'salto_largo' and valor >= 120 and valor < 150`)
+  await pool.query(`update tests_fisicos set semaforo = 'rojo', semaforo_auto = true
+    where semaforo is null and test = 'salto_largo' and valor < 120`)
+  await pool.query(`update tests_fisicos set semaforo = 'verde', semaforo_auto = true
+    where semaforo is null and test = 'velocidad_20m' and valor <= 4.00`)
+  await pool.query(`update tests_fisicos set semaforo = 'amarillo', semaforo_auto = true
+    where semaforo is null and test = 'velocidad_20m' and valor > 4.00 and valor <= 4.40`)
+  await pool.query(`update tests_fisicos set semaforo = 'rojo', semaforo_auto = true
+    where semaforo is null and test = 'velocidad_20m' and valor > 4.40`)
 }
 
 
