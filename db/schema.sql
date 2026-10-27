@@ -370,6 +370,28 @@ create table if not exists plan_tecnico (
 -- Ajustes internos de la app. Hoy guarda el par de claves VAPID del push, que
 -- se genera solo la primera vez que alguien activa los avisos: así no hay que
 -- cargar nada a mano en las variables de entorno.
+-- Criterios del semáforo de los tests físicos: con qué valores la app pinta
+-- sola cada medición. Son configurables desde la pantalla de tests porque el
+-- cuerpo técnico los ajusta por categoría y por temporada; `verde` y
+-- `amarillo` son los dos bordes, y hacia qué lado mejora cada test sale del
+-- catálogo (src/tests.js). Un test sin fila no se pinta solo.
+create table if not exists cortes_tests (
+  test text primary key check (test in
+    ('resistencia','salto_largo','velocidad_20m','peso','talla')),
+  verde numeric(7,2) not null check (verde > 0),
+  amarillo numeric(7,2) not null check (amarillo > 0),
+  actualizado_en timestamptz not null default now(),
+  actualizado_por text
+);
+
+-- Los criterios con los que arranca la división. Quedan acá y en la migración
+-- (server/db.js) para que una base nueva y la que ya está andando pinten igual;
+-- de acá en más los edita el cuerpo técnico desde la pantalla de tests.
+insert into cortes_tests (test, verde, amarillo) values
+  ('salto_largo', 150, 120),
+  ('velocidad_20m', 4.00, 4.40)
+on conflict (test) do nothing;
+
 create table if not exists ajustes (
   clave text primary key,
   valor text not null
