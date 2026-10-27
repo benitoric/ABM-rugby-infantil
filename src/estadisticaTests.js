@@ -223,18 +223,18 @@ export function resumirTest(test, mediciones, { desde, hasta }) {
   }
 }
 
-// Ranking por puesto para el PDF: en cada puesto entran todos los que pueden
-// jugar ahí, sea su puesto principal o uno secundario (el entrenador arma el
-// equipo con los dos), ordenados igual que el ranking general y con la
-// posición recalculada dentro del puesto. `secundario` marca a los que
-// tienen otro puesto como principal.
+// Ranking por puesto para el PDF: en cada puesto entran solo los que lo
+// tienen como puesto principal (el mismo criterio que la tabla por puesto),
+// ordenados igual que el ranking general y con la posición recalculada
+// dentro del puesto. El que tiene varios puestos y ninguno elegido como
+// principal no entra en ninguno.
 export function rankingPorPuesto(resumen) {
   const t = resumen.test
   return PUESTOS
     .map((p) => {
       const suyos = resumen.filas
-        .filter((f) => f.puestos.includes(p.value))
-        .map((f) => ({ ...f, secundario: !!f.puesto && f.puesto !== p.value }))
+        .filter((f) => f.puesto === p.value)
+        .map((f) => ({ ...f }))
       if (t.mejor) {
         let pos = 0
         suyos.forEach((f, i) => {
