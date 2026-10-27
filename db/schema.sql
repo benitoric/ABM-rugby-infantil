@@ -397,6 +397,10 @@ create table if not exists ajustes (
   valor text not null
 );
 
+-- Marca de las migraciones de datos que una base nueva ya trae hechas
+insert into ajustes (clave, valor) values ('resistencia_en_vueltas', '1')
+on conflict (clave) do nothing;
+
 -- Notificaciones push: una fila por celular (o navegador) que activó los
 -- avisos. El endpoint lo da el navegador y es único; las claves son las que
 -- permiten cifrar el mensaje para ese dispositivo.
