@@ -164,7 +164,7 @@ export function resumirTest(test, mediciones, { desde, hasta }) {
   const porEdad = []
   for (const edad of [...new Set(filas.map((f) => f.edadAnios).filter((e) => e != null))].sort()) {
     const suyas = filas.filter((f) => f.edadAnios === edad)
-    porEdad.push({ edad, ...estadisticas(suyas.map((f) => f.valor)) })
+    porEdad.push({ edad, ...resumenDe(suyas) })
   }
   const sinEdad = filas.filter((f) => f.edadAnios == null).length
 
