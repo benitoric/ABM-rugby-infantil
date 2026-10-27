@@ -10,6 +10,7 @@ import TestsFisicos from './TestsFisicos.jsx'
 import TrabajoFisico from './TrabajoFisico.jsx'
 import PlanTecnico from './PlanTecnico.jsx'
 import EstadisticaFisica from './EstadisticaFisica.jsx'
+import ReporteTests from './ReporteTests.jsx'
 import GraficoAsistencia from './GraficoAsistencia.jsx'
 import GraficoTecnica from './GraficoTecnica.jsx'
 
@@ -28,6 +29,7 @@ export default function Entrenamientos({ yo }) {
   const [eventos, setEventos] = useState([])
   const [eventoSel, setEventoSel] = useState(null)
   const [verEstadisticaFisica, setVerEstadisticaFisica] = useState(false)
+  const [verReporteTests, setVerReporteTests] = useState(false)
   const [creando, setCreando] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [sugerencias, recargarSugerencias] = useSugerencias()
@@ -47,6 +49,9 @@ export default function Entrenamientos({ yo }) {
 
   if (verEstadisticaFisica) {
     return <EstadisticaFisica yo={yo} onVolver={() => setVerEstadisticaFisica(false)} />
+  }
+  if (verReporteTests) {
+    return <ReporteTests yo={yo} onVolver={() => setVerReporteTests(false)} />
   }
 
   async function descargarResumen() {
@@ -69,6 +74,7 @@ export default function Entrenamientos({ yo }) {
         <h2>Entrenamientos</h2>
         <div className="fila">
           <button className="btn sec" onClick={() => setVerEstadisticaFisica(true)}>📊 Física</button>
+          <button className="btn sec" onClick={() => setVerReporteTests(true)}>📈 Tests</button>
           <button className="btn sec" onClick={descargarResumen}>Resumen CSV</button>
           <button
             className="btn"

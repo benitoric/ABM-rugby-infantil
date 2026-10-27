@@ -1523,6 +1523,22 @@ async function enrutar(metodo, p, b, req, url) {
         [desde, hasta, modalidad])
       return { desde, hasta, modalidad, sesiones }
     }
+    // Reporte de tests físicos: todas las mediciones de los jugadores que no
+    // están dados de baja, con la fecha de nacimiento para calcular la edad en
+    // el momento de cada medición. Los cortes van juntos porque el reporte
+    // muestra el semáforo. El recorte por período se hace en el cliente: son
+    // pocas filas y el mismo dato alimenta los cinco tests.
+    if (metodo === 'GET' && p[1] === 'tests') {
+      const mediciones = await query(
+        `select t.id, t.jugador_id, t.fecha::text as fecha, t.test,
+                t.valor::float8 as valor, t.semaforo, t.semaforo_auto, t.nota,
+                j.nombre, j.apellido, j.fecha_nacimiento::text as fecha_nacimiento
+         from tests_fisicos t
+         join jugadores j on j.id = t.jugador_id
+         where j.estado <> 'inactivo'
+         order by t.fecha, t.created_at`)
+      return { mediciones, cortes: await leerCortes() }
+    }
     if (metodo === 'GET' && p[1] === 'tiempos') {
       const anio = Number(url.searchParams.get('anio')) || new Date().getFullYear()
       return query(

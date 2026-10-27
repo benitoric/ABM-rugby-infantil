@@ -147,6 +147,7 @@ async function main() {
     ['POST', 'seguimientos', { jugador_id: jugador.id, area: 'tecnica' }],
     ['POST', 'tests', { jugador_id: jugador.id }],
     ['GET', 'tests/cortes'],
+    ['GET', 'stats/tests'],
     ['PUT', 'tests/cortes/salto_largo', { verde: 150, amarillo: 120 }],
     ['DELETE', 'tests/cortes/salto_largo'],
     ['POST', 'lesiones', { jugador_id: jugador.id }],
