@@ -1481,3 +1481,6 @@ details.tarjeta summary {
 .barra-avance.chica { height: 6px; margin: 3px 0 2px; }
 .proceso-eval.cerrado .barra-avance span { background: var(--ok); }
 .avance-staff { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--borde); }
+
+/* Cortes del semáforo, a la vista mientras se cargan las mediciones */
+.cortes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }

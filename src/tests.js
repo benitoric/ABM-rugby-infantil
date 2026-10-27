@@ -29,6 +29,8 @@ export const TESTS = [
     unidad: 'cm',
     decimales: 0,
     mejor: 'mayor',
+    // Verde desde 150 cm, amarillo desde 120, rojo abajo de eso
+    cortes: { verde: 150, amarillo: 120 },
     ayuda: 'Distancia del salto sin carrera, en centímetros.',
   },
   {
@@ -39,6 +41,8 @@ export const TESTS = [
     unidad: 's',
     decimales: 2,
     mejor: 'menor',
+    // Verde hasta 4.00 s, amarillo hasta 4.40, rojo arriba de eso
+    cortes: { verde: 4.00, amarillo: 4.40 },
     ayuda: 'Segundos con centésimas (ej.: 3.42).',
   },
   // Peso y talla son antropométricos, no una performance: no hay un lado
@@ -68,6 +72,18 @@ export const TESTS = [
 export const TESTS_POR_VALUE = Object.fromEntries(TESTS.map((t) => [t.value, t]))
 
 export const CLAVES_TEST = TESTS.map((t) => t.value)
+
+// ---------------------------------------------------------------------------
+// Cortes del semáforo
+//
+// Los `cortes` de cada test son los valores con los que la app propone el
+// color sola, apenas se carga la medición. Están pensados para la M12: son
+// los que usa el cuerpo técnico de la división, no una tabla universal, así
+// que si la app se usa en otra categoría hay que revisarlos.
+//
+// Un test sin `cortes` (la resistencia, el peso y la talla) no propone nada:
+// ahí el color lo pone el PF a mano, o no lo pone.
+// ---------------------------------------------------------------------------
 
 // Valoración del PF junto a la medición. Siempre opcional: primero se anota
 // el número (que es lo que apura en la cancha) y el color puede ir después.
@@ -155,6 +171,45 @@ export function imc(pesoKg, tallaCm) {
   if (!pesoKg || !tallaCm) return null
   const m = Number(tallaCm) / 100
   return redondear(Number(pesoKg) / (m * m), 1)
+}
+
+// Color que le corresponde a una medición según la tabla de la división.
+// Devuelve null en los tests que no tienen cortes cargados.
+export function semaforoSugerido(test, valor) {
+  const t = TESTS_POR_VALUE[test]
+  if (!t?.cortes || valor == null) return null
+  const n = Number(valor)
+  if (!Number.isFinite(n)) return null
+  if (t.mejor === 'mayor') {
+    if (n >= t.cortes.verde) return 'verde'
+    return n >= t.cortes.amarillo ? 'amarillo' : 'rojo'
+  }
+  if (n <= t.cortes.verde) return 'verde'
+  return n <= t.cortes.amarillo ? 'amarillo' : 'rojo'
+}
+
+export const tieneCortes = (test) => !!TESTS_POR_VALUE[test]?.cortes
+
+// Los tres rangos escritos, para mostrarle al PF con qué criterio se pinta.
+// El paso es la unidad más chica que el test puede anotar (1 cm, 0.01 s), así
+// el borde de cada rango se lee con el mismo detalle con el que se carga.
+export function rangosSemaforo(test) {
+  const t = TESTS_POR_VALUE[test]
+  if (!t?.cortes) return []
+  const paso = 1 / 10 ** t.decimales
+  const v = (n) => conUnidad(test, redondear(n, t.decimales))
+  if (t.mejor === 'mayor') {
+    return [
+      { semaforo: 'verde', texto: `${v(t.cortes.verde)} o más` },
+      { semaforo: 'amarillo', texto: `${v(t.cortes.amarillo)} a ${v(t.cortes.verde - paso)}` },
+      { semaforo: 'rojo', texto: `menos de ${v(t.cortes.amarillo)}` },
+    ]
+  }
+  return [
+    { semaforo: 'verde', texto: `${v(t.cortes.verde)} o menos` },
+    { semaforo: 'amarillo', texto: `${v(t.cortes.verde + paso)} a ${v(t.cortes.amarillo)}` },
+    { semaforo: 'rojo', texto: `más de ${v(t.cortes.amarillo)}` },
+  ]
 }
 
 function redondear(n, decimales) {

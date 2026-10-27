@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { fechaCompacta, fechaCorta, nombreCompleto } from '../helpers.js'
 import {
-  conUnidad, diferencia, formatearValor, imc, parsearValor, progreso, semaforo,
-  SEMAFOROS, TESTS, TESTS_POR_VALUE,
+  conUnidad, diferencia, formatearValor, imc, parsearValor, progreso, rangosSemaforo,
+  semaforo, semaforoSugerido, tieneCortes, SEMAFOROS, TESTS, TESTS_POR_VALUE,
 } from '../tests.js'
 
 // Clave de una medición dentro del estado local de la pantalla de carga
@@ -45,19 +45,29 @@ function FilaTest({ jugador, test, medicion, previa, onGuardar }) {
     setError(false)
   }, [test, jugador.id])
 
+  // Un color elegido a mano manda sobre la tabla: si el PF ya decidió, corregir
+  // el número no le pisa la valoración.
+  const colorAMano = !!medicion?.semaforo && !medicion.semaforo_auto
+
   function confirmar() {
     const crudo = texto.trim()
     // Vaciar el campo borra la medición (se cargó a quien no era)
     if (!crudo) {
       setError(false)
-      if (medicion) onGuardar(jugador.id, null, null)
+      if (medicion) onGuardar(jugador.id, null, null, false)
       return
     }
     const valor = parsearValor(test, crudo)
     if (valor == null) { setError(true); return }
     setError(false)
     setTexto(formatearValor(test, valor))
-    if (valor !== medicion?.valor) onGuardar(jugador.id, valor, medicion?.semaforo || null)
+    if (valor === medicion?.valor) return
+    if (colorAMano) {
+      onGuardar(jugador.id, valor, medicion.semaforo, false)
+    } else {
+      const sugerido = semaforoSugerido(test, valor)
+      onGuardar(jugador.id, valor, sugerido, !!sugerido)
+    }
   }
 
   const cambio = medicion && previa
@@ -96,8 +106,32 @@ function FilaTest({ jugador, test, medicion, previa, onGuardar }) {
       <Semaforo
         valor={medicion?.semaforo || null}
         deshabilitado={!medicion}
-        onCambiar={(s) => onGuardar(jugador.id, medicion.valor, s)}
+        onCambiar={(s) => onGuardar(jugador.id, medicion.valor, s, false)}
       />
+    </div>
+  )
+}
+
+// Con qué criterio se pinta el color, a la vista mientras se carga: el PF
+// tiene que poder ver de dónde salió el verde antes de aceptarlo.
+function LeyendaCortes({ test }) {
+  const rangos = rangosSemaforo(test)
+  if (!rangos.length) {
+    return (
+      <p className="mini" style={{ marginTop: 6 }}>
+        Este test todavía no tiene tabla de referencia: el color va a mano.
+      </p>
+    )
+  }
+  return (
+    <div className="cortes">
+      <span className="mini">El color se pone solo:</span>
+      {rangos.map((r) => (
+        <span key={r.semaforo} className={`badge semaforo-${r.semaforo}`}>
+          {semaforo(r.semaforo).ico} {r.texto}
+        </span>
+      ))}
+      <span className="mini">Si no coincide con lo que viste, tocá otro color y manda el tuyo.</span>
     </div>
   )
 }
@@ -137,20 +171,31 @@ export default function TestsFisicos({ evento, onVolver }) {
     cargar().catch((e) => { setErrorCarga(e); setCargando(false) })
   }, [evento.id, intento])
 
-  // Guarda una medición (valor null la borra) con vuelta atrás si falla
-  async function guardar(jugadorId, valor, sem) {
+  // Guarda una medición (valor null la borra) con vuelta atrás si falla.
+  // `auto` marca que el color lo puso la tabla y no una persona.
+  async function guardar(jugadorId, valor, sem, auto = false) {
     const k = clave(jugadorId, test)
     const previo = mediciones[k]
     setMediciones((m) => {
       const copia = { ...m }
       if (valor == null) delete copia[k]
-      else copia[k] = { ...copia[k], jugador_id: jugadorId, test, valor, semaforo: sem || null }
+      else {
+        copia[k] = {
+          ...copia[k], jugador_id: jugadorId, test, valor,
+          semaforo: sem || null, semaforo_auto: !!sem && auto,
+        }
+      }
       return copia
     })
     try {
       const r = await api(`eventos/${evento.id}/tests`, {
         method: 'PUT',
-        body: { marcas: [{ jugador_id: jugadorId, test, valor, semaforo: sem || null }] },
+        body: {
+          marcas: [{
+            jugador_id: jugadorId, test, valor,
+            semaforo: sem || null, semaforo_auto: !!sem && auto,
+          }],
+        },
       })
       const guardada = r?.guardadas?.[0]
       if (guardada) setMediciones((m) => ({ ...m, [k]: guardada }))
@@ -199,6 +244,7 @@ export default function TestsFisicos({ evento, onVolver }) {
           ))}
         </div>
         <p className="mini" style={{ marginTop: 8 }}>{t.ayuda}</p>
+        <LeyendaCortes test={test} />
       </div>
 
       <div className="fila entre">
@@ -324,7 +370,10 @@ function TarjetaTest({ test, historial, onBorrar }) {
                 <tr key={m.id}>
                   <td title={m.autor_email || ''}>{fechaCorta(m.fecha)}</td>
                   <td>{conUnidad(test, m.valor)}</td>
-                  <td>{s ? `${s.ico} ${s.label}` : '—'}</td>
+                  <td>
+                    {s ? `${s.ico} ${s.label}` : '—'}
+                    {s && m.semaforo_auto && <span className="mini"> por tabla</span>}
+                  </td>
                   <td>
                     <button className="btn peligro chico" onClick={() => onBorrar(m)}>Borrar</button>
                   </td>
@@ -346,10 +395,15 @@ function FormTest({ jugadorId, onCerrar, onGuardado }) {
   const [test, setTest] = useState(TESTS[0].value)
   const [texto, setTexto] = useState('')
   const [sem, setSem] = useState(null)
+  // Mientras el PF no toque un color, vale el que propone la tabla
+  const [semAMano, setSemAMano] = useState(false)
   const [nota, setNota] = useState('')
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
   const t = TESTS_POR_VALUE[test]
+
+  const sugerido = semaforoSugerido(test, parsearValor(test, texto))
+  const semFinal = semAMano ? sem : sugerido
 
   async function guardar(e) {
     e.preventDefault()
@@ -360,7 +414,11 @@ function FormTest({ jugadorId, onCerrar, onGuardado }) {
     try {
       await api('tests', {
         method: 'POST',
-        body: { jugador_id: jugadorId, fecha, test, valor, semaforo: sem, nota: nota.trim() || null },
+        body: {
+          jugador_id: jugadorId, fecha, test, valor,
+          semaforo: semFinal, semaforo_auto: !!semFinal && !semAMano,
+          nota: nota.trim() || null,
+        },
       })
       onGuardado()
     } catch {
@@ -378,7 +436,10 @@ function FormTest({ jugadorId, onCerrar, onGuardado }) {
         </div>
         <div className="campo">
           <label>Test</label>
-          <select value={test} onChange={(e) => { setTest(e.target.value); setError('') }}>
+          <select
+            value={test}
+            onChange={(e) => { setTest(e.target.value); setError(''); setSem(null); setSemAMano(false) }}
+          >
             {TESTS.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}
           </select>
         </div>
@@ -397,7 +458,16 @@ function FormTest({ jugadorId, onCerrar, onGuardado }) {
       </div>
       <div className="campo">
         <label>Valoración (opcional)</label>
-        <Semaforo valor={sem} onCambiar={setSem} />
+        <Semaforo
+          valor={semFinal}
+          onCambiar={(v) => { setSem(v); setSemAMano(true) }}
+        />
+        {!semAMano && sugerido && (
+          <span className="mini">Puesto por la tabla. Tocá otro color si no coincide.</span>
+        )}
+        {!tieneCortes(test) && (
+          <span className="mini">Este test no tiene tabla: el color va a mano.</span>
+        )}
       </div>
       <div className="campo">
         <label>Nota (opcional)</label>

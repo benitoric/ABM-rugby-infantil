@@ -120,7 +120,7 @@ const COLS_EVALUACION = `id, jugador_id, fecha::text as fecha, valores, comentar
 // El valor va a float: numeric llega como texto desde pg y el frontend lo
 // necesita como número para formatearlo y comparar mediciones.
 const COLS_TEST = `id, jugador_id, evento_id, fecha::text as fecha, test,
-  valor::float8 as valor, semaforo, nota, autor_email`
+  valor::float8 as valor, semaforo, semaforo_auto, nota, autor_email`
 // Metadatos del documento: nunca el contenido (se pide aparte al abrirlo)
 const COLS_DOCUMENTO = `id, jugador_id, tipo, nombre, mime,
   octet_length(datos) as bytes, created_at::date::text as fecha, subido_por,
@@ -1167,14 +1167,15 @@ async function enrutar(metodo, p, b, req, url) {
       if (!b?.jugador_id) throw { codigo: 400, error: 'faltan_datos' }
       const valor = medicionValida(b.test, b.valor)
       const filas = await query(
-        `insert into tests_fisicos (jugador_id, fecha, test, valor, semaforo, nota, autor_email)
-         values ($1,$2,$3,$4,$5,$6,$7)
+        `insert into tests_fisicos (jugador_id, fecha, test, valor, semaforo, semaforo_auto, nota, autor_email)
+         values ($1,$2,$3,$4,$5,$6,$7,$8)
          on conflict (jugador_id, fecha, test) do update
            set valor = excluded.valor, semaforo = excluded.semaforo,
+               semaforo_auto = excluded.semaforo_auto,
                nota = excluded.nota, autor_email = excluded.autor_email
          returning ${COLS_TEST}`,
         [b.jugador_id, b.fecha || new Date().toISOString().slice(0, 10), b.test, valor,
-         semaforoValido(b.semaforo), b.nota?.trim() || null, yo.email])
+         semaforoValido(b.semaforo), !!b.semaforo_auto, b.nota?.trim() || null, yo.email])
       return filas[0]
     }
     if (metodo === 'DELETE' && p[1]) {
@@ -2093,14 +2094,15 @@ async function enrutar(metodo, p, b, req, url) {
             continue
           }
           const [fila] = await query(
-            `insert into tests_fisicos (jugador_id, evento_id, fecha, test, valor, semaforo, autor_email)
-             values ($1,$2,$3,$4,$5,$6,$7)
+            `insert into tests_fisicos (jugador_id, evento_id, fecha, test, valor, semaforo, semaforo_auto, autor_email)
+             values ($1,$2,$3,$4,$5,$6,$7,$8)
              on conflict (jugador_id, fecha, test) do update
                set valor = excluded.valor, semaforo = excluded.semaforo,
+                   semaforo_auto = excluded.semaforo_auto,
                    evento_id = excluded.evento_id, autor_email = excluded.autor_email
              returning ${COLS_TEST}`,
             [m.jugador_id, p[1], evento.fecha, m.test, medicionValida(m.test, m.valor),
-             semaforoValido(m.semaforo), yo.email])
+             semaforoValido(m.semaforo), !!m.semaforo_auto, yo.email])
           guardadas.push(fila)
         }
         return { guardadas }
