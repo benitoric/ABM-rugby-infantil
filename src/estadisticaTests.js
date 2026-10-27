@@ -97,9 +97,11 @@ export function resumirTest(test, mediciones, { desde, hasta }) {
     filas.push({
       imc: test === 'peso' ? imcDe(ultima.valor, talla?.valor) : null,
       tallaUsada: talla,
-      // La línea (forward/back/mixto) y el puesto principal, como en la ficha
+      // La línea (forward/back/mixto), el puesto principal y todos los puestos
+      // en los que puede jugar, como en la ficha
       tipo: tipoJugador(ultima),
       puesto: puestoPrincipal(ultima),
+      puestos: ultima.puestos || [],
       jugador_id: ultima.jugador_id,
       nombre: ultima.nombre,
       apellido: ultima.apellido,
@@ -162,7 +164,7 @@ export function resumirTest(test, mediciones, { desde, hasta }) {
   const porEdad = []
   for (const edad of [...new Set(filas.map((f) => f.edadAnios).filter((e) => e != null))].sort()) {
     const suyas = filas.filter((f) => f.edadAnios === edad)
-    porEdad.push({ edad, ...estadisticas(suyas.map((f) => f.valor)) })
+    porEdad.push({ edad, ...resumenDe(suyas) })
   }
   const sinEdad = filas.filter((f) => f.edadAnios == null).length
 
@@ -219,4 +221,28 @@ export function resumirTest(test, mediciones, { desde, hasta }) {
     evolucion,
     comparacion,
   }
+}
+
+// Ranking por puesto para el PDF: en cada puesto entran todos los que pueden
+// jugar ahí, sea su puesto principal o uno secundario (el entrenador arma el
+// equipo con los dos), ordenados igual que el ranking general y con la
+// posición recalculada dentro del puesto. `secundario` marca a los que
+// tienen otro puesto como principal.
+export function rankingPorPuesto(resumen) {
+  const t = resumen.test
+  return PUESTOS
+    .map((p) => {
+      const suyos = resumen.filas
+        .filter((f) => f.puestos.includes(p.value))
+        .map((f) => ({ ...f, secundario: !!f.puesto && f.puesto !== p.value }))
+      if (t.mejor) {
+        let pos = 0
+        suyos.forEach((f, i) => {
+          if (i === 0 || f.valor !== suyos[i - 1].valor) pos = i + 1
+          f.posicion = pos
+        })
+      }
+      return { puesto: p.value, label: p.label, plural: p.plural, abrev: p.abrev, filas: suyos }
+    })
+    .filter((g) => g.filas.length)
 }
