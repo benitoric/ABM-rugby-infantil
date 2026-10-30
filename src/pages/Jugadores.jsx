@@ -9,6 +9,7 @@ import { promediosResumen, valoresConsolidados, GRUPOS } from '../evaluacion.js'
 import { base64ABlob } from '../archivos.js'
 import { irA, leerHash, reponer, suscribir } from '../navegacion.js'
 import { ultimosMeses } from '../boletin.js'
+import { exportarEvaluaciones } from '../exportarEvaluaciones.js'
 import { AvisosPerdidos } from './Avisos.jsx'
 import Boletin from './Boletin.jsx'
 import Ficha from './Ficha.jsx'
@@ -178,6 +179,20 @@ export default function Jugadores({ yo }) {
   const [autoEvaluar, setAutoEvaluar] = useState(false)
   const [revisar, setRevisar] = useState(null)
   const [repartiendo, setRepartiendo] = useState(false)
+  const [exportando, setExportando] = useState(false)
+
+  // Todas las evaluaciones a una planilla (solo cabeza de división y dueño)
+  async function exportar() {
+    setExportando(true)
+    try {
+      const todas = await api('evaluaciones')
+      if (!todas.length) alert('Todavía no hay evaluaciones cargadas.')
+      else exportarEvaluaciones(todas)
+    } catch {
+      alert('No se pudieron exportar las evaluaciones. Probá de nuevo.')
+    }
+    setExportando(false)
+  }
   // Boletín mensual: null o la posición que sale del hash (ver boletinDeHash)
   const [boletin, setBoletin] = useState(boletinDeHash)
   useEffect(() => suscribir(() => setBoletin(boletinDeHash())), [])
@@ -357,6 +372,11 @@ export default function Jugadores({ yo }) {
       <div className="fila entre">
         <h2>Jugadores ({visibles.length})</h2>
         <div className="fila">
+          {yo?.admin && (
+            <button className="btn sec" disabled={exportando} onClick={exportar}>
+              {exportando ? 'Armando…' : '⬇ Evaluaciones'}
+            </button>
+          )}
           <button className="btn sec" onClick={() => irA('jugadores', 'boletines')}>📄 Boletines</button>
           <button className="btn sec" onClick={() => setImportando(true)}>Importar lista</button>
           <button className="btn" onClick={() => setEditando({ ...VACIO })}>+ Nuevo</button>

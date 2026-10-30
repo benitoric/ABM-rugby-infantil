@@ -1256,6 +1256,24 @@ async function enrutar(metodo, p, b, req, url) {
 
   // ---------- evaluaciones periódicas ----------
   if (p[0] === 'evaluaciones') {
+    // Todas las evaluaciones con el jugador y los nombres del staff, para
+    // exportarlas. Es toda la historia de notas de la división: queda para la
+    // cabeza de división y el dueño.
+    if (metodo === 'GET' && !p[1]) {
+      if (!puedeAdministrar(yo)) throw { codigo: 403, error: 'solo_cabeza' }
+      return query(
+        `select e.id, e.jugador_id, j.nombre, j.apellido,
+                e.fecha::text as fecha, e.valores, e.comentario,
+                e.autor_email, trim(concat(a.nombre, ' ', a.apellido)) as autor_nombre,
+                e.revisor_email, trim(concat(r.nombre, ' ', r.apellido)) as revisor_nombre,
+                e.valores_revisor, e.comentario_revisor,
+                e.revisado_en::date::text as revisado_en
+         from evaluaciones e
+         join jugadores j on j.id = e.jugador_id
+         left join staff a on a.email = e.autor_email
+         left join staff r on r.email = e.revisor_email
+         order by j.apellido, j.nombre, e.fecha, e.created_at`)
+    }
     // Segunda mirada, a ciegas: el revisor puntúa sin ver la nota del primero
     if (metodo === 'POST' && p[1] && p[2] === 'revision') {
       const valores = puntajesValidos(b?.valores)
