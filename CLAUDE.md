@@ -104,6 +104,14 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   revisión cruzada salen tres (evaluador, revisor y consolidada); sin
   revisión, solo la consolidada. Lleva los tres promedios, el acuerdo entre
   miradas y las 24 variables con el nombre de su área.
+- **Exportar tests físicos**: Entrenamientos → "📈 Tests" → "⬇ Todo en Excel"
+  baja un `.xlsx` de verdad (`src/xlsx.js` arma el zip y los XML sin
+  dependencias; `src/exportarTests.js` las hojas) con la ruta `GET
+  tests/exportar`, que trae todas las mediciones de la división, dados de
+  baja incluidos, con quién las cargó y los cortes vigentes. Tres hojas:
+  Mediciones (una fila por medición), Última por jugador (la última de cada
+  test por chico) y Criterios (los rangos del semáforo). Cerrada a los
+  managers como todo `tests/*`.
 - **Boletín mensual**: hoja A4 por jugador (`server/boletin.js` arma los
   números, `src/boletin.js` dibuja el PDF con el generador propio) con la
   asistencia del mes, la comparación contra la división, el ranking, las
