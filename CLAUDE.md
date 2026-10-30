@@ -97,6 +97,13 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   que ahora corre `tareaDiaria`) los días con cargas; cada aviso sale una vez
   (`avisos_enviados`). `GET asignaciones` devuelve `proceso` solo a quien
   administra, y la tarjeta de Jugadores lo muestra solo a ellos.
+- **Exportar evaluaciones**: Jugadores → "⬇ Evaluaciones" (solo cabeza de
+  división y dueño; la ruta `GET evaluaciones` devuelve 403 al resto) baja un
+  CSV con punto y coma y decimales con coma, el que abre bien el Excel en
+  castellano (`src/exportarEvaluaciones.js`). Una fila por mirada: con
+  revisión cruzada salen tres (evaluador, revisor y consolidada); sin
+  revisión, solo la consolidada. Lleva los tres promedios, el acuerdo entre
+  miradas y las 24 variables con el nombre de su área.
 - **Boletín mensual**: hoja A4 por jugador (`server/boletin.js` arma los
   números, `src/boletin.js` dibuja el PDF con el generador propio) con la
   asistencia del mes, la comparación contra la división, el ranking, las
