@@ -6,6 +6,7 @@ import { fechaISO, rangoDePeriodo, PERIODOS } from '../estadisticaFisica.js'
 import { resumirTest, textoEdad } from '../estadisticaTests.js'
 import { fuenteDe } from '../referencias.js'
 import { generarReporteTestsPDF, nombreReporteTests } from '../reporteTestsPDF.js'
+import { armarPlanillaTests, nombrePlanillaTests } from '../exportarTests.js'
 import { conUnidad, semaforo, textoMedicion, TESTS, TESTS_POR_VALUE } from '../tests.js'
 import { PUESTOS } from '../helpers.js'
 
@@ -94,6 +95,18 @@ export default function ReporteTests({ yo, onVolver }) {
     }
   }
 
+  // Toda la historia de tests (todos los tests, todos los chicos, dados de
+  // baja incluidos) en un Excel de verdad, para trabajarla afuera
+  async function bajarExcel() {
+    setAviso('')
+    try {
+      const datos = await api('tests/exportar')
+      descargarArchivo(armarPlanillaTests(datos), nombrePlanillaTests())
+    } catch (e) {
+      setAviso(`No se pudo armar la planilla: ${e.message}`)
+    }
+  }
+
   function bajarCSV() {
     descargarCSV(`tests-${test}-${rango.desde}-a-${rango.hasta}.csv`, [
       ['Posición', 'Jugador', 'Línea', 'Puesto', 'Edad al medir', 'Fecha', t.label, ...(test === 'velocidad_20m' ? ['m/s'] : []), 'Semáforo', 'Anterior', 'Evolución', 'Percentil ref.', ...(test === 'peso' ? ['IMC'] : [])],
@@ -111,7 +124,7 @@ export default function ReporteTests({ yo, onVolver }) {
     <div className="contenido">
       <div className="fila entre">
         <button className="btn sec chico" onClick={onVolver}>← Volver</button>
-        <span className="mini">Tests físicos</span>
+        <button className="btn sec chico" onClick={bajarExcel} disabled={!datos}>⬇ Todo en Excel</button>
       </div>
 
       <div className="tarjeta">

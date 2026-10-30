@@ -148,6 +148,7 @@ async function main() {
     ['POST', 'tests', { jugador_id: jugador.id }],
     ['GET', 'tests/cortes'],
     ['GET', 'stats/tests'],
+    ['GET', 'tests/exportar'],
     ['PUT', 'tests/cortes/salto_largo', { verde: 150, amarillo: 120 }],
     ['DELETE', 'tests/cortes/salto_largo'],
     ['POST', 'lesiones', { jugador_id: jugador.id }],

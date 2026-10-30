@@ -1205,6 +1205,24 @@ async function enrutar(metodo, p, b, req, url) {
     // Criterios del semáforo: los dos bordes con los que se pinta cada test.
     // Los edita el cuerpo técnico (los managers no llegan hasta acá: la lista
     // blanca de permisos no incluye 'tests').
+    // Todas las mediciones de la división, para bajarlas a una planilla.
+    // Incluye a los dados de baja (es la historia completa) y dice quién
+    // cargó cada una. Los cortes van juntos para que la planilla lleve el
+    // criterio del semáforo vigente. Nace cerrada para los managers.
+    if (metodo === 'GET' && p[1] === 'exportar' && !p[2]) {
+      const mediciones = await query(
+        `select t.id, t.jugador_id, t.evento_id, t.fecha::text as fecha, t.test,
+                t.valor::float8 as valor, t.semaforo, t.semaforo_auto, t.nota,
+                t.autor_email, trim(concat(s.nombre, ' ', s.apellido)) as autor_nombre,
+                t.created_at::date::text as cargada_en,
+                j.nombre, j.apellido, j.estado, j.fecha_nacimiento::text as fecha_nacimiento,
+                j.puestos, j.puesto_principal, j.posicion
+         from tests_fisicos t
+         join jugadores j on j.id = t.jugador_id
+         left join staff s on s.email = t.autor_email
+         order by j.apellido, j.nombre, t.fecha, t.test, t.created_at`)
+      return { mediciones, cortes: await leerCortes() }
+    }
     if (p[1] === 'cortes') {
       if (metodo === 'GET' && !p[2]) return leerCortes()
       if (metodo === 'PUT' && p[2]) {
