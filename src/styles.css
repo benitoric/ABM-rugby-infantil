@@ -437,6 +437,20 @@ h3 { font-size: 1rem; }
   font-weight: 800;
   color: var(--primario);
 }
+/* Conteo vivo de cada bloque en "Tomar asistencia": cuántos ya están y
+   cuántos faltan venir, grande como para leerlo de reojo en la cancha */
+.conteo-bloque {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: 2px 0 6px;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+.conteo-bloque .ok { color: var(--ok); }
+.conteo-bloque .warn { color: var(--warn); }
+.conteo-bloque .mini { font-weight: 400; }
 
 /* ---------- login ---------- */
 .login-wrap {

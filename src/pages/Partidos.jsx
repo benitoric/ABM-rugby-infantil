@@ -1618,9 +1618,30 @@ function ControlAsistencia({
     return 'sin confirmación previa'
   }
 
+  // El conteo del bloque, que se va moviendo a medida que se marca: cuántos
+  // ya están y cuántos faltan venir. Los marcados "Faltó" a mano se aclaran
+  // aparte, porque a esos ya no se los espera.
+  const conteo = (lista) => {
+    const vinieron = lista.filter((j) => asistencia[j.id] === 'presente').length
+    const faltaron = lista.filter((j) => asistencia[j.id] === 'ausente').length
+    const faltan = lista.length - vinieron
+    return (
+      <div className="conteo-bloque">
+        <span className="ok">✅ {vinieron} {vinieron === 1 ? 'presente' : 'presentes'}</span>
+        <span className={faltan ? 'warn' : 'ok'}>
+          {faltan ? `⏳ ${faltan === 1 ? 'falta venir 1' : `faltan venir ${faltan}`}` : '✓ están todos'}
+        </span>
+        {faltaron > 0 && (
+          <span className="mini">({faltaron} {faltaron === 1 ? 'marcado' : 'marcados'} Faltó)</span>
+        )}
+      </div>
+    )
+  }
+
   const grupo = (titulo, subtitulo, lista) => (
     <div key={titulo}>
       <h3 style={{ marginTop: 16 }}>{titulo}</h3>
+      {lista.length > 0 && conteo(lista)}
       {subtitulo && <p className="mini">{subtitulo}</p>}
       {!lista.length && <p className="mini">Sin jugadores convocados.</p>}
       {lista.map((j) => fila(
