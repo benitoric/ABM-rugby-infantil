@@ -61,6 +61,19 @@ pantalla de inicio" del teléfono y queda como una app más).
    registró) y las observaciones que la familia anfitriona tiene que saber
    (alergias, medicación). El listado y la ficha del viaje muestran cuánto
    falta cobrar y quiénes tienen papeles pendientes.
+7. **Informe de gestión** (Staff → "Informe de gestión", solo para la cabeza
+   de división): un PDF con rango de fechas configurable y todos los números
+   de la división en ese período, comparados con el período anterior de igual
+   largo: jugadores activos al inicio y al cierre, altas y bajas, cantidad de
+   entrenamientos y partidos y % de suspendidos, asistencia de los chicos
+   (promedios, franjas, mejores y peores, faltas seguidas), presencia y carga
+   de trabajo de cada integrante del staff (evaluaciones cargadas, tests,
+   planificaciones), evaluaciones (cobertura, acuerdo entre miradas,
+   promedios por área y variable, progresos), qué se entrenó (minutos por
+   aspecto técnico y por variable física), evolución de los tests, lesiones y
+   golpes, partidos (valoración de los bloques, rivales, equidad de tiempos,
+   capitanías), lo administrativo (fichas médicas, DNI, viajes) y la calidad
+   del registro (lo que faltó cargar). Las hojas se eligen antes de emitirlo.
 
 ## Arquitectura
 

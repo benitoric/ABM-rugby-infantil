@@ -143,6 +143,7 @@ async function main() {
     ['GET', 'stats/plan-tecnico'],
     ['GET', 'boletin'],
     ['GET', `boletin/${jugador.id}`],
+    ['GET', 'informe?desde=2026-01-01&hasta=2026-03-31'],
     ['POST', 'evaluaciones', { jugador_id: jugador.id, valores: {} }],
     ['POST', 'seguimientos', { jugador_id: jugador.id, area: 'tecnica' }],
     ['POST', 'tests', { jugador_id: jugador.id }],
@@ -409,6 +410,43 @@ async function main() {
   esperar('entrenador no blanquea claves', r.codigo === 403 && r.datos.error === 'solo_cabeza', r)
   r = await pedir(`viajes/${viaje.id}`, { method: 'DELETE', token: E })
   esperar('entrenador no borra un viaje entero', r.codigo === 403, r)
+  r = await pedir('informe?desde=2026-01-01&hasta=2026-03-31', { token: E })
+  esperar('entrenador no ve el informe de gestión', r.codigo === 403 && r.datos.error === 'solo_cabeza', r)
+
+  // ---------- informe de gestión: solo quien administra ----------
+  console.log('Informe de gestión:')
+  r = await pedir('informe?desde=2026-03-01&hasta=2026-03-31', { token: T })
+  esperar('el dueño pide el informe', r.codigo === 200, r)
+  const informe = r.datos
+  esperar('el informe trae todas las secciones',
+    ['indicadores', 'plantel', 'actividad', 'asistencia', 'staff', 'evaluaciones', 'entrenado', 'tests', 'lesiones', 'partidos', 'administrativo', 'registro']
+      .every((k) => k in informe), Object.keys(informe))
+  esperar('el informe compara con el período anterior de igual largo',
+    informe.anterior?.desde === '2026-01-29' && informe.anterior?.hasta === '2026-02-28', informe.anterior)
+  esperar('el entrenamiento del período cuenta como realizado', informe.actividad.entrenamientos.realizados === 1, informe.actividad)
+  esperar('la asistencia tomada se refleja en el informe',
+    informe.asistencia.division.entrenamientos === 100 && informe.asistencia.por_evento.length === 1, informe.asistencia.division)
+  esperar('la evaluación de marzo cuenta', informe.evaluaciones.cargadas === 1 && informe.evaluaciones.jugadores_evaluados === 1, informe.evaluaciones)
+  esperar('la hoja del staff cuenta la evaluación del dueño',
+    informe.staff.integrantes.find((s) => s.email === DUENIO)?.evaluaciones === 1, informe.staff.integrantes)
+  esperar('el partido futuro no entra en el informe', informe.actividad.partidos.programados === 0, informe.actividad.partidos)
+  r = await pedir('informe?desde=2026-03-31&hasta=2026-03-01', { token: T })
+  esperar('un rango al revés se rechaza', r.codigo === 400 && r.datos.error === 'rango_invalido', r)
+  r = await pedir('informe?desde=2099-01-01&hasta=2099-12-31', { token: T })
+  esperar('un rango enteramente futuro se rechaza', r.codigo === 400 && r.datos.error === 'rango_futuro', r)
+  // El historial de estado: la baja queda fechada y el informe la cuenta
+  r = await pedir(`jugadores/${jugador.id}`, { method: 'PUT', token: T, body: { ...jugador, estado: 'inactivo' } })
+  esperar('el dueño da de baja al jugador', r.codigo === 200 && r.datos.estado === 'inactivo', r)
+  const hoyISO = new Date().toISOString().slice(0, 10)
+  r = await pedir(`informe?desde=${hoyISO}&hasta=${hoyISO}`, { token: T })
+  esperar('la baja de hoy sale en el informe de hoy',
+    r.codigo === 200 && r.datos.plantel.bajas.length === 1 && r.datos.plantel.bajas[0].aproximado === false, r.datos?.plantel)
+  esperar('al cierre de hoy no queda ningún activo', r.datos.plantel.activos_cierre === 0, r.datos?.plantel)
+  r = await pedir(`jugadores/${jugador.id}`, { method: 'PUT', token: T, body: { ...jugador, estado: 'activo' } })
+  esperar('el dueño lo reincorpora', r.codigo === 200, r)
+  r = await pedir(`informe?desde=${hoyISO}&hasta=${hoyISO}`, { token: T })
+  esperar('la reincorporación también queda registrada',
+    r.datos.plantel.reincorporaciones.length === 1 && r.datos.plantel.activos_cierre === 1, r.datos?.plantel)
 
   // ---------- el cambio de rol corta de inmediato ----------
   console.log('Cambio de rol:')

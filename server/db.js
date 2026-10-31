@@ -93,7 +93,8 @@ export async function migracionesAplicadas(pool) {
         and to_regclass('public.boletines_guardados') is not null
         and to_regclass('public.procesos_evaluacion') is not null
         and to_regclass('public.cortes_tests') is not null
-        and to_regclass('public.ajustes') is not null as existe`)
+        and to_regclass('public.ajustes') is not null
+        and to_regclass('public.jugadores_historial_estado') is not null as existe`)
   if (!t.existe) return false
   // Migraciones de datos, sin tabla ni columna que las delate: dejan su
   // marca en `ajustes`
@@ -525,6 +526,27 @@ export async function migrar(pool) {
       where test = 'resistencia'`)
     await pool.query(`insert into ajustes (clave, valor) values ('resistencia_en_vueltas', '1')`)
   }
+  // Historial de estado de los jugadores, para el informe de gestión (ver
+  // db/schema.sql). Que exista la tabla es el testigo más nuevo. Arranca con
+  // una fila por jugador con su estado de hoy: los activos y lesionados desde
+  // su alta en la app, y los dados de baja desde su última modificación, que
+  // es la mejor pista de cuándo fue la baja. Quedan marcadas como de la
+  // migración porque son aproximadas; de acá en adelante la historia es exacta.
+  await pool.query(`create table if not exists jugadores_historial_estado (
+    id uuid primary key default gen_random_uuid(),
+    jugador_id uuid not null references jugadores(id) on delete cascade,
+    estado text not null check (estado in ('activo','inactivo','lesionado')),
+    desde timestamptz not null default now(),
+    cambiado_por text
+  )`)
+  await pool.query(`create index if not exists jugadores_historial_estado_idx
+    on jugadores_historial_estado (jugador_id, desde desc)`)
+  await pool.query(`insert into jugadores_historial_estado (jugador_id, estado, desde, cambiado_por)
+    select j.id, j.estado,
+           case when j.estado = 'inactivo' then j.updated_at else j.created_at end,
+           'migracion'
+    from jugadores j
+    where not exists (select 1 from jugadores_historial_estado h where h.jugador_id = j.id)`)
 }
 
 

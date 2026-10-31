@@ -139,6 +139,25 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   que no se imprime— y al boletín llega solo la frase de qué practicar, nunca
   la nota, el área ni la fecha. Con todo alto va un desafío en vez de una
   debilidad inventada, y con la evaluación de más de 90 días no sale nada.
+- **Informe de gestión**: Staff → "Informe de gestión" (solo cabeza de
+  división y dueño: `GET informe?desde&hasta` devuelve 403 `solo_cabeza` al
+  resto, y es ruta cerrada a los managers). `server/informe.js` arma en una
+  consulta por tabla todos los números del período —plantel, actividad y
+  calendario, asistencia de los chicos con el mismo criterio del boletín,
+  presencia y carga de trabajo del staff, evaluaciones (con lo social: es
+  material para adultos), lo entrenado (plan técnico y planilla del PF),
+  tests, lesiones y golpes, partidos (valoración de bloques, rivales, equidad
+  de tiempos, capitanías), administrativo (fichas, DNI, viajes) y calidad del
+  registro— y los indicadores principales del período inmediato anterior de
+  igual largo, para ver la variación. `src/informePDF.js` dibuja el PDF con el
+  generador propio y `src/pages/Informe.jsx` (hash `#/staff/informe`) elige
+  período y secciones (`src/informe.js`). Para saber cuántos activos había en
+  una fecha está `jugadores_historial_estado`: una fila por cambio de estado,
+  que escribe `server/historial-estado.js` desde el router (alta, edición,
+  carga por lote y la sincronización por lesiones); la migración la siembra
+  con el estado actual (los dados de baja fechados en su última edición,
+  marcados `migracion` = aproximado) y para las fechas sin historial el
+  informe reconstruye con la fecha de alta en la app y el plantel congelado.
 - **Viajes (giras)**: menú propio para las giras a otras provincias. Las
   rutas `viajes/...` viven en `server/viajes.js` (el router delega ahí) y la
   pantalla en `src/pages/Viajes.jsx`, con cuatro vistas: Jugadores (quiénes
