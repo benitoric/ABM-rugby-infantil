@@ -45,7 +45,9 @@ pantalla de inicio" del teléfono y queda como una app más).
    rival y lugar de juego autocompletan con lo ya cargado: se escriben unas
    letras y aparecen las coincidencias. Cada
    bloque guarda además el grado de dificultad del rival (bueno / regular /
-   malo).
+   malo). El día del partido, en "Tomar asistencia", cada bloque lleva su
+   conteo vivo: cuántos ya están y cuántos faltan venir, a medida que se va
+   marcando quién llegó.
 5. **Equipos por tiempo**: cada bloque juega 4 a 6 tiempos; se arma el equipo de
    cada tiempo y la app avisa qué chicos todavía no jugaron ningún tiempo.
 6. **Viajes**: las giras a otras provincias. De cada viaje se carga quiénes
