@@ -40,6 +40,24 @@ create table if not exists jugadores (
   updated_at timestamptz not null default now()
 );
 
+-- Historial de estado de cada jugador: una fila cada vez que cambia (alta,
+-- baja, lesión, reincorporación), con el momento del cambio. Es lo que
+-- permite saber cuántos jugadores activos había en una fecha pasada (informe
+-- de gestión, server/informe.js): `jugadores.estado` solo dice el de hoy.
+-- Lo escribe la API en cada cambio (server/historial-estado.js); para las
+-- fechas anteriores a que existiera, el informe reconstruye el estado con la
+-- fecha de alta en la app y el plantel congelado de cada evento.
+create table if not exists jugadores_historial_estado (
+  id uuid primary key default gen_random_uuid(),
+  jugador_id uuid not null references jugadores(id) on delete cascade,
+  estado text not null check (estado in ('activo','inactivo','lesionado')),
+  desde timestamptz not null default now(),
+  cambiado_por text
+);
+
+create index if not exists jugadores_historial_estado_idx
+  on jugadores_historial_estado (jugador_id, desde desc);
+
 create table if not exists seguimientos (
   id uuid primary key default gen_random_uuid(),
   jugador_id uuid not null references jugadores(id) on delete cascade,

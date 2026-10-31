@@ -2,6 +2,7 @@ import { query } from './db.js'
 import { sqlLesionadoEnFecha, sqlEnPlantel } from './asistencia-sql.js'
 import { autenticar, crearToken, hashClave, compararClave } from './auth.js'
 import { perfil, puedeAdministrar, rutaAdministrativa, validarRol } from './permisos.js'
+import { registrarEstado, registrarEstadoActual } from './historial-estado.js'
 // El catálogo de la evaluación es compartido con el frontend: así el promedio
 // de juego se calcula igual en los dos lados (src/evaluacion.js no toca el DOM)
 import { promedioDeAreas, GRUPOS } from '../src/evaluacion.js'
@@ -949,6 +950,20 @@ async function enrutar(metodo, p, b, req, url) {
 
   if (p[0] === 'me') return perfil(yo)
 
+  // ---------- informe de gestión ----------
+  // `informe?desde=YYYY-MM-DD&hasta=YYYY-MM-DD`: todos los números del
+  // período para medir la gestión (server/informe.js). Lleva la asistencia
+  // del staff, las evaluaciones por entrenador y las notas de los chicos con
+  // lo social incluido: queda para la cabeza de división y el dueño.
+  if (p[0] === 'informe' && metodo === 'GET' && !p[1]) {
+    if (!puedeAdministrar(yo)) throw { codigo: 403, error: 'solo_cabeza' }
+    const { informe } = await import('./informe.js')
+    return informe({
+      desde: url.searchParams.get('desde'),
+      hasta: url.searchParams.get('hasta'),
+    })
+  }
+
   // ---------- boletín mensual ----------
   // `boletin?mes=YYYY-MM` trae el de todos los jugadores activos;
   // `boletin/:jugadorId?mes=...`, el de uno solo. Nunca incluye evaluaciones.
@@ -1050,6 +1065,7 @@ async function enrutar(metodo, p, b, req, url) {
            puesto_principal, aptitudes, estado, tutor_nombre, tutor_telefono,
            ficha_medica_vigente, ficha_medica_vence, observaciones)
          values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,$9,$10,$11,$12,$13,$14) returning ${COLS_JUGADOR}`, d)
+      await registrarEstado(filas[0].id, filas[0].estado, yo.email)
       return filas[0]
     }
     if (metodo === 'PUT' && p[1]) {
@@ -1060,6 +1076,7 @@ async function enrutar(metodo, p, b, req, url) {
            estado=$9, tutor_nombre=$10, tutor_telefono=$11,
            ficha_medica_vigente=$12, ficha_medica_vence=$13, observaciones=$14, updated_at=now()
          where id=$15 returning ${COLS_JUGADOR}`, [...d, p[1]])
+      if (filas[0]) await registrarEstado(filas[0].id, filas[0].estado, yo.email)
       return filas[0]
     }
     if (metodo === 'DELETE' && p[1]) {
@@ -1073,14 +1090,15 @@ async function enrutar(metodo, p, b, req, url) {
       let creados = 0
       for (const j of lista) {
         if (!j?.nombre?.trim() || !j?.apellido?.trim()) continue
-        await query(
+        const [nuevo] = await query(
           `insert into jugadores (nombre, apellido, fecha_nacimiento, dni, posicion,
              tutor_nombre, tutor_telefono, ficha_medica_vence, observaciones)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id, estado`,
           [j.nombre.trim(), j.apellido.trim(), j.fecha_nacimiento || null,
            j.dni || null, normalizarPosicion(j.posicion), j.tutor_nombre || null,
            j.tutor_telefono || null, j.ficha_medica_vence || null,
            j.observaciones || null])
+        await registrarEstado(nuevo.id, nuevo.estado, yo.email)
         creados++
       }
       return { creados }
@@ -1462,6 +1480,7 @@ async function enrutar(metodo, p, b, req, url) {
     } else {
       await query("update jugadores set estado = 'activo' where id = $1 and estado = 'lesionado'", [jugadorId])
     }
+    await registrarEstadoActual(jugadorId, yo.email)
   }
 
   if (p[0] === 'lesiones') {

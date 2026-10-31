@@ -1,9 +1,17 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { ROLES_STAFF, nombreStaff } from '../helpers.js'
+import { irA, leerHash, suscribir } from '../navegacion.js'
 import Avisos from './Avisos.jsx'
+import Informe from './Informe.jsx'
+
+// La subvista vive en el hash (#/staff/informe), como en el resto de la app
+const subDeHash = () => leerHash()[1] || null
 
 export default function Staff({ yo }) {
+  const [sub, setSub] = useState(subDeHash)
+  useEffect(() => suscribir(() => setSub(subDeHash())), [])
+
   const [staff, setStaff] = useState([])
   const [email, setEmail] = useState('')
   const [nombre, setNombre] = useState('')
@@ -101,9 +109,30 @@ export default function Staff({ yo }) {
     cargar()
   }
 
+  // El informe de gestión es solo de quien administra: la API lo cierra al
+  // resto, y acá ni se ofrece
+  if (sub === 'informe' && yo.admin) {
+    return <Informe yo={yo} onVolver={() => irA('staff')} />
+  }
+
   return (
     <div className="contenido">
       <Avisos />
+
+      {yo.admin && (
+        <div className="tarjeta">
+          <div className="fila entre">
+            <div className="crece">
+              <div style={{ fontWeight: 600 }}>📊 Informe de gestión</div>
+              <div className="mini">
+                Todos los números de la división en un período, en PDF, para
+                medir cómo viene la gestión. Solo para la cabeza de división.
+              </div>
+            </div>
+            <button className="btn sec chico" onClick={() => irA('staff', 'informe')}>Abrir</button>
+          </div>
+        </div>
+      )}
 
       <h2>Staff</h2>
       <p className="suave">
