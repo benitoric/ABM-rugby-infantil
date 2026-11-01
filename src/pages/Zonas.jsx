@@ -28,7 +28,7 @@ const VISTAS = [
   { id: 'mapa', label: 'Mapa' },
   { id: 'pooles', label: 'Pooles' },
   { id: 'pendientes', label: 'Sin ubicar' },
-  { id: 'asistencia', label: 'Asistencia', completo: true },
+  { id: 'asistencia', label: 'Asistencia', completo: true }, // a entrenamientos
 ]
 
 // Lugares a menos de esta distancia entre sí van en la misma zona de pool
@@ -533,10 +533,18 @@ function CargarBarrio({ jugador, onGuardado }) {
 
 function VistaAsistencia({ datos, jugadores }) {
   if (!jugadores) return <div className="vacio">Cargando…</div>
-  const asis = new Map(jugadores.map((j) => [j.id, j.asistencia?.total ?? null]))
-  const filas = datos.conChicos.flatMap((l) => l.chicos.map((j) => ({
-    ...j, lugar: l, km: l.km, total: asis.get(j.id) ?? null,
-  })))
+  // Solo los entrenamientos: los partidos dependen de la convocatoria y de
+  // los bloques que presenta el club, no de que la familia pueda traerlo
+  const asis = new Map(jugadores.map((j) => [j.id, j.asistencia]))
+  const filas = datos.conChicos.flatMap((l) => l.chicos.map((j) => {
+    const a = asis.get(j.id)
+    return {
+      ...j, lugar: l, km: l.km,
+      total: a?.entrenamientos ?? null,
+      presentes: a?.entrenamientos_presentes ?? 0,
+      de: a?.entrenamientos_total ?? 0,
+    }
+  }))
   const conDato = filas.filter((f) => f.total != null)
   const promedio = (lista) => (lista.length ? Math.round(lista.reduce((s, f) => s + f.total, 0) / lista.length) : null)
   const lejos = conDato.filter((f) => f.km >= KM_LEJOS)
@@ -544,18 +552,22 @@ function VistaAsistencia({ datos, jugadores }) {
   const flojos = lejos.filter((f) => f.total < 60).sort((a, b) => a.total - b.total)
   const ordenadas = [...filas].sort((a, b) => b.km - a.km)
   const clase = (t) => (t == null ? '' : t >= 75 ? 'bien' : t >= 50 ? 'regular' : 'flojo')
+  const detalle = (f) => `${f.total}% (${f.presentes}/${f.de})`
 
   return (
     <>
       <p className="mini" style={{ marginBottom: 8 }}>
-        La distancia es contexto para leer la asistencia: no cambia el porcentaje de nadie
-        ni lo que sale en el boletín. «Lejos» es a más de {KM_LEJOS} km del club.
+        <b>Solo asistencia a entrenamientos</b>: los partidos no entran, porque ahí
+        manda la convocatoria y no si la familia puede traerlo. Se cuenta igual que
+        en el listado de jugadores (sin los suspendidos ni los días de lesión). La
+        distancia es contexto: no cambia el porcentaje de nadie ni lo que sale en
+        el boletín. «Lejos» es a más de {KM_LEJOS} km del club.
       </p>
 
       <div className="tarjeta">
-        <h3>Asistencia promedio por distancia</h3>
+        <h3>Asistencia a entrenamientos por distancia</h3>
         <table className="tabla-zona">
-          <thead><tr><th>Distancia</th><th>Chicos</th><th>Asistencia</th></tr></thead>
+          <thead><tr><th>Distancia</th><th>Chicos</th><th>Entrenamientos</th></tr></thead>
           <tbody>
             {ANILLOS.map((a, i) => {
               const grupo = conDato.filter((f) => anilloDe(f.km) === i)
@@ -574,22 +586,22 @@ function VistaAsistencia({ datos, jugadores }) {
 
       <div className="tarjeta">
         <h3>💪 Vienen de lejos y no faltan</h3>
-        <p className="mini">A más de {KM_LEJOS} km y con 75% o más de asistencia: el esfuerzo de la familia merece un reconocimiento.</p>
+        <p className="mini">A más de {KM_LEJOS} km y con 75% o más de asistencia a los entrenamientos: el esfuerzo de la familia merece un reconocimiento.</p>
         {!firmes.length && <p className="mini">Nadie por ahora.</p>}
         <ul className="lista-zona">
           {firmes.map((f) => (
-            <li key={f.id}><b>{nombreCompleto(f)}</b> <span className="mini">· {f.lugar.nombre} · {textoKm(f.km)} · {f.total}%</span></li>
+            <li key={f.id}><b>{nombreCompleto(f)}</b> <span className="mini">· {f.lugar.nombre} · {textoKm(f.km)} · {detalle(f)}</span></li>
           ))}
         </ul>
       </div>
 
       <div className="tarjeta">
         <h3>🚗 Vienen de lejos y faltan</h3>
-        <p className="mini">A más de {KM_LEJOS} km y con menos de 60%: los primeros candidatos a sumarse a un pool.</p>
+        <p className="mini">A más de {KM_LEJOS} km y con menos de 60% de asistencia a los entrenamientos: los primeros candidatos a sumarse a un pool.</p>
         {!flojos.length && <p className="mini">Nadie por ahora.</p>}
         <ul className="lista-zona">
           {flojos.map((f) => (
-            <li key={f.id}><b>{nombreCompleto(f)}</b> <span className="mini">· {f.lugar.nombre} · {textoKm(f.km)} · {f.total}%</span></li>
+            <li key={f.id}><b>{nombreCompleto(f)}</b> <span className="mini">· {f.lugar.nombre} · {textoKm(f.km)} · {detalle(f)}</span></li>
           ))}
         </ul>
       </div>
@@ -597,14 +609,15 @@ function VistaAsistencia({ datos, jugadores }) {
       <div className="tarjeta">
         <h3>Todos, del más lejano al más cercano</h3>
         <table className="tabla-zona">
-          <thead><tr><th>Jugador</th><th>Barrio</th><th>Dist.</th><th>Asist.</th></tr></thead>
+          <thead><tr><th>Jugador</th><th>Barrio</th><th>Dist.</th><th title="Asistencia a entrenamientos">Entren.</th></tr></thead>
           <tbody>
             {ordenadas.map((f) => (
               <tr key={f.id}>
                 <td>{nombreCompleto(f)}</td>
                 <td>{f.lugar.nombre}</td>
                 <td>{textoKm(f.km)}</td>
-                <td><b className={`asis-total ${clase(f.total)}`}>{f.total == null ? '—' : `${f.total}%`}</b></td>
+                <td><b className={`asis-total ${clase(f.total)}`}>{f.total == null ? '—' : `${f.total}%`}</b>
+                  {f.total != null && <div className="mini">{f.presentes}/{f.de}</div>}</td>
               </tr>
             ))}
           </tbody>

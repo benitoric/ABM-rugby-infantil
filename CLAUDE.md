@@ -64,7 +64,9 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   km). La pantalla (`#/jugadores/zonas/<vista>` y `#/padron/zonas/<vista>`)
   tiene Mapa (Leaflet + teselas de OpenStreetMap, cargado aparte con
   `lazy`), Pooles (lugares a menos de 2,5 km encadenados), Sin ubicar y, solo
-  para el alcance completo, Asistencia: la saca de `GET jugadores`, que sigue
+  para el alcance completo, Asistencia: solo la de **entrenamientos** (los
+  partidos dependen de la convocatoria, no de la distancia), con el mismo
+  criterio del listado; la saca de `GET jugadores`, que sigue
   cerrado a los managers, así que `lugares/*` nunca devuelve asistencia. La
   distancia es contexto: no toca el porcentaje ni el boletín (`lugares` es
   ruta ajena al boletín).
