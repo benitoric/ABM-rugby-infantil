@@ -28,6 +28,11 @@ export const ANILLOS = [
 // asistencia y para proponer pooles.
 export const KM_LEJOS = 7
 
+// "Muy lejos": a más de 15 km (el último anillo). Con 70% o más de asistencia
+// a los entrenamientos, se destacan aparte: es el mayor esfuerzo del plantel.
+export const KM_MUY_LEJOS = 15
+export const PCT_MUY_LEJOS = 70
+
 // Palabras que no distinguen un lugar de otro: "Barrio Norte" y "B° Norte",
 // "Country Vilago" y "Vilago" son lo mismo.
 const RELLENO = new Set([

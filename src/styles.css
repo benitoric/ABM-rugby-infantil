@@ -1604,3 +1604,5 @@ details.tarjeta summary {
 .candidato.activo { border-color: var(--primario); background: var(--celeste); }
 .cargar-barrio { padding: 6px 0; border-top: 1px solid var(--borde); flex-wrap: wrap; }
 .cargar-barrio input { flex: 1 1 160px; border: 1px solid var(--borde); border-radius: 8px; padding: 6px 8px; }
+
+.destacados-lejos { border-left: 4px solid var(--dorado); }

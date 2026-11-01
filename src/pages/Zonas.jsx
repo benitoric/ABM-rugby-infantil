@@ -4,7 +4,7 @@ import { nombreCompleto } from '../helpers.js'
 import { irA, leerHash, reponer, suscribir } from '../navegacion.js'
 import { Telefono } from '../telefono.jsx'
 import {
-  ANILLOS, KM_LEJOS, anilloDe, clavesDe, distanciaKm, lugarParecido, nombreSugerido,
+  ANILLOS, KM_LEJOS, KM_MUY_LEJOS, PCT_MUY_LEJOS, anilloDe, clavesDe, distanciaKm, lugarParecido, nombreSugerido,
   textoKm, zonasDePool,
 } from '../lugares.js'
 import { buscarLugar } from '../geocodificar.js'
@@ -548,7 +548,13 @@ function VistaAsistencia({ datos, jugadores }) {
   const conDato = filas.filter((f) => f.total != null)
   const promedio = (lista) => (lista.length ? Math.round(lista.reduce((s, f) => s + f.total, 0) / lista.length) : null)
   const lejos = conDato.filter((f) => f.km >= KM_LEJOS)
-  const firmes = lejos.filter((f) => f.total >= 75).sort((a, b) => b.km - a.km)
+  // Los de más de 15 km con 70% o más se destacan en su propia tarjeta (y no
+  // se repiten en la de "vienen de lejos y no faltan")
+  const destacados = conDato
+    .filter((f) => f.km > KM_MUY_LEJOS && f.total >= PCT_MUY_LEJOS)
+    .sort((a, b) => b.total - a.total || b.km - a.km)
+  const esDestacado = new Set(destacados.map((f) => f.id))
+  const firmes = lejos.filter((f) => f.total >= 75 && !esDestacado.has(f.id)).sort((a, b) => b.km - a.km)
   const flojos = lejos.filter((f) => f.total < 60).sort((a, b) => a.total - b.total)
   const ordenadas = [...filas].sort((a, b) => b.km - a.km)
   const clase = (t) => (t == null ? '' : t >= 75 ? 'bien' : t >= 50 ? 'regular' : 'flojo')
@@ -584,9 +590,23 @@ function VistaAsistencia({ datos, jugadores }) {
         </table>
       </div>
 
+      <div className="tarjeta destacados-lejos">
+        <h3>🏆 Desde más de {KM_MUY_LEJOS} km y con {PCT_MUY_LEJOS}% o más</h3>
+        <p className="mini">
+          Viven a más de {KM_MUY_LEJOS} km del club y vienen a {PCT_MUY_LEJOS}% o más de los
+          entrenamientos: el mayor esfuerzo del plantel, para destacar.
+        </p>
+        {!destacados.length && <p className="mini">Nadie por ahora.</p>}
+        <ul className="lista-zona">
+          {destacados.map((f) => (
+            <li key={f.id}><b>⭐ {nombreCompleto(f)}</b> <span className="mini">· {f.lugar.nombre} · {textoKm(f.km)} · {detalle(f)}</span></li>
+          ))}
+        </ul>
+      </div>
+
       <div className="tarjeta">
         <h3>💪 Vienen de lejos y no faltan</h3>
-        <p className="mini">A más de {KM_LEJOS} km y con 75% o más de asistencia a los entrenamientos: el esfuerzo de la familia merece un reconocimiento.</p>
+        <p className="mini">A más de {KM_LEJOS} km y con 75% o más de asistencia a los entrenamientos: el esfuerzo de la familia merece un reconocimiento.{destacados.length > 0 && ' Sin los destacados de arriba.'}</p>
         {!firmes.length && <p className="mini">Nadie por ahora.</p>}
         <ul className="lista-zona">
           {firmes.map((f) => (
@@ -613,7 +633,7 @@ function VistaAsistencia({ datos, jugadores }) {
           <tbody>
             {ordenadas.map((f) => (
               <tr key={f.id}>
-                <td>{nombreCompleto(f)}</td>
+                <td>{esDestacado.has(f.id) && '⭐ '}{nombreCompleto(f)}</td>
                 <td>{f.lugar.nombre}</td>
                 <td>{textoKm(f.km)}</td>
                 <td><b className={`asis-total ${clase(f.total)}`}>{f.total == null ? '—' : `${f.total}%`}</b>

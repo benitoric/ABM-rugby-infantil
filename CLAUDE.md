@@ -66,7 +66,8 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   `lazy`), Pooles (lugares a menos de 2,5 km encadenados), Sin ubicar y, solo
   para el alcance completo, Asistencia: solo la de **entrenamientos** (los
   partidos dependen de la convocatoria, no de la distancia), con el mismo
-  criterio del listado; la saca de `GET jugadores`, que sigue
+  criterio del listado, y destaca aparte a los que viven a más de 15 km con
+  70% o más (`KM_MUY_LEJOS`, `PCT_MUY_LEJOS`); la saca de `GET jugadores`, que sigue
   cerrado a los managers, así que `lugares/*` nunca devuelve asistencia. La
   distancia es contexto: no toca el porcentaje ni el boletín (`lugares` es
   ruta ajena al boletín).
