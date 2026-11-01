@@ -554,10 +554,10 @@ function VistaAsistencia({ datos, jugadores }) {
     .filter((f) => f.total >= 75 || (f.km > KM_MUY_LEJOS && f.total >= PCT_MUY_LEJOS))
     .sort((a, b) => b.km - a.km)
   const flojos = lejos.filter((f) => f.total < 60).sort((a, b) => a.total - b.total)
-  // El caso contrario: viven a menos de 7 km y vienen a menos del 60%. La
+  // El caso contrario: viven a menos de 7 km y vienen a menos del 70%. La
   // distancia no explica esas faltas: hay que preguntar qué pasa.
   const cercaFaltan = conDato
-    .filter((f) => f.km < KM_LEJOS && f.total < 60)
+    .filter((f) => f.km < KM_LEJOS && f.total < 70)
     .sort((a, b) => a.total - b.total || a.km - b.km)
   const conEstrella = new Set(firmes.map((f) => f.id))
   const conCarita = new Set(cercaFaltan.map((f) => f.id))
@@ -619,7 +619,7 @@ function VistaAsistencia({ datos, jugadores }) {
 
       <div className="tarjeta">
         <h3>🏠 Viven cerca y faltan</h3>
-        <p className="mini">A menos de {KM_LEJOS} km y con menos de 60% de asistencia a los entrenamientos: la distancia no explica las faltas, conviene hablar con la familia.</p>
+        <p className="mini">A menos de {KM_LEJOS} km y con menos de 70% de asistencia a los entrenamientos: la distancia no explica las faltas, conviene hablar con la familia.</p>
         {!cercaFaltan.length && <p className="mini">Nadie por ahora.</p>}
         <ul className="lista-zona">
           {cercaFaltan.map((f) => (
