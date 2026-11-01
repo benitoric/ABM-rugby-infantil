@@ -27,7 +27,7 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   seguimientos, boletines ni las observaciones de la ficha. El router aplica
   una **lista blanca** (`rutaAdministrativa`) justo después de `autenticar`:
   al alcance administrativo solo le pasan `me`, `viajes/*`, `padron/*`,
-  `convocatoria/*`, `documentos/*`, `push/*` y `GET staff` (sin
+  `lugares/*`, `convocatoria/*`, `documentos/*`, `push/*` y `GET staff` (sin
   `tiene_clave`); el resto devuelve 403 `solo_entrenadores`. Una ruta nueva nace cerrada para ellos:
   si tiene que abrirse, se agrega a la lista y se prueba en
   `scripts/test-permisos.mjs` (`npm run test:permisos`, base en memoria).
@@ -43,6 +43,31 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   La pantalla de Viajes elige quiénes viajan con `viajes/plantel` (nombre,
   estado y puestos), nunca con `GET jugadores`, que trae asistencia y
   evaluaciones.
+- **Dónde viven** (`src/lugares.js`, `server/lugares.js`,
+  `src/pages/Zonas.jsx`): el barrio o la localidad de cada chico, **nunca el
+  domicilio**, cargado como texto libre (`jugadores.barrio`) en la ficha o el
+  padrón. `src/lugares.js` (sin DOM, lo usan los dos lados) lo normaliza
+  —minúsculas, sin tildes ni signos, sin "barrio", "B°", "country", artículos;
+  "YB" → "yerba buena"— y prueba el texto entero y su primera parte
+  ("Vilago, Yerba Buena" → "vilago"). La clave se busca en `lugares_alias`
+  (clave → lugar) y el resultado queda en `jugadores.lugar_id`; sin match queda
+  null y el chico va a "Sin ubicar". Ahí se ubica una vez por grupo de textos:
+  el navegador consulta Nominatim (OpenStreetMap, `src/geocodificar.js`,
+  acotado al Gran Tucumán), propone candidatos y una persona confirma o corre
+  el pin; `POST lugares` crea el lugar, aprende las claves y resuelve a todos
+  los pendientes que ahora coinciden. Nada se ubica solo sin confirmación: los
+  parecidos por tipeo (`lugarParecido`) solo se sugieren ("Es Vilago"). Un
+  PUT de padrón o jugador sin el campo `barrio` no lo toca (versiones viejas
+  de la app). El club vive en `ajustes` (`club_ubicacion`, con un valor de
+  arranque aproximado en `CLUB_POR_DEFECTO`); moverlo y borrar un lugar
+  exigen administrar. La distancia es en línea recta, por anillos (3/7/15
+  km). La pantalla (`#/jugadores/zonas/<vista>` y `#/padron/zonas/<vista>`)
+  tiene Mapa (Leaflet + teselas de OpenStreetMap, cargado aparte con
+  `lazy`), Pooles (lugares a menos de 2,5 km encadenados), Sin ubicar y, solo
+  para el alcance completo, Asistencia: la saca de `GET jugadores`, que sigue
+  cerrado a los managers, así que `lugares/*` nunca devuelve asistencia. La
+  distancia es contexto: no toca el porcentaje ni el boletín (`lugares` es
+  ruta ajena al boletín).
 - **Convocatoria para managers** (`convocatoria/...` en el router,
   `src/pages/PartidosManagers.jsx`): en el menú Partidos los managers ven
   solo la solapa Convocatoria, para marcar "va / no va" de la semana. La API

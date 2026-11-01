@@ -195,7 +195,7 @@ async function armarYGuardar(mes) {
 const RUTAS_AJENAS = new Set([
   'auth', 'health', 'cron', 'me', 'push', 'documentos', 'staff', 'viajes',
   'boletin', 'seguimientos', 'aspectos-tecnicos', 'asignaciones',
-  'sugerencias', 'stats',
+  'sugerencias', 'stats', 'lugares',
 ])
 // Rutas que escriben sobre un evento puntual (p[1] es su id): alcanza con
 // tirar los meses desde el del evento, así una toma de asistencia de hoy no

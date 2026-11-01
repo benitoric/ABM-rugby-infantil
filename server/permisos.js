@@ -5,7 +5,8 @@
 //    Ven y cargan todo.
 //  - "administrativo": los managers (principal y asistente), que suelen ser
 //    padres. Solo entran a lo administrativo: viajes, padrón (datos de
-//    contacto, DNI y ficha médica), la convocatoria de los partidos (marcar
+//    contacto, DNI, ficha médica y barrio), el mapa de barrios y los pooles,
+//    la convocatoria de los partidos (marcar
 //    quién va), la lista del staff y sus propios avisos.
 //    Nunca ven asistencia, evaluaciones, entrenamientos, partidos, lesiones,
 //    tests físicos ni boletines.
@@ -77,6 +78,12 @@ export function rutaAdministrativa(metodo, p) {
     // Convocatoria de los partidos: la lista de partidos y el "va / no va"
     // de la semana. Nada más del partido (ni suspenderlo).
     case 'convocatoria':
+      return true
+    // Dónde viven los chicos (barrio o localidad, nunca el domicilio): ubicar
+    // barrios en el mapa y armar pooles. Mover el club y borrar un lugar
+    // exigen administrar (server/lugares.js). La asistencia por zona no pasa
+    // por acá: sale de `jugadores`, que les sigue cerrado.
+    case 'lugares':
       return true
     // Escaneos del DNI: se ven y se cargan desde el padrón
     case 'documentos':

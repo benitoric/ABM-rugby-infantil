@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { api } from '../api.js'
 import {
   estadoJugador, etiquetaPuestos, fechaCompacta, fechaCorta, nombreCompleto,
@@ -13,6 +13,9 @@ import { exportarEvaluaciones } from '../exportarEvaluaciones.js'
 import { AvisosPerdidos } from './Avisos.jsx'
 import Boletin from './Boletin.jsx'
 import Ficha from './Ficha.jsx'
+
+// El mapa (Leaflet) se baja recién al abrir "Dónde viven"
+const Zonas = lazy(() => import('./Zonas.jsx'))
 
 // La posición dentro de los boletines vive en el hash, así "atrás" vuelve al
 // listado del mes elegido en vez de saltar a la pestaña anterior:
@@ -31,6 +34,12 @@ function boletinDeHash() {
   return null
 }
 
+// #/jugadores/zonas/<vista>: dónde viven los chicos (mapa, pooles, asistencia)
+const enZonas = () => {
+  const [seccion, sub] = leerHash()
+  return seccion === 'jugadores' && sub === 'zonas'
+}
+
 const hashBoletin = (b) => (b.solo
   ? ['jugadores', 'boletin', b.jugadorId, b.mes]
   : ['jugadores', 'boletines', b.mes, b.jugadorId])
@@ -39,7 +48,7 @@ const VACIO = {
   nombre: '', apellido: '', fecha_nacimiento: '', dni: '', posicion: '',
   puestos: [], puesto_principal: '',
   aptitudes: [], estado: 'activo', tutor_nombre: '', tutor_telefono: '',
-  ficha_medica_vigente: false, ficha_medica_vence: '', observaciones: '',
+  ficha_medica_vigente: false, ficha_medica_vence: '', observaciones: '', barrio: '',
 }
 
 // Los promedios de juego y comportamiento, en chico bajo el general
@@ -195,7 +204,8 @@ export default function Jugadores({ yo }) {
   }
   // Boletín mensual: null o la posición que sale del hash (ver boletinDeHash)
   const [boletin, setBoletin] = useState(boletinDeHash)
-  useEffect(() => suscribir(() => setBoletin(boletinDeHash())), [])
+  const [zonas, setZonas] = useState(enZonas)
+  useEffect(() => suscribir(() => { setBoletin(boletinDeHash()); setZonas(enZonas()) }), [])
 
   // Mueve la posición dentro de los boletines. Elegir un chico suma historial
   // (para que "atrás" vuelva al listado); cambiar el mes reemplaza la entrada,
@@ -352,6 +362,14 @@ export default function Jugadores({ yo }) {
     )
   }
 
+  if (zonas) {
+    return (
+      <Suspense fallback={<div className="vacio">Cargando…</div>}>
+        <Zonas yo={yo} base="jugadores" />
+      </Suspense>
+    )
+  }
+
   if (fichaDe) {
     return (
       <Ficha
@@ -378,6 +396,7 @@ export default function Jugadores({ yo }) {
             </button>
           )}
           <button className="btn sec" onClick={() => irA('jugadores', 'boletines')}>📄 Boletines</button>
+          <button className="btn sec" onClick={() => irA('jugadores', 'zonas')}>🗺️ Dónde viven</button>
           <button className="btn sec" onClick={() => setImportando(true)}>Importar lista</button>
           <button className="btn" onClick={() => setEditando({ ...VACIO })}>+ Nuevo</button>
         </div>
@@ -848,6 +867,19 @@ function parsearLinea(linea) {
   return { nombre, apellido, fecha_nacimiento: fecha }
 }
 
+// Barrio o localidad, en texto libre: la app reconoce el lugar (src/lugares.js)
+export function CampoBarrio({ campo }) {
+  return (
+    <div className="campo" style={{ gridColumn: '1 / -1' }}>
+      <label>Barrio o localidad donde vive</label>
+      <input placeholder="Ej.: country Vilago, B° Norte, Yerba Buena" {...campo('barrio')} />
+      <p className="mini" style={{ margin: '4px 0 0' }}>
+        Solo el barrio, no la dirección. Es para el mapa, los pooles y la distancia al club.
+      </p>
+    </div>
+  )
+}
+
 export function FormJugador({ inicial, onCerrar, onGuardado }) {
   const [f, setF] = useState(inicial)
   const [error, setError] = useState('')
@@ -997,6 +1029,7 @@ export function FormJugador({ inicial, onCerrar, onGuardado }) {
             <label>Teléfono del tutor</label>
             <input inputMode="tel" {...campo('tutor_telefono')} />
           </div>
+          <CampoBarrio campo={campo} />
         </div>
 
         <div className="grid2">

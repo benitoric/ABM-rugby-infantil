@@ -5,12 +5,14 @@
 // asistencia, ni evaluaciones, ni lesiones, ni tests, ni observaciones de los
 // entrenadores. Los entrenadores también pueden usarlo, pero tienen la ficha.
 import { query } from './db.js'
+import { guardarBarrio } from './lugares.js'
 
 // Columnas administrativas. `estado` viaja para distinguir a los dados de
 // baja; `puestos` y `posicion`, para reconocer al chico en el listado.
 const COLS_PADRON = `j.id, j.nombre, j.apellido, j.fecha_nacimiento::text as fecha_nacimiento,
   j.dni, j.estado, j.posicion, j.puestos, j.puesto_principal, j.tutor_nombre, j.tutor_telefono,
-  j.ficha_medica_vigente, j.ficha_medica_vence::text as ficha_medica_vence`
+  j.ficha_medica_vigente, j.ficha_medica_vence::text as ficha_medica_vence,
+  j.barrio, j.lugar_id`
 
 const COLS_DOCUMENTO = `id, jugador_id, tipo, nombre, mime,
   octet_length(datos) as bytes, created_at::date::text as fecha, subido_por,
@@ -19,7 +21,9 @@ const COLS_DOCUMENTO = `id, jugador_id, tipo, nombre, mime,
 const esFecha = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || '')
 
 // Solo lo administrativo se puede editar desde acá: nombre, estado, puestos
-// y observaciones quedan para la ficha de los entrenadores.
+// y observaciones quedan para la ficha de los entrenadores. El barrio también
+// es administrativo, pero se guarda aparte (guardarBarrio) porque además
+// resuelve el lugar.
 function datosAdministrativos(b) {
   if (b?.fecha_nacimiento && !esFecha(b.fecha_nacimiento)) throw { codigo: 400, error: 'fecha_invalida' }
   if (b?.ficha_medica_vence && !esFecha(b.ficha_medica_vence)) throw { codigo: 400, error: 'fecha_invalida' }
@@ -71,6 +75,7 @@ export async function enrutarPadron({ metodo, p, b }) {
        where id = $7
        returning id`, [...d, jugadorId])
     if (!filas.length) throw { codigo: 404, error: 'no_existe' }
+    await guardarBarrio(jugadorId, b)
     const [jugador] = await query(
       `select ${COLS_PADRON} from jugadores j where j.id = $1`, [jugadorId])
     return jugador
