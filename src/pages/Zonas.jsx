@@ -554,6 +554,13 @@ function VistaAsistencia({ datos, jugadores }) {
     .filter((f) => f.total >= 75 || (f.km > KM_MUY_LEJOS && f.total >= PCT_MUY_LEJOS))
     .sort((a, b) => b.km - a.km)
   const flojos = lejos.filter((f) => f.total < 60).sort((a, b) => a.total - b.total)
+  // El caso contrario: viven a menos de 7 km y vienen a menos del 60%. La
+  // distancia no explica esas faltas: hay que preguntar qué pasa.
+  const cercaFaltan = conDato
+    .filter((f) => f.km < KM_LEJOS && f.total < 60)
+    .sort((a, b) => a.total - b.total || a.km - b.km)
+  const conEstrella = new Set(firmes.map((f) => f.id))
+  const conCarita = new Set(cercaFaltan.map((f) => f.id))
   const ordenadas = [...filas].sort((a, b) => b.km - a.km)
   const clase = (t) => (t == null ? '' : t >= 75 ? 'bien' : t >= 50 ? 'regular' : 'flojo')
   const detalle = (f) => `${f.total}% (${f.presentes}/${f.de})`
@@ -611,13 +618,29 @@ function VistaAsistencia({ datos, jugadores }) {
       </div>
 
       <div className="tarjeta">
+        <h3>🏠 Viven cerca y faltan</h3>
+        <p className="mini">A menos de {KM_LEJOS} km y con menos de 60% de asistencia a los entrenamientos: la distancia no explica las faltas, conviene hablar con la familia.</p>
+        {!cercaFaltan.length && <p className="mini">Nadie por ahora.</p>}
+        <ul className="lista-zona">
+          {cercaFaltan.map((f) => (
+            <li key={f.id}><b>{nombreCompleto(f)}</b> <span className="mini">· {f.lugar.nombre} · {textoKm(f.km)} · {detalle(f)}</span></li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="tarjeta">
         <h3>Todos, del más lejano al más cercano</h3>
+        <p className="mini">⭐ vienen de lejos y no faltan · 😟 viven cerca y faltan</p>
         <table className="tabla-zona">
           <thead><tr><th>Jugador</th><th>Barrio</th><th>Dist.</th><th title="Asistencia a entrenamientos">Entren.</th></tr></thead>
           <tbody>
             {ordenadas.map((f) => (
               <tr key={f.id}>
-                <td>{nombreCompleto(f)}</td>
+                <td>
+                  {conEstrella.has(f.id) && <span title="Vienen de lejos y no faltan">⭐ </span>}
+                  {conCarita.has(f.id) && <span title="Viven cerca y faltan">😟 </span>}
+                  {nombreCompleto(f)}
+                </td>
                 <td>{f.lugar.nombre}</td>
                 <td>{textoKm(f.km)}</td>
                 <td><b className={`asis-total ${clase(f.total)}`}>{f.total == null ? '—' : `${f.total}%`}</b>
