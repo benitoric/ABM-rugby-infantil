@@ -85,7 +85,8 @@ pantalla de inicio" del teléfono y queda como una app más).
    **pooles** (chicos que viven cerca entre sí, con el WhatsApp del tutor y
    la lista para copiar al grupo) y, solo para el cuerpo técnico, la
    **asistencia a los entrenamientos según la distancia** (los partidos no
-   entran: ahí manda la convocatoria): los que vienen de lejos y no faltan y
+   entran: ahí manda la convocatoria): destacados aparte los que viven a más
+   de 15 km y vienen al 70% o más, los que vienen de lejos y no faltan y
    los que vienen de lejos y faltan (candidatos a un pool). La distancia es
    contexto: no cambia el porcentaje de asistencia ni el boletín.
 
