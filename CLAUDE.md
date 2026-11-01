@@ -68,7 +68,8 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   partidos dependen de la convocatoria, no de la distancia), con el mismo
   criterio del listado; "vienen de lejos y no faltan" junta a los de más de
   7 km con 75% o más y a los de más de 15 km con 70% o más (`KM_MUY_LEJOS`,
-  `PCT_MUY_LEJOS`); la saca de `GET jugadores`, que sigue
+  `PCT_MUY_LEJOS`), y "viven cerca y faltan" a los de menos de 7 km con
+  menos de 60%; en la tabla de todos llevan ⭐ y 😟; la saca de `GET jugadores`, que sigue
   cerrado a los managers, así que `lugares/*` nunca devuelve asistencia. La
   distancia es contexto: no toca el porcentaje ni el boletín (`lugares` es
   ruta ajena al boletín).

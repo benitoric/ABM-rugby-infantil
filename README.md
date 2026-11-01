@@ -86,8 +86,10 @@ pantalla de inicio" del teléfono y queda como una app más).
    la lista para copiar al grupo) y, solo para el cuerpo técnico, la
    **asistencia a los entrenamientos según la distancia** (los partidos no
    entran: ahí manda la convocatoria): los que vienen de lejos y no faltan
-   (más de 7 km y 75% o más, o más de 15 km y 70% o más) y
-   los que vienen de lejos y faltan (candidatos a un pool). La distancia es
+   (más de 7 km y 75% o más, o más de 15 km y 70% o más), los que vienen de
+   lejos y faltan (candidatos a un pool) y, al revés, los que viven cerca
+   (menos de 7 km) y faltan (menos de 60%); en la tabla de todos, ⭐ marca a
+   los primeros y 😟 a los últimos. La distancia es
    contexto: no cambia el porcentaje de asistencia ni el boletín.
 
 ## Arquitectura
