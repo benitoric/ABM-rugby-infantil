@@ -84,7 +84,8 @@ pantalla de inicio" del teléfono y queda como una app más).
    influencia del club y la distancia de cada barrio (en línea recta), los
    **pooles** (chicos que viven cerca entre sí, con el WhatsApp del tutor y
    la lista para copiar al grupo) y, solo para el cuerpo técnico, la
-   **asistencia según la distancia**: los que vienen de lejos y no faltan y
+   **asistencia a los entrenamientos según la distancia** (los partidos no
+   entran: ahí manda la convocatoria): los que vienen de lejos y no faltan y
    los que vienen de lejos y faltan (candidatos a un pool). La distancia es
    contexto: no cambia el porcentaje de asistencia ni el boletín.
 
