@@ -113,7 +113,7 @@ export default function App() {
       {tab === 'partidos' && (staff.alcance === 'completo' ? <Partidos /> : <PartidosManagers />)}
       {tab === 'viajes' && <Viajes yo={staff} />}
       {tab === 'staff' && <Staff yo={staff} />}
-      {tab === 'padron' && <Padron />}
+      {tab === 'padron' && <Padron yo={staff} />}
       {tab === 'avisos' && <div className="contenido"><Avisos /></div>}
     </div>
   )

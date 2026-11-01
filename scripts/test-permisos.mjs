@@ -477,6 +477,63 @@ async function main() {
   r = await pedir('auth/login', { method: 'POST', body: { email: ENTRENADOR, password: 'clave-nueva' } })
   esperar('con la que ya puede ingresar', r.codigo === 200, r)
 
+  // ---------- dónde viven: barrio libre, lugares que se aprenden ----------
+  console.log('Barrios y lugares:')
+  r = await pedir(`padron/${jugador.id}`, { method: 'PUT', token: M, body: {
+    dni: '55111333', tutor_nombre: 'Ana María', barrio: 'country Vilago',
+  } })
+  esperar('manager carga el barrio en el padrón',
+    r.codigo === 200 && r.datos.barrio === 'country Vilago' && r.datos.lugar_id === null, r)
+  r = await pedir('lugares', { token: M })
+  esperar('manager GET lugares', r.codigo === 200 && Array.isArray(r.datos.lugares)
+    && Number.isFinite(r.datos.club?.lat), r)
+  r = await pedir('lugares', { method: 'POST', token: M, body: {
+    nombre: 'Vilago', lat: -26.81, lng: -65.29, textos: ['country Vilago'],
+  } })
+  esperar('manager ubica un lugar nuevo', r.codigo === 200 && r.datos.alias.includes('vilago'), r)
+  const vilago = r.datos
+  r = await pedir(`padron/${jugador.id}`, { token: M })
+  esperar('el chico pendiente queda ubicado solo', r.datos.jugador.lugar_id === vilago.id, r.datos.jugador)
+  r = await pedir(`padron/${jugador.id}`, { method: 'PUT', token: M, body: { dni: '55111333' } })
+  esperar('un PUT sin el campo barrio no lo borra',
+    r.datos.barrio === 'country Vilago' && r.datos.lugar_id === vilago.id, r.datos)
+  r = await pedir('jugadores', { method: 'POST', token: E, body: {
+    nombre: 'Pedro', apellido: 'Gómez', barrio: 'B° Világo, Yerba Buena',
+  } })
+  esperar('otra forma de escribirlo se reconoce sola', r.codigo === 200 && r.datos.lugar_id === vilago.id, r)
+  const pedro = r.datos
+  r = await pedir('jugadores', { method: 'POST', token: E, body: {
+    nombre: 'Luis', apellido: 'Díaz', barrio: 'Las Lomitas',
+  } })
+  esperar('un barrio desconocido queda sin ubicar', r.codigo === 200 && r.datos.barrio === 'Las Lomitas' && r.datos.lugar_id === null, r)
+  const luis = r.datos
+  r = await pedir(`lugares/${vilago.id}/alias`, { method: 'POST', token: M, body: { texto: 'Lomitas' } })
+  esperar('sumar un alias resuelve a los pendientes', r.codigo === 200 && r.datos.alias.includes('lomitas'), r)
+  r = await pedir(`jugadores/${luis.id}/detalle`, { token: E })
+  esperar('la ficha trae el lugar con la distancia al club',
+    r.datos.jugador.lugar?.id === vilago.id && r.datos.jugador.lugar.distancia_km > 5, r.datos.jugador)
+  r = await pedir(`lugares/${vilago.id}`, { method: 'PUT', token: M, body: { lat: -26.8, lng: -65.3 } })
+  esperar('manager corrige el punto', r.codigo === 200 && r.datos.lat === -26.8, r)
+  r = await pedir('lugares', { method: 'POST', token: M, body: { nombre: 'Lejos', lat: 40, lng: 3 } })
+  esperar('un punto fuera del país se rechaza', r.codigo === 400 && r.datos.error === 'ubicacion_invalida', r)
+  r = await pedir('lugares/club', { method: 'PUT', token: M, body: { lat: -26.83, lng: -65.19 } })
+  esperar('manager no mueve el club', r.codigo === 403, r)
+  r = await pedir('lugares/club', { method: 'PUT', token: E, body: { lat: -26.83, lng: -65.19 } })
+  esperar('entrenador no mueve el club', r.codigo === 403, r)
+  r = await pedir('lugares/club', { method: 'PUT', token: T, body: { lat: -26.83, lng: -65.19 } })
+  esperar('el dueño mueve el club', r.codigo === 200, r)
+  r = await pedir('lugares', { token: E })
+  esperar('el club queda donde lo dejó', r.datos.club.lat === -26.83 && r.datos.club.guardada, r.datos.club)
+  r = await pedir(`lugares/${vilago.id}`, { method: 'DELETE', token: M })
+  esperar('manager no borra lugares', r.codigo === 403, r)
+  r = await pedir(`lugares/${vilago.id}`, { method: 'DELETE', token: T })
+  esperar('el dueño borra un lugar', r.codigo === 200, r)
+  r = await pedir(`padron/${pedro.id}`, { token: M })
+  esperar('sus chicos vuelven a quedar sin ubicar',
+    r.datos.jugador.lugar_id === null && r.datos.jugador.barrio === 'B° Világo, Yerba Buena', r.datos.jugador)
+  r = await pedir('jugadores', { token: M })
+  esperar('el manager sigue sin ver jugadores (ni la asistencia por zona)', r.codigo === 403, r)
+
   servidor.close()
   console.log(`\n${pruebas - fallas}/${pruebas} pruebas pasaron`)
   if (fallas) {

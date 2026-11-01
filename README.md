@@ -74,6 +74,19 @@ pantalla de inicio" del teléfono y queda como una app más).
    golpes, partidos (valoración de los bloques, rivales, equidad de tiempos,
    capitanías), lo administrativo (fichas médicas, DNI, viajes) y la calidad
    del registro (lo que faltó cargar). Las hojas se eligen antes de emitirlo.
+8. **Dónde viven** (Jugadores o Padrón → "🗺️ Dónde viven"): el barrio o la
+   localidad de cada chico —nunca el domicilio— cargado como texto libre en
+   la ficha o el padrón ("country Vilago", "B° Norte", "YB"). La app lo
+   normaliza y lo reconoce; la primera vez que aparece un barrio nuevo queda
+   en "Sin ubicar" y se ubica una sola vez en el mapa (el buscador de
+   OpenStreetMap propone dónde queda y se confirma o se corre el pin), y esa
+   forma de escribirlo queda aprendida. Muestra el mapa con la zona de
+   influencia del club y la distancia de cada barrio (en línea recta), los
+   **pooles** (chicos que viven cerca entre sí, con el WhatsApp del tutor y
+   la lista para copiar al grupo) y, solo para el cuerpo técnico, la
+   **asistencia según la distancia**: los que vienen de lejos y no faltan y
+   los que vienen de lejos y faltan (candidatos a un pool). La distancia es
+   contexto: no cambia el porcentaje de asistencia ni el boletín.
 
 ## Arquitectura
 
@@ -87,8 +100,9 @@ pantalla de inicio" del teléfono y queda como una app más).
   su contraseña. Las sesiones usan JWT (60 días).
 - **Roles**: entrenadores, preparadores físicos y la cabeza de división ven
   toda la app. Los managers (principal y asistente) solo entran a lo
-  administrativo: Padrón (contacto, DNI, ficha médica), la convocatoria de
-  los partidos (marcar quién va), Viajes y sus avisos;
+  administrativo: Padrón (contacto, DNI, ficha médica, barrio), el mapa de
+  barrios y los pooles, la convocatoria de los partidos (marcar quién va),
+  Viajes y sus avisos;
   la API les cierra todo lo demás (asistencia, evaluaciones, entrenamientos,
   partidos, lesiones, tests, boletines).
 

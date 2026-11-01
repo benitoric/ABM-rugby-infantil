@@ -1,26 +1,36 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
 import { edad, fechaCorta, fichaMedica, nombreCompleto } from '../helpers.js'
 import { base64ABlob } from '../archivos.js'
 import { irA, leerHash, suscribir } from '../navegacion.js'
 import Documentos from './Documentos.jsx'
 import { Telefono } from '../telefono.jsx'
+import { CampoBarrio } from './Jugadores.jsx'
+
+// El mapa (Leaflet) se baja recién al abrir "Dónde viven"
+const Zonas = lazy(() => import('./Zonas.jsx'))
+
+// #/padron/zonas/<vista> es "Dónde viven"; cualquier otro tramo, un chico
+const jugadorDeHash = (id) => (id && id !== 'zonas' ? id : null)
 
 // Padrón administrativo: la vista de los chicos para los managers. Datos de
 // contacto, DNI, fecha de nacimiento, ficha médica y los escaneos del DNI, y
 // nada más: la API (`padron/...`) no devuelve asistencia, evaluaciones,
 // lesiones, tests ni observaciones, así que acá no hay nada que ocultar.
-export default function Padron() {
+export default function Padron({ yo }) {
   const [lista, setLista] = useState(null)
   const [busqueda, setBusqueda] = useState('')
   const [mostrarBajas, setMostrarBajas] = useState(false)
-  const [jugadorId, setJugadorId] = useState(() => leerHash()[1] || null)
+  const [jugadorId, setJugadorId] = useState(() => jugadorDeHash(leerHash()[1]))
+  const [zonas, setZonas] = useState(() => leerHash()[1] === 'zonas')
   // Ampliación de la foto del DNI: se baja el archivo completo recién al tocarla
   const [foto, setFoto] = useState(null)
 
   useEffect(() => suscribir(() => {
     const [seccion, id] = leerHash()
-    if (seccion === 'padron') setJugadorId(id || null)
+    if (seccion !== 'padron') return
+    setJugadorId(jugadorDeHash(id))
+    setZonas(id === 'zonas')
   }), [])
 
   async function cargar() {
@@ -55,6 +65,14 @@ export default function Padron() {
       .filter((j) => !q || nombreCompleto(j).toLowerCase().includes(q) || (j.dni || '').includes(q))
   }, [lista, busqueda, mostrarBajas])
 
+  if (zonas) {
+    return (
+      <Suspense fallback={<div className="vacio">Cargando…</div>}>
+        <Zonas yo={yo} base="padron" />
+      </Suspense>
+    )
+  }
+
   if (jugadorId) {
     return (
       <DetallePadron
@@ -74,10 +92,13 @@ export default function Padron() {
 
   return (
     <div className="contenido">
-      <h2>Padrón</h2>
+      <div className="fila entre">
+        <h2>Padrón</h2>
+        <button className="btn sec" onClick={() => irA('padron', 'zonas')}>🗺️ Dónde viven y pooles</button>
+      </div>
       <p className="suave">
         Datos administrativos de los chicos: contacto del tutor, DNI, fecha de
-        nacimiento y ficha médica. Tocá a uno para editarlo o cargar el escaneo del DNI.
+        nacimiento, ficha médica y barrio. Tocá a uno para editarlo o cargar el escaneo del DNI.
       </p>
 
       <div className="stat-grid">
@@ -220,6 +241,11 @@ function DetallePadron({ jugadorId, onVolver, onCambio }) {
           Tutor: {j.tutor_nombre || '—'}
           {j.tutor_telefono && <> · <Telefono numero={j.tutor_telefono} /></>}
         </p>
+        <p className="suave" style={{ marginTop: 4 }}>
+          📍 {j.barrio
+            ? <>{j.barrio}{!j.lugar_id && <span className="mini"> (sin ubicar en el mapa todavía)</span>}</>
+            : 'Sin barrio cargado'}
+        </p>
       </div>
 
       {editando && (
@@ -253,6 +279,7 @@ function FormPadron({ inicial, onCerrar, onGuardado }) {
     tutor_telefono: inicial.tutor_telefono || '',
     ficha_medica_vigente: !!inicial.ficha_medica_vigente,
     ficha_medica_vence: inicial.ficha_medica_vence || '',
+    barrio: inicial.barrio || '',
   })
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
@@ -296,6 +323,7 @@ function FormPadron({ inicial, onCerrar, onGuardado }) {
           <label>Teléfono del tutor</label>
           <input inputMode="tel" {...campo('tutor_telefono')} />
         </div>
+        <CampoBarrio campo={campo} />
       </div>
 
       <div className="grid2">

@@ -14,6 +14,20 @@ create table if not exists staff (
   created_at timestamptz not null default now()
 );
 
+-- Barrios y localidades donde viven los chicos (nunca el domicilio), ya
+-- ubicados en el mapa: el centro aproximado de cada uno. Ver src/lugares.js y
+-- server/lugares.js. Se crean al confirmar dónde queda un barrio cargado como
+-- texto libre en la ficha o el padrón.
+create table if not exists lugares (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null,
+  lat double precision not null,
+  lng double precision not null,
+  creado_por text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists jugadores (
   id uuid primary key default gen_random_uuid(),
   nombre text not null,
@@ -36,8 +50,20 @@ create table if not exists jugadores (
   ficha_medica_vigente boolean not null default false,
   ficha_medica_vence date,
   observaciones text,
+  -- Barrio o localidad tal como se cargó ("country Vilago", "B° Norte") y el
+  -- lugar reconocido a partir de ese texto (null = todavía sin ubicar)
+  barrio text,
+  lugar_id uuid references lugares(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+-- Las formas de escribir cada lugar que la app ya aprendió: el texto
+-- normalizado (sin tildes, mayúsculas ni "barrio"/"country") → el lugar. Cada
+-- confirmación suma la suya, así el próximo que lo escriba igual se ubica solo.
+create table if not exists lugares_alias (
+  clave text primary key,
+  lugar_id uuid not null references lugares(id) on delete cascade
 );
 
 -- Historial de estado de cada jugador: una fila cada vez que cambia (alta,

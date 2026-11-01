@@ -94,7 +94,8 @@ export async function migracionesAplicadas(pool) {
         and to_regclass('public.procesos_evaluacion') is not null
         and to_regclass('public.cortes_tests') is not null
         and to_regclass('public.ajustes') is not null
-        and to_regclass('public.jugadores_historial_estado') is not null as existe`)
+        and to_regclass('public.jugadores_historial_estado') is not null
+        and to_regclass('public.lugares_alias') is not null as existe`)
   if (!t.existe) return false
   // Migraciones de datos, sin tabla ni columna que las delate: dejan su
   // marca en `ajustes`
@@ -547,6 +548,25 @@ export async function migrar(pool) {
            'migracion'
     from jugadores j
     where not exists (select 1 from jugadores_historial_estado h where h.jugador_id = j.id)`)
+  // Dónde viven los chicos: barrio o localidad en texto libre y el lugar
+  // reconocido (ver db/schema.sql). Que exista lugares_alias es el testigo
+  // más nuevo, así que va última.
+  await pool.query(`create table if not exists lugares (
+    id uuid primary key default gen_random_uuid(),
+    nombre text not null,
+    lat double precision not null,
+    lng double precision not null,
+    creado_por text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  )`)
+  await pool.query('alter table jugadores add column if not exists barrio text')
+  await pool.query(`alter table jugadores add column if not exists lugar_id uuid
+    references lugares(id) on delete set null`)
+  await pool.query(`create table if not exists lugares_alias (
+    clave text primary key,
+    lugar_id uuid not null references lugares(id) on delete cascade
+  )`)
 }
 
 

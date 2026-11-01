@@ -5,6 +5,7 @@ import {
   puestoPrincipal, tipoJugador, APTITUDES, AREAS, ESTADOS, PUESTOS,
 } from '../helpers.js'
 import { FormJugador } from './Jugadores.jsx'
+import { textoKm } from '../lugares.js'
 import { Telefono } from '../telefono.jsx'
 import { FormEvaluacion, TarjetaEvaluacion } from './Evaluacion.jsx'
 import Documentos from './Documentos.jsx'
@@ -170,6 +171,11 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
           <p className="suave" style={{ marginTop: 10 }}>
             Tutor: {j.tutor_nombre || '—'}
             {j.tutor_telefono && <> · <Telefono numero={j.tutor_telefono} /></>}
+          </p>
+        )}
+        {j.barrio && (
+          <p className="suave" style={{ marginTop: 6 }}>
+            📍 {j.lugar ? `${j.lugar.nombre} · a ${textoKm(j.lugar.distancia_km)} del club` : `${j.barrio} (sin ubicar en el mapa todavía)`}
           </p>
         )}
         {j.observaciones && <p className="suave" style={{ marginTop: 6 }}>📝 {j.observaciones}</p>}

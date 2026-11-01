@@ -3,6 +3,7 @@ import { sqlLesionadoEnFecha, sqlEnPlantel } from './asistencia-sql.js'
 import { autenticar, crearToken, hashClave, compararClave } from './auth.js'
 import { perfil, puedeAdministrar, rutaAdministrativa, validarRol } from './permisos.js'
 import { registrarEstado, registrarEstadoActual } from './historial-estado.js'
+import { guardarBarrio } from './lugares.js'
 // El catálogo de la evaluación es compartido con el frontend: así el promedio
 // de juego se calcula igual en los dos lados (src/evaluacion.js no toca el DOM)
 import { promedioDeAreas, GRUPOS } from '../src/evaluacion.js'
@@ -21,7 +22,7 @@ import {
 
 const COLS_JUGADOR = `id, nombre, apellido, fecha_nacimiento::text as fecha_nacimiento,
   dni, posicion, puestos, puesto_principal, aptitudes, estado, tutor_nombre, tutor_telefono, ficha_medica_vigente,
-  ficha_medica_vence::text as ficha_medica_vence, observaciones`
+  ficha_medica_vence::text as ficha_medica_vence, observaciones, barrio, lugar_id`
 
 const APTITUDES = ['conduccion', 'penetracion', 'definicion']
 
@@ -1066,7 +1067,10 @@ async function enrutar(metodo, p, b, req, url) {
            ficha_medica_vigente, ficha_medica_vence, observaciones)
          values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,$9,$10,$11,$12,$13,$14) returning ${COLS_JUGADOR}`, d)
       await registrarEstado(filas[0].id, filas[0].estado, yo.email)
-      return filas[0]
+      if (!b || !('barrio' in b)) return filas[0]
+      await guardarBarrio(filas[0].id, b)
+      const [conBarrio] = await query(`select ${COLS_JUGADOR} from jugadores where id = $1`, [filas[0].id])
+      return conBarrio
     }
     if (metodo === 'PUT' && p[1]) {
       const d = datosJugador(b)
@@ -1076,8 +1080,12 @@ async function enrutar(metodo, p, b, req, url) {
            estado=$9, tutor_nombre=$10, tutor_telefono=$11,
            ficha_medica_vigente=$12, ficha_medica_vence=$13, observaciones=$14, updated_at=now()
          where id=$15 returning ${COLS_JUGADOR}`, [...d, p[1]])
-      if (filas[0]) await registrarEstado(filas[0].id, filas[0].estado, yo.email)
-      return filas[0]
+      if (!filas[0]) return filas[0]
+      await registrarEstado(filas[0].id, filas[0].estado, yo.email)
+      if (!b || !('barrio' in b)) return filas[0]
+      await guardarBarrio(filas[0].id, b)
+      const [conBarrio] = await query(`select ${COLS_JUGADOR} from jugadores where id = $1`, [filas[0].id])
+      return conBarrio
     }
     if (metodo === 'DELETE' && p[1]) {
       await query('delete from jugadores where id = $1', [p[1]])
@@ -1119,6 +1127,13 @@ async function enrutar(metodo, p, b, req, url) {
     if (metodo === 'GET' && p[1] && p[2] === 'detalle') {
       const [jugador] = await query(`select ${COLS_JUGADOR} from jugadores where id = $1`, [p[1]])
       if (!jugador) throw { codigo: 404, error: 'no_existe' }
+      // Dónde vive, para mostrarlo en la ficha con la distancia al club
+      if (jugador.lugar_id) {
+        const { ubicacionClub } = await import('./lugares.js')
+        const { distanciaKm } = await import('../src/lugares.js')
+        const [l] = await query('select id, nombre, lat, lng from lugares where id = $1', [jugador.lugar_id])
+        if (l) jugador.lugar = { ...l, distancia_km: distanciaKm(l, await ubicacionClub()) }
+      }
       const seguimientos = await query(
         `select ${COLS_SEGUIMIENTO} from seguimientos where jugador_id = $1
          order by fecha desc, created_at desc`, [p[1]])
@@ -2798,6 +2813,13 @@ async function enrutar(metodo, p, b, req, url) {
   if (p[0] === 'viajes') {
     const { enrutarViajes } = await import('./viajes.js')
     return enrutarViajes({ metodo, p, b, yo, admin: puedeAdministrar(yo) })
+  }
+
+  // ---------- dónde viven los chicos (barrios, mapa y pooles) ----------
+  // Todo lo que empieza con `lugares` vive en server/lugares.js
+  if (p[0] === 'lugares') {
+    const { enrutarLugares } = await import('./lugares.js')
+    return enrutarLugares({ metodo, p, b, yo, admin: puedeAdministrar(yo) })
   }
 
   // ---------- padrón administrativo (lo que ven los managers) ----------

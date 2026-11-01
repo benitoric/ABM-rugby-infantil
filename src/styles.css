@@ -1536,3 +1536,71 @@ details.tarjeta summary {
 /* Ranking del reporte de tests: números alineados, nombre a la izquierda */
 .grafico-tabla.ranking td, .grafico-tabla.ranking th { white-space: nowrap; text-align: center; }
 .grafico-tabla.ranking td:nth-child(2), .grafico-tabla.ranking th:nth-child(2) { text-align: left; white-space: normal; }
+
+/* ---------- dónde viven: mapa, zonas y pooles ---------- */
+/* El mapa arma su propio contexto de apilado: las capas de Leaflet (z-index
+   400 y más) no tapan los modales de la app */
+.mapa {
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  border-radius: var(--radio);
+  border: 1px solid var(--borde);
+  overflow: hidden;
+  background: #e8ecf2;
+}
+.mapa-club, .mapa-pin, .mapa-candidato {
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  line-height: 1;
+}
+.mapa-club { font-size: 1.5rem; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)); }
+.mapa-pin { font-size: 1.9rem; transform: translate(-50%, -95%); cursor: grab; }
+.mapa-candidato {
+  background: var(--dorado);
+  color: var(--texto);
+  border: 2px solid var(--primario-oscuro);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.barra-zona {
+  display: grid;
+  grid-template-columns: minmax(90px, 30%) 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 0;
+  background: none;
+  border: 0;
+  text-align: left;
+  color: inherit;
+}
+.barra-zona-nombre { font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barra-zona-fondo { height: 10px; background: var(--celeste); border-radius: 5px; overflow: hidden; }
+.barra-zona-relleno { display: block; height: 100%; background: var(--primario); border-radius: 5px; }
+.barra-zona-dato { font-size: 0.8rem; font-weight: 700; white-space: nowrap; }
+.barra-zona-km { min-width: 44px; text-align: right; }
+.lista-zona { list-style: none; margin-top: 6px; }
+.lista-zona li { padding: 6px 0; border-top: 1px solid var(--borde); }
+.lista-zona li:first-child { border-top: 0; }
+.tabla-zona { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-top: 6px; }
+.tabla-zona th { text-align: left; font-size: 0.72rem; color: var(--texto-suave); text-transform: uppercase; padding: 4px; }
+.tabla-zona td { padding: 6px 4px; border-top: 1px solid var(--borde); }
+.candidatos { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.candidato {
+  text-align: left;
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 6px 8px;
+  color: inherit;
+}
+.candidato.activo { border-color: var(--primario); background: var(--celeste); }
+.cargar-barrio { padding: 6px 0; border-top: 1px solid var(--borde); flex-wrap: wrap; }
+.cargar-barrio input { flex: 1 1 160px; border: 1px solid var(--borde); border-radius: 8px; padding: 6px 8px; }
