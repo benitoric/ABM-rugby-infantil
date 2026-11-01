@@ -4,7 +4,7 @@ import { compartirArchivo } from '../pdf.js'
 import {
   anteriorDelTest, contraElPromedio, diaCorto, evolucionDelTest, generarBoletinPDF,
   mensajeDelMes, mesCorto, mesSiguiente, nombreArchivoBoletin, nombreCortoDelMes,
-  nombreDelJugador, nombreDelTest, puestosDelJugador, textoLesion, tituloDelMes,
+  nombreDelJugador, nombreDelTest, puestosDelJugador, puestosJugados, textoLesion, tituloDelMes,
   ultimosMeses, valorDelTest,
 } from '../boletin.js'
 
@@ -244,8 +244,7 @@ function Hoja({ b, mes, division }) {
             ['Tiempos en cancha', b.juego.tiempos_posibles
               ? `${b.juego.tiempos_jugados} de ${b.juego.tiempos_posibles}`
               : b.juego.tiempos_jugados],
-            ['Puestos de los que jugaste', b.juego.camisetas.length
-              ? b.juego.camisetas.map((c) => `${c.puesto} (${c.tiempos})`).join(' · ') : '—'],
+            ['Puestos de los que jugaste', puestosJugados(b).join(' · ') || '—'],
             ['Prestado al rival', b.juego.prestado === 0 ? 'ninguna vez'
               : b.juego.prestado === 1 ? '1 vez' : `${b.juego.prestado} veces`],
             ['Capitán en el año', b.juego.capitanias_anio],
