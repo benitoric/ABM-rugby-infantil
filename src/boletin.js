@@ -6,7 +6,7 @@
 // Entra entera en una carilla A4.
 
 import { anchoTexto, nuevoPDF, partirTexto } from './pdf.js'
-import { PUESTOS } from './helpers.js'
+import { PUESTOS, puestoFormacion } from './helpers.js'
 import { TESTS_POR_VALUE, conUnidad, diferencia, progreso } from './tests.js'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
@@ -62,6 +62,24 @@ export function puestosDelJugador(b) {
     : (propios.includes(b.jugador.puesto_principal) ? b.jugador.puesto_principal : null)
   const otros = propios.filter((v) => v !== principal).map(nombre)
   return { principal: principal ? nombre(principal) : null, otros }
+}
+
+// Puestos en los que jugó en el mes, con los tiempos de cada uno, del que más
+// jugó al que menos. Los tiempos llegan por número de camiseta y acá se pasan
+// al nombre del puesto, sumando las camisetas que son el mismo: el 1 y el 3
+// son pilar, el 4 y el 5 segunda línea, el 11 y el 14 wing, el 12 y el 13
+// centro. Devuelve los textos sueltos ("Pilar (3)") para que cada pantalla
+// los junte como le quede mejor.
+export function puestosJugados(b) {
+  const tiempos = new Map()
+  for (const c of b.juego.camisetas) {
+    const puesto = puestoFormacion(Number(c.puesto))?.puesto
+    const nombre = PUESTOS.find((p) => p.value === puesto)?.label || `Camiseta ${c.puesto}`
+    tiempos.set(nombre, (tiempos.get(nombre) || 0) + c.tiempos)
+  }
+  return [...tiempos]
+    .sort((a, b) => b[1] - a[1])
+    .map(([nombre, t]) => `${nombre} (${t})`)
 }
 
 // Aclaración de los eventos que no cuentan porque se los perdió lesionado
@@ -394,24 +412,41 @@ function medallas(doc, x, y, ancho, lista) {
   return cy + alto
 }
 
+// Rótulo a la izquierda y valor a la derecha. Un valor que es una lista
+// (los puestos jugados) se reparte en renglones sin partir ningún elemento,
+// para que no se pise con el rótulo.
 function lista(doc, x, y, ancho, filas) {
-  filas.forEach((f, i) => {
-    const yf = y + i * 12
-    doc.texto(f[0], x, yf, { tam: 8.5, color: GRIS })
-    doc.texto(f[1], x + ancho, yf, { tam: 8.5, negrita: true, color: TINTA, alinear: 'der' })
-  })
-  return y + filas.length * 12
+  let yf = y
+  for (const [rotulo, valor] of filas) {
+    doc.texto(rotulo, x, yf, { tam: 8.5, color: GRIS })
+    const lineas = Array.isArray(valor)
+      ? empacar(valor, ancho - anchoTexto(rotulo, 8.5) - 12, 8.5)
+      : [valor]
+    lineas.forEach((l, i) => doc.texto(l, x + ancho, yf + i * 11, {
+      tam: 8.5, negrita: true, color: TINTA, alinear: 'der',
+    }))
+    yf += 12 + (lineas.length - 1) * 11
+  }
+  return yf
+}
+
+// Junta los elementos de a " · " en renglones que entren en `ancho`
+function empacar(items, ancho, tam) {
+  const lineas = []
+  for (const item of items) {
+    const prueba = lineas.length ? `${lineas.at(-1)} · ${item}` : item
+    if (lineas.length && anchoTexto(prueba, tam, true) <= ancho) lineas[lineas.length - 1] = prueba
+    else lineas.push(item)
+  }
+  return lineas.length ? lineas : ['—']
 }
 
 function filasDeJuego(b) {
   const j = b.juego
-  const camisetas = j.camisetas.length
-    ? j.camisetas.map((c) => `${c.puesto} (${c.tiempos})`).join(' · ')
-    : '—'
   return [
     ['Partidos jugados', String(j.partidos_jugados)],
     ['Tiempos en cancha', j.tiempos_posibles ? `${j.tiempos_jugados} de ${j.tiempos_posibles}` : String(j.tiempos_jugados)],
-    ['Puestos de los que jugaste', camisetas],
+    ['Puestos de los que jugaste', puestosJugados(b)],
     ['Jugaste prestado al rival', j.prestado === 0 ? 'ninguna vez'
       : j.prestado === 1 ? '1 vez' : `${j.prestado} veces`],
     ['Veces capitán en el año', String(j.capitanias_anio)],
