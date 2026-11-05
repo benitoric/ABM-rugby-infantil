@@ -3,6 +3,7 @@ import { sqlLesionadoEnFecha, sqlEnPlantel } from './asistencia-sql.js'
 import { autenticar, crearToken, hashClave, compararClave } from './auth.js'
 import { perfil, puedeAdministrar, rutaAdministrativa, validarRol } from './permisos.js'
 import { registrarEstado, registrarEstadoActual } from './historial-estado.js'
+import { guardarTelefono } from './padron.js'
 import { guardarBarrio } from './lugares.js'
 // El catálogo de la evaluación es compartido con el frontend: así el promedio
 // de juego se calcula igual en los dos lados (src/evaluacion.js no toca el DOM)
@@ -22,7 +23,7 @@ import {
 
 const COLS_JUGADOR = `id, nombre, apellido, fecha_nacimiento::text as fecha_nacimiento,
   dni, posicion, puestos, puesto_principal, aptitudes, estado, tutor_nombre, tutor_telefono, ficha_medica_vigente,
-  ficha_medica_vence::text as ficha_medica_vence, observaciones, barrio, lugar_id`
+  ficha_medica_vence::text as ficha_medica_vence, observaciones, barrio, lugar_id, telefono`
 
 const APTITUDES = ['conduccion', 'penetracion', 'definicion']
 
@@ -937,6 +938,14 @@ async function enrutar(metodo, p, b, req, url) {
     return { ok: true }
   }
 
+  // ---------- encuesta anónima: la pantalla del chico (sin sesión) ----------
+  // El token del link es la credencial y sirve una sola vez
+  // (server/encuestas.js). Los chicos no tienen usuario en la app.
+  if (p[0] === 'encuesta-publica') {
+    const { enrutarEncuestaPublica } = await import('./encuestas.js')
+    return enrutarEncuestaPublica({ metodo, p, b })
+  }
+
   // ---------- todo lo demás requiere staff activo ----------
   const yo = await autenticar(req)
 
@@ -950,6 +959,16 @@ async function enrutar(metodo, p, b, req, url) {
   }
 
   if (p[0] === 'me') return perfil(yo)
+
+  // ---------- encuesta anónima: administración ----------
+  // Crear, editar las preguntas, mandar los links, seguir quién contestó y
+  // ver los resultados: solo la cabeza de división y el dueño. Los pedidos
+  // de ayuda, solo la cabeza de división (lo controla server/encuestas.js).
+  if (p[0] === 'encuestas') {
+    if (!puedeAdministrar(yo)) throw { codigo: 403, error: 'solo_cabeza' }
+    const { enrutarEncuestas } = await import('./encuestas.js')
+    return enrutarEncuestas({ metodo, p, b, yo })
+  }
 
   // ---------- informe de gestión ----------
   // `informe?desde=YYYY-MM-DD&hasta=YYYY-MM-DD`: todos los números del
@@ -1067,10 +1086,10 @@ async function enrutar(metodo, p, b, req, url) {
            ficha_medica_vigente, ficha_medica_vence, observaciones)
          values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,$9,$10,$11,$12,$13,$14) returning ${COLS_JUGADOR}`, d)
       await registrarEstado(filas[0].id, filas[0].estado, yo.email)
-      if (!b || !('barrio' in b)) return filas[0]
-      await guardarBarrio(filas[0].id, b)
-      const [conBarrio] = await query(`select ${COLS_JUGADOR} from jugadores where id = $1`, [filas[0].id])
-      return conBarrio
+      await guardarTelefono(filas[0].id, b)
+      if (b && 'barrio' in b) await guardarBarrio(filas[0].id, b)
+      const [completo] = await query(`select ${COLS_JUGADOR} from jugadores where id = $1`, [filas[0].id])
+      return completo
     }
     if (metodo === 'PUT' && p[1]) {
       const d = datosJugador(b)
@@ -1082,10 +1101,10 @@ async function enrutar(metodo, p, b, req, url) {
          where id=$15 returning ${COLS_JUGADOR}`, [...d, p[1]])
       if (!filas[0]) return filas[0]
       await registrarEstado(filas[0].id, filas[0].estado, yo.email)
-      if (!b || !('barrio' in b)) return filas[0]
-      await guardarBarrio(filas[0].id, b)
-      const [conBarrio] = await query(`select ${COLS_JUGADOR} from jugadores where id = $1`, [filas[0].id])
-      return conBarrio
+      await guardarTelefono(filas[0].id, b)
+      if (b && 'barrio' in b) await guardarBarrio(filas[0].id, b)
+      const [completo] = await query(`select ${COLS_JUGADOR} from jugadores where id = $1`, [filas[0].id])
+      return completo
     }
     if (metodo === 'DELETE' && p[1]) {
       await query('delete from jugadores where id = $1', [p[1]])

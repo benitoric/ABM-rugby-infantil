@@ -173,6 +173,11 @@ export default function Ficha({ jugadorId, yo, evaluarAlAbrir = false, revisar =
             {j.tutor_telefono && <> · <Telefono numero={j.tutor_telefono} /></>}
           </p>
         )}
+        {j.telefono && (
+          <p className="suave" style={{ marginTop: 6 }}>
+            Celular del chico: <Telefono numero={j.telefono} />
+          </p>
+        )}
         {j.barrio && (
           <p className="suave" style={{ marginTop: 6 }}>
             📍 {j.lugar ? `${j.lugar.nombre} · a ${textoKm(j.lugar.distancia_km)} del club` : `${j.barrio} (sin ubicar en el mapa todavía)`}

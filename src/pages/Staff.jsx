@@ -4,12 +4,17 @@ import { ROLES_STAFF, nombreStaff } from '../helpers.js'
 import { irA, leerHash, suscribir } from '../navegacion.js'
 import Avisos from './Avisos.jsx'
 import Informe from './Informe.jsx'
+import Encuestas from './Encuestas.jsx'
 
-// La subvista vive en el hash (#/staff/informe), como en el resto de la app
-const subDeHash = () => leerHash()[1] || null
+// La subvista vive en el hash (#/staff/informe, #/staff/encuestas/<id>/<vista>),
+// como en el resto de la app
+const subDeHash = () => {
+  const [, sub = null, id = null, vista = null] = leerHash()
+  return { sub, id, vista }
+}
 
 export default function Staff({ yo }) {
-  const [sub, setSub] = useState(subDeHash)
+  const [{ sub, id: subId, vista: subVista }, setSub] = useState(subDeHash)
   useEffect(() => suscribir(() => setSub(subDeHash())), [])
 
   const [staff, setStaff] = useState([])
@@ -114,6 +119,9 @@ export default function Staff({ yo }) {
   if (sub === 'informe' && yo.admin) {
     return <Informe yo={yo} onVolver={() => irA('staff')} />
   }
+  if (sub === 'encuestas' && yo.admin) {
+    return <Encuestas yo={yo} id={subId} vista={subVista} onVolver={() => irA('staff')} />
+  }
 
   return (
     <div className="contenido">
@@ -130,6 +138,21 @@ export default function Staff({ yo }) {
               </div>
             </div>
             <button className="btn sec chico" onClick={() => irA('staff', 'informe')}>Abrir</button>
+          </div>
+        </div>
+      )}
+
+      {yo.admin && (
+        <div className="tarjeta">
+          <div className="fila entre">
+            <div className="crece">
+              <div style={{ fontWeight: 600 }}>📝 Encuesta a los jugadores</div>
+              <div className="mini">
+                Anónima, desde el celular de cada chico con un link personal. Los
+                resultados se suman al informe de gestión.
+              </div>
+            </div>
+            <button className="btn sec chico" onClick={() => irA('staff', 'encuestas')}>Abrir</button>
           </div>
         </div>
       )}

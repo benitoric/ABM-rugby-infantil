@@ -48,10 +48,17 @@ const tabDeHash = (tabs) => {
 export default function App() {
   const [staff, setStaff] = useState(undefined) // undefined = cargando, null = sin sesión
   const versionNueva = useVersionNueva()
-  const [tab, setTab] = useState(() => tabDeHash(TABS_COMPLETO))
+  const [tabElegida, setTab] = useState(() => tabDeHash(TABS_COMPLETO))
   const TABS = tabsDe(staff)
+  // Mientras se lee la sesión no se sabe qué pestañas corresponden: se espera
+  // a tenerla. Y en el primer render con la sesión ya cargada, una pestaña
+  // que este rol no tiene se resuelve ahí mismo: si no, se montaba por un
+  // instante la pantalla equivocada (el Padrón leía el hash de otra sección
+  // como si fuera un jugador y pedía, por ejemplo, padron/encuestas).
+  const tab = TABS.some((t) => t.id === tabElegida) ? tabElegida : tabDeHash(TABS)
 
   useEffect(() => {
+    if (staff === undefined) return
     setTab(tabDeHash(TABS))
     return suscribir(() => setTab(tabDeHash(TABS)))
   }, [staff])

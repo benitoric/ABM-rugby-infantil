@@ -14,6 +14,9 @@ function aHash(partes) {
 }
 
 function guardar(hash) {
+  // El link de una encuesta no es una posición de la app: si alguien lo abre
+  // en su celular, la app tiene que seguir abriendo donde estaba
+  if (hash.startsWith('#/encuesta/')) return
   try { localStorage.setItem(CLAVE_NAV, hash) } catch { /* modo privado */ }
 }
 

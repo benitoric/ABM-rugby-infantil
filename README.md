@@ -91,6 +91,17 @@ pantalla de inicio" del teléfono y queda como una app más).
    (menos de 7 km) y faltan (menos de 70%); en la tabla de todos, ⭐ marca a
    los primeros y 😟 a los últimos. La distancia es
    contexto: no cambia el porcentaje de asistencia ni el boletín.
+9. **Encuesta anónima a los jugadores** (Staff → "Encuesta a los jugadores",
+   solo para la cabeza de división): los chicos la contestan desde el celular,
+   el suyo o el del tutor, con un link personal de un solo uso que se manda
+   por WhatsApp desde la app. Arranca con 21 preguntas pensadas para chicos
+   de 11 y 12 años (disfrute y ganas de seguir, aprender, trato y justicia,
+   grupo, cuerpo y seguridad, organización y tres preguntas libres), que se
+   pueden cambiar o ampliar antes de la primera respuesta. Las respuestas se
+   guardan sin el nombre ni la hora, y los resultados se ven recién con la
+   encuesta cerrada. Al final, el chico puede pedir que alguien del club hable
+   con él: ese pedido le llega aparte, con el nombre, a la cabeza de división.
+   Los resultados se suman al informe de gestión.
 
 ## Arquitectura
 

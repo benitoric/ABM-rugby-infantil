@@ -10,6 +10,7 @@
 // deja documentado.
 import { createServer } from 'http'
 import { handle } from '../server/router.js'
+import { query } from '../server/db.js'
 
 process.env.PGLITE = process.env.PGLITE || '1'
 
@@ -144,6 +145,8 @@ async function main() {
     ['GET', 'boletin'],
     ['GET', `boletin/${jugador.id}`],
     ['GET', 'informe?desde=2026-01-01&hasta=2026-03-31'],
+    ['GET', 'encuestas'],
+    ['POST', 'encuestas', { titulo: 'X' }],
     ['POST', 'evaluaciones', { jugador_id: jugador.id, valores: {} }],
     ['POST', 'seguimientos', { jugador_id: jugador.id, area: 'tecnica' }],
     ['POST', 'tests', { jugador_id: jugador.id }],
@@ -447,6 +450,141 @@ async function main() {
   r = await pedir(`informe?desde=${hoyISO}&hasta=${hoyISO}`, { token: T })
   esperar('la reincorporación también queda registrada',
     r.datos.plantel.reincorporaciones.length === 1 && r.datos.plantel.activos_cierre === 1, r.datos?.plantel)
+
+  // ---------- encuesta anónima a los jugadores ----------
+  console.log('Encuesta a los jugadores:')
+  r = await pedir('staff', { method: 'POST', token: T, body: { email: 'cabeza@prueba.test', nombre: 'Cabeza', rol: 'Cabeza de división' } })
+  esperar('el dueño suma una cabeza de división', r.codigo === 200, r)
+  const C = (await ingresar('cabeza@prueba.test')).token
+  r = await pedir('encuestas', { token: E })
+  esperar('el entrenador no ve las encuestas', r.codigo === 403 && r.datos.error === 'solo_cabeza', r)
+  // Más chicos, para llegar al mínimo de respuestas que muestra resultados
+  const chicos = [jugador.id]
+  for (const [n, tel] of [['Uno', '381 15 400 0001'], ['Dos', null], ['Tres', null], ['Cuatro', null], ['Cinco', null]]) {
+    r = await pedir('jugadores', { method: 'POST', token: T, body: { nombre: n, apellido: 'Encuesta', telefono: tel, tutor_telefono: '3815550000' } })
+    chicos.push(r.datos.id)
+  }
+  esperar('el celular del chico se guarda en la ficha', r.codigo === 200 && 'telefono' in r.datos, r.datos)
+  r = await pedir(`jugadores/${chicos[1]}/detalle`, { token: T })
+  esperar('la ficha devuelve el celular del chico', r.datos.jugador.telefono === '381 15 400 0001', r.datos.jugador)
+  r = await pedir(`jugadores/${chicos[1]}`, { method: 'PUT', token: T, body: { nombre: 'Uno', apellido: 'Encuesta' } })
+  r = await pedir(`jugadores/${chicos[1]}/detalle`, { token: T })
+  esperar('editar sin mandar el celular no lo borra', r.datos.jugador.telefono === '381 15 400 0001', r.datos.jugador)
+  r = await pedir(`padron/${chicos[2]}`, { method: 'PUT', token: M, body: { telefono: '3814000002' } })
+  esperar('el manager carga el celular del chico en el padrón', r.codigo === 200 && r.datos.telefono === '3814000002', r.datos)
+  r = await pedir('viajes/plantel', { token: M })
+  esperar('el plantel para viajes no trae el celular del chico', r.datos.every((j) => !('telefono' in j)), Object.keys(r.datos[0] || {}))
+
+  const cierra = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10)
+  r = await pedir('encuestas', { method: 'POST', token: T, body: { titulo: 'Fin de año', cierra } })
+  esperar('el dueño crea una encuesta con las preguntas de siempre',
+    r.codigo === 200 && r.datos.encuesta.estado === 'borrador' && r.datos.encuesta.preguntas.length === 22 && r.datos.editable, r.datos)
+  const enc = r.datos.encuesta
+  r = await pedir(`encuestas/${enc.id}`, { method: 'PUT', token: T, body: { preguntas: [] } })
+  esperar('una encuesta sin preguntas se rechaza', r.codigo === 400 && r.datos.error === 'preguntas_invalidas', r)
+  const preguntas = enc.preguntas
+    .filter((q) => q.clave !== 'mensaje')
+    .map((q) => (q.clave === 'ganas' ? { ...q, texto: 'Tengo ganas de venir al club.' } : q))
+  preguntas.push({ clave: 'x_comida', bloque: 'Organización', tipo: 'opciones', texto: '¿Qué preferís en el tercer tiempo?', opciones: ['Pizza', 'Sándwiches'], obligatoria: true })
+  r = await pedir(`encuestas/${enc.id}`, { method: 'PUT', token: T, body: { preguntas } })
+  esperar('se cambia, se saca y se suma una pregunta',
+    r.codigo === 200 && r.datos.encuesta.preguntas.length === 22
+      && r.datos.encuesta.preguntas.find((q) => q.clave === 'ganas').texto === 'Tengo ganas de venir al club.'
+      && !r.datos.encuesta.preguntas.some((q) => q.clave === 'mensaje'), r.datos.encuesta?.preguntas?.length)
+  r = await pedir('encuesta-publica/token-que-no-existe-123')
+  esperar('un link inventado no abre nada', r.codigo === 404 && r.datos.error === 'link_invalido', r)
+  r = await pedir(`encuestas/${enc.id}/abrir`, { method: 'POST', token: T })
+  esperar('al abrirla se arma un link por chico activo',
+    r.codigo === 200 && r.datos.encuesta.estado === 'abierta' && r.datos.links.length === chicos.length
+      && r.datos.links.every((l) => l.token && !l.usado), r.datos.links?.length)
+  const tokens = Object.fromEntries(r.datos.links.map((l) => [l.jugador_id, l.token]))
+  r = await pedir(`encuesta-publica/${tokens[chicos[0]]}`)
+  esperar('el chico abre su link sin sesión', r.codigo === 200 && r.datos.estado === 'abierta' && r.datos.preguntas.length === 22, r.datos)
+  esperar('la encuesta pública no dice de quién es el link', !JSON.stringify(r.datos).includes('Pérez') && !JSON.stringify(r.datos).includes('Juan'), r.datos)
+  r = await pedir(`encuesta-publica/${tokens[chicos[0]]}`, { method: 'POST', body: { respuestas: { ganas: 4 } } })
+  esperar('sin las obligatorias no se manda', r.codigo === 400 && r.datos.error === 'faltan_respuestas', r)
+  const respuesta = (k) => {
+    const res = {}
+    for (const q of preguntas) {
+      if (q.tipo === 'frecuencia') res[q.clave] = 1 + ((k + q.clave.length) % 4)
+      else if (q.tipo === 'si_no') res[q.clave] = k % 2 ? 'si' : 'no'
+      else if (q.tipo === 'si_nose_no') res[q.clave] = ['si', 'nose', 'no'][k % 3]
+      else if (q.tipo === 'nota') res[q.clave] = 5 + k
+      else if (q.tipo === 'opciones') res[q.clave] = k % q.opciones.length
+      else if (q.clave === 'mas_gusto') res[q.clave] = `Me gustó ${k}`
+    }
+    return res
+  }
+  r = await pedir(`encuesta-publica/${tokens[chicos[0]]}`, { method: 'POST', body: { respuestas: respuesta(0), hablar: true } })
+  esperar('el chico manda la encuesta y pide hablar', r.codigo === 200, r)
+  r = await pedir(`encuesta-publica/${tokens[chicos[0]]}`, { method: 'POST', body: { respuestas: respuesta(0) } })
+  esperar('el link no sirve dos veces', r.codigo === 409 && r.datos.error === 'ya_respondida', r)
+  r = await pedir(`encuesta-publica/${tokens[chicos[0]]}`)
+  esperar('el link usado dice que ya está contestada', r.datos.estado === 'respondida' && !r.datos.preguntas, r.datos)
+  const columnas = (await query(
+    `select column_name from information_schema.columns
+     where table_schema = 'public' and table_name = 'encuesta_respuestas' order by column_name`)).map((c) => c.column_name)
+  esperar('la respuesta se guarda sin chico, sin token y sin hora',
+    JSON.stringify(columnas) === JSON.stringify(['encuesta_id', 'id', 'respuestas']), columnas)
+  const columnasFecha = (await query(
+    `select table_name, column_name from information_schema.columns
+     where table_schema = 'public' and table_name in ('encuesta_links', 'encuesta_respuestas')
+       and (data_type like 'timestamp%' or data_type in ('date', 'time without time zone'))`))
+  esperar('ni el link ni la respuesta guardan una fecha u hora', !columnasFecha.length, columnasFecha)
+  r = await pedir(`encuestas/${enc.id}`, { token: T })
+  esperar('con una respuesta, las preguntas quedan fijas y no hay resultados',
+    r.datos.respuestas === 1 && r.datos.editable === false && !('resultados' in r.datos), r.datos)
+  esperar('el dueño ve que hay un pedido, pero no de quién', !('pedidos' in r.datos) && r.datos.pedidos_pendientes === 1, r.datos)
+  esperar('el link del que contestó ya no viaja', r.datos.links.find((l) => l.jugador_id === chicos[0]).token === null, r.datos.links)
+  r = await pedir(`encuestas/${enc.id}`, { method: 'PUT', token: T, body: { preguntas } })
+  esperar('con respuestas, las preguntas no se pueden cambiar', r.codigo === 409 && r.datos.error === 'preguntas_bloqueadas', r)
+  r = await pedir(`encuestas/${enc.id}`, { token: C })
+  esperar('la cabeza de división ve el pedido con el nombre',
+    r.datos.pedidos?.length === 1 && r.datos.pedidos[0].nombre === 'Juan', r.datos.pedidos)
+  const pedido = r.datos.pedidos[0]
+  r = await pedir(`encuestas/pedidos/${pedido.id}`, { method: 'PUT', token: T, body: { atendido: true } })
+  esperar('el dueño no atiende pedidos', r.codigo === 403 && r.datos.error === 'solo_cabeza_division', r)
+  r = await pedir(`encuestas/pedidos/${pedido.id}`, { method: 'PUT', token: E, body: { atendido: true } })
+  esperar('el entrenador no atiende pedidos', r.codigo === 403, r)
+  r = await pedir(`encuestas/pedidos/${pedido.id}`, { method: 'PUT', token: C, body: { atendido: true } })
+  esperar('la cabeza de división marca el pedido como atendido', r.codigo === 200 && r.datos.pedidos[0].atendido === true, r.datos.pedidos)
+  r = await pedir(`encuestas/${enc.id}/links/${chicos[0]}/nuevo`, { method: 'POST', token: T })
+  esperar('no hay link nuevo para el que ya contestó', r.codigo === 409, r)
+  r = await pedir(`encuestas/${enc.id}/links/${chicos[1]}/nuevo`, { method: 'POST', token: T })
+  const nuevoToken = r.datos.links.find((l) => l.jugador_id === chicos[1]).token
+  esperar('un link nuevo reemplaza al anterior', r.codigo === 200 && nuevoToken !== tokens[chicos[1]], r.datos)
+  r = await pedir(`encuesta-publica/${tokens[chicos[1]]}`)
+  esperar('el link viejo deja de funcionar', r.codigo === 404, r)
+  tokens[chicos[1]] = nuevoToken
+  r = await pedir(`encuestas/${enc.id}/links/${chicos[1]}`, { method: 'PUT', token: T, body: { enviado: true } })
+  esperar('se marca un link como enviado', r.codigo === 200, r)
+  for (let k = 1; k < 5; k++) {
+    r = await pedir(`encuesta-publica/${tokens[chicos[k]]}`, { method: 'POST', body: { respuestas: respuesta(k) } })
+    esperar(`contesta el chico ${k + 1}`, r.codigo === 200, r)
+  }
+  r = await pedir(`encuestas/${enc.id}/cerrar`, { method: 'POST', token: T })
+  esperar('al cerrarla aparecen los resultados',
+    r.codigo === 200 && r.datos.encuesta.estado === 'cerrada' && r.datos.resultados?.suficientes === true
+      && r.datos.resultados.respuestas === 5 && typeof r.datos.resultados.indice === 'number', r.datos.resultados)
+  const res = r.datos.resultados
+  esperar('los resultados traen la nota y las respuestas libres',
+    res.nota?.promedio === 7 && res.preguntas.find((q) => q.clave === 'mas_gusto').textos.length === 5, res.nota)
+  esperar('la pregunta nueva sale en los resultados',
+    res.preguntas.find((q) => q.clave === 'x_comida')?.opciones.map((o) => o.cantidad).join() === '3,2', res.preguntas.find((q) => q.clave === 'x_comida'))
+  esperar('"me molestaron" cuenta el no como favorable',
+    res.preguntas.find((q) => q.clave === 'molestaron').favorable === 60, res.preguntas.find((q) => q.clave === 'molestaron'))
+  r = await pedir(`encuesta-publica/${tokens[chicos[5]]}`, { method: 'POST', body: { respuestas: respuesta(5) } })
+  esperar('cerrada, el link que quedaba ya no sirve', r.codigo === 409 && r.datos.error === 'encuesta_cerrada', r)
+  r = await pedir(`encuestas/${enc.id}`, { method: 'DELETE', token: T })
+  esperar('una encuesta con respuestas no se borra', r.codigo === 409, r)
+  const hoyEnc = new Date().toISOString().slice(0, 10)
+  r = await pedir(`informe?desde=${hoyEnc}&hasta=${hoyEnc}`, { token: T })
+  esperar('la encuesta cerrada entra en el informe de gestión',
+    r.codigo === 200 && r.datos.encuesta?.encuesta?.titulo === 'Fin de año' && r.datos.encuesta.respondieron === 5
+      && r.datos.encuesta.pedidos === 1 && r.datos.encuesta.resultados.suficientes, r.datos.encuesta)
+  r = await pedir('encuestas', { method: 'POST', token: T, body: { titulo: 'Para borrar' } })
+  r = await pedir(`encuestas/${r.datos.encuesta.id}`, { method: 'DELETE', token: T })
+  esperar('una encuesta sin respuestas se borra', r.codigo === 200, r)
 
   // ---------- el cambio de rol corta de inmediato ----------
   console.log('Cambio de rol:')

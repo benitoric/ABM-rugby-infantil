@@ -25,6 +25,7 @@ export const SECCIONES_INFORME = [
   { value: 'lesiones', label: 'Lesiones y golpes', ayuda: 'Nuevas, abiertas, días de baja y golpes en cancha.' },
   { value: 'partidos', label: 'Partidos', ayuda: 'Valoración de los bloques, rivales, tiempos y capitanías.' },
   { value: 'administrativo', label: 'Administrativo', ayuda: 'Fichas médicas, DNI, tutores y viajes del período.' },
+  { value: 'encuesta', label: 'Encuesta a los jugadores', ayuda: 'Resultados de la encuesta anónima que cerró en el período.' },
   { value: 'registro', label: 'Calidad del registro', ayuda: 'Lo que faltó cargar: dice cuánto confiar en el resto.' },
 ]
 

@@ -241,6 +241,11 @@ function DetallePadron({ jugadorId, onVolver, onCambio }) {
           Tutor: {j.tutor_nombre || '—'}
           {j.tutor_telefono && <> · <Telefono numero={j.tutor_telefono} /></>}
         </p>
+        {j.telefono && (
+          <p className="suave" style={{ marginTop: 4 }}>
+            Celular del chico: <Telefono numero={j.telefono} />
+          </p>
+        )}
         <p className="suave" style={{ marginTop: 4 }}>
           📍 {j.barrio
             ? <>{j.barrio}{!j.lugar_id && <span className="mini"> (sin ubicar en el mapa todavía)</span>}</>
@@ -277,6 +282,7 @@ function FormPadron({ inicial, onCerrar, onGuardado }) {
     dni: inicial.dni || '',
     tutor_nombre: inicial.tutor_nombre || '',
     tutor_telefono: inicial.tutor_telefono || '',
+    telefono: inicial.telefono || '',
     ficha_medica_vigente: !!inicial.ficha_medica_vigente,
     ficha_medica_vence: inicial.ficha_medica_vence || '',
     barrio: inicial.barrio || '',
@@ -322,6 +328,10 @@ function FormPadron({ inicial, onCerrar, onGuardado }) {
         <div className="campo">
           <label>Teléfono del tutor</label>
           <input inputMode="tel" {...campo('tutor_telefono')} />
+        </div>
+        <div className="campo">
+          <label>Celular del chico (si tiene)</label>
+          <input inputMode="tel" {...campo('telefono')} />
         </div>
         <CampoBarrio campo={campo} />
       </div>
