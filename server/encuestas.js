@@ -225,6 +225,9 @@ async function detalle(id, veoPedidos) {
     hay_cabeza: cabeza.n > 0,
     pedidos_pendientes: (await query(
       'select count(*)::int as n from encuesta_pedidos where encuesta_id = $1 and not atendido', [id]))[0].n,
+    // Solo la cantidad: es lo que va al reporte, que no lleva nombres
+    pedidos_total: (await query(
+      'select count(*)::int as n from encuesta_pedidos where encuesta_id = $1', [id]))[0].n,
   }
   if (veoPedidos) {
     res.pedidos = await query(

@@ -59,7 +59,7 @@ function Pregunta({ p, valor, onChange, marcarFalta }) {
   )
 }
 
-export default function EncuestaPublica({ token, vistaPrevia = null, onCerrar }) {
+export default function EncuestaPublica({ token, vistaPrevia = null, onCerrar, onPDF }) {
   const [estado, setEstado] = useState(vistaPrevia ? 'inicio' : 'cargando')
   const [encuesta, setEncuesta] = useState(vistaPrevia)
   const [respuestas, setRespuestas] = useState(() => (vistaPrevia ? {} : leerBorrador(token).respuestas || {}))
@@ -127,7 +127,8 @@ export default function EncuestaPublica({ token, vistaPrevia = null, onCerrar })
       {encuesta?.titulo && <div className="enc-titulo">{encuesta.titulo}</div>}
       {vistaPrevia && (
         <div className="enc-vista-previa">
-          Vista previa: así la ven los chicos. No se guarda nada.
+          <span className="crece">Vista previa: así la ven los chicos. No se guarda nada.</span>
+          {onPDF && <button type="button" onClick={onPDF}>📄 Compartir PDF</button>}
           {onCerrar && <button type="button" onClick={onCerrar}>Cerrar</button>}
         </div>
       )}

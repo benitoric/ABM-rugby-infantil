@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
 import { fechaCorta } from '../helpers.js'
+import { descargarArchivo, verOCompartirArchivo } from '../pdf.js'
+import {
+  generarCuestionarioPDF, generarReporteEncuestaPDF, nombreCuestionario, nombreReporteEncuesta,
+} from '../encuestaPDF.js'
 import { irA, reponer } from '../navegacion.js'
 import { numeroWhatsApp, Telefono } from '../telefono.jsx'
 import {
-  claveNueva, limpiarPreguntas, MINIMO_RESPUESTAS, opcionesDe, preguntasPorDefecto, puntosBajos,
+  analizarEncuesta, claveNueva, limpiarPreguntas, MINIMO_RESPUESTAS, opcionesDe, preguntasPorDefecto, puntosBajos,
   TIPOS_POR_VALUE, TIPOS_PREGUNTA,
 } from '../encuesta.js'
 import EncuestaPublica from './EncuestaPublica.jsx'
@@ -477,6 +481,80 @@ function Barra({ etiqueta, valor, proporcion, color }) {
 const colorFavorable = (v) => (v == null ? 'var(--primario)' : v >= 75 ? 'var(--ok)' : v >= 50 ? 'var(--warn)' : 'var(--bad)')
 const textoVariacion = (v) => (v == null ? '' : v === 0 ? ' · igual que la anterior' : ` · ${v > 0 ? '+' : '−'}${Math.abs(v)} vs. la anterior`)
 
+// El reporte con análisis de una encuesta cerrada: en pantalla, la lectura y
+// las alertas; el PDF completo se comparte o se baja desde acá
+function ReporteEncuesta({ datos, yo }) {
+  const [aviso, setAviso] = useState('')
+  const r = datos.resultados
+  const respondieron = datos.links.filter((l) => l.usado).length
+  const extra = {
+    links: datos.links.length, respondieron,
+    pedidos: datos.pedidos_total, pedidos_pendientes: datos.pedidos_pendientes,
+  }
+  const a = analizarEncuesta(r, extra)
+
+  function armarPDF() {
+    return generarReporteEncuestaPDF({
+      encuesta: datos.encuesta, resultados: r, links: datos.links.length, respondieron,
+      pedidos: datos.pedidos_total, pedidosPendientes: datos.pedidos_pendientes,
+      generadoPor: yo?.nombre || yo?.email,
+    }).blob()
+  }
+
+  async function compartir() {
+    setAviso('')
+    const res = await verOCompartirArchivo(armarPDF(), nombreReporteEncuesta(datos.encuesta.titulo),
+      `Reporte de la encuesta · ${datos.encuesta.titulo}`)
+    if (res === 'descargado') setAviso('Este dispositivo no puede compartir archivos: el PDF se descargó y lo podés adjuntar a mano.')
+  }
+
+  return (
+    <div className="tarjeta">
+      <h3>Reporte con análisis</h3>
+      {a ? (
+        <>
+          <p className="mini" style={{ margin: '2px 0 8px' }}>
+            La lectura sale sola de los resultados. El PDF suma cada pregunta con sus
+            respuestas, lo que escribieron y sugerencias para conversar en el staff. No
+            lleva ningún nombre.
+          </p>
+          {a.lectura.map((f, i) => <p key={i} className="enc-lectura">{f}</p>)}
+          {a.alertas.length > 0 && (
+            <div className="aviso" style={{ marginTop: 8 }}>
+              <b>Alertas de cuidado</b>
+              <ul className="enc-alertas">{a.alertas.map((t, i) => <li key={i}>{t}</li>)}</ul>
+            </div>
+          )}
+          {a.sugerencias.length > 0 && (
+            <details style={{ marginTop: 8 }}>
+              <summary style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--primario)' }}>
+                Sugerencias para el staff ({a.sugerencias.length})
+              </summary>
+              {a.sugerencias.map((s, i) => (
+                <div key={i} className="enc-sugerencia">
+                  <div className="mini"><b>{s.pregunta}</b> · {s.favorable}% favorable</div>
+                  <div style={{ fontSize: '0.88rem' }}>{s.sugerencia}</div>
+                </div>
+              ))}
+            </details>
+          )}
+        </>
+      ) : (
+        <p className="mini" style={{ margin: '2px 0 8px' }}>
+          Con menos de {MINIMO_RESPUESTAS} respuestas el reporte sale sin resultados, solo con la participación.
+        </p>
+      )}
+      {aviso && <div className="aviso" style={{ marginTop: 8 }}>{aviso}</div>}
+      <div className="fila" style={{ marginTop: 10 }}>
+        <button className="btn crece" onClick={compartir}>📤 Compartir reporte</button>
+        <button className="btn sec" onClick={() => descargarArchivo(armarPDF(), nombreReporteEncuesta(datos.encuesta.titulo))}>
+          Descargar
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function ResultadosEncuesta({ r, links }) {
   if (!r) return null
   if (!r.suficientes) {
@@ -651,7 +729,22 @@ function DetalleEncuesta({ id, vista, yo }) {
   if (error) return <div className="vacio">No se pudo abrir la encuesta.</div>
   if (!datos) return <div className="vacio">Cargando…</div>
   if (vistaPrevia) {
-    return <EncuestaPublica vistaPrevia={{ titulo: datos.encuesta.titulo, preguntas: vistaPrevia }} onCerrar={() => setVistaPrevia(null)} />
+    // El PDF lleva las preguntas tal como están en la vista previa, aunque
+    // todavía no se hayan guardado
+    const compartirCuestionario = () => verOCompartirArchivo(
+      generarCuestionarioPDF({
+        titulo: datos.encuesta.titulo, preguntas: vistaPrevia, cierra: datos.encuesta.cierra,
+        generadoPor: yo?.nombre || yo?.email,
+      }).blob(),
+      nombreCuestionario(datos.encuesta.titulo),
+      `Encuesta a los jugadores · ${datos.encuesta.titulo}`)
+    return (
+      <EncuestaPublica
+        vistaPrevia={{ titulo: datos.encuesta.titulo, preguntas: vistaPrevia }}
+        onCerrar={() => setVistaPrevia(null)}
+        onPDF={compartirCuestionario}
+      />
+    )
   }
 
   const { encuesta } = datos
@@ -758,7 +851,12 @@ function DetalleEncuesta({ id, vista, yo }) {
 
       {actual === 'preguntas' && <Preguntas key={JSON.stringify(encuesta.preguntas)} datos={datos} onGuardado={setDatos} onVistaPrevia={setVistaPrevia} />}
       {actual === 'links' && <Links datos={datos} onCambio={cargar} />}
-      {actual === 'resultados' && <ResultadosEncuesta r={datos.resultados} links={datos.links.length} />}
+      {actual === 'resultados' && (
+        <>
+          <ReporteEncuesta datos={datos} yo={yo} />
+          <ResultadosEncuesta r={datos.resultados} links={datos.links.length} />
+        </>
+      )}
       {actual === 'pedidos' && datos.pedidos && <Pedidos datos={datos} onCambio={cargar} />}
     </>
   )

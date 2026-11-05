@@ -315,3 +315,183 @@ export function puntosBajos(resumen, cuantos = 5) {
     .sort((a, b) => a.favorable - b.favorable)
     .slice(0, cuantos)
 }
+
+// ---------------------------------------------------------------------------
+// Análisis automático de una encuesta cerrada
+//
+// Reglas simples y explicables sobre el resumen (resumirEncuesta), para que
+// el reporte no sea solo números: la lectura general, lo más fuerte y lo más
+// flojo, las alertas de cuidado, lo que cambió contra la encuesta anterior y
+// sugerencias para conversar en el staff. Las alertas y sugerencias miran las
+// preguntas de siempre por su clave; las preguntas nuevas entran en el resto
+// del análisis pero no tienen una sugerencia propia.
+// ---------------------------------------------------------------------------
+
+// Umbrales del porcentaje favorable
+export const FAVORABLE_BUENO = 75
+export const FAVORABLE_FLOJO = 60
+// Una variación contra la encuesta anterior que vale la pena nombrar
+const VARIACION_NOTABLE = 10
+
+// Sugerencias para cuando una de las preguntas de siempre sale floja. Son
+// puntos de partida para la charla del staff, no recetas.
+const SUGERENCIAS = {
+  divierte_entrenamientos: 'Revisar la dinámica de los entrenamientos: más juego con pelota, menos tiempo esperando en fila y consignas cortas.',
+  divierte_partidos: 'Mirar cómo se viven los días de partido: la espera entre tiempos, la rotación y el clima en el banco.',
+  ganas: 'Buscar qué apaga las ganas de venir: horarios, el grupo o la propuesta. Vale preguntarlo en una charla corta con ellos.',
+  aprendi: 'Revisar la planificación técnica: objetivos claros por mes y una devolución individual a cada chico de qué mejoró.',
+  explican: 'Acordar que cada corrección diga qué hacer y no solo qué estuvo mal, y reservar un momento del entrenamiento para devoluciones.',
+  sin_gritos: 'Acordar en el staff una forma común de corregir: en voz normal, cerca del chico y diciendo qué hacer.',
+  trato_igual: 'Repartir la atención: que cada entrenador tenga un grupo chico de jugadores a cargo para seguirlos de cerca.',
+  juego_suficiente: 'Contarles a los chicos cómo se reparten los tiempos y verificar la equidad real en el informe de gestión.',
+  se_dan_cuenta: 'Sumar un saludo y una pregunta corta a cada chico al llegar: es la forma más simple de notar cómo está.',
+  adulto_confianza: 'Presentar a los chicos un adulto de referencia claro y recordarles seguido que pueden hablar con él.',
+  parte_equipo: 'Trabajar la integración del grupo: actividades que mezclen y atención a los que quedan aislados.',
+  companeros: 'Prestar atención al trato entre ellos en los momentos sin adultos cerca: vestuario, viajes, tercer tiempo.',
+  molestaron: 'Hablar de las burlas con el grupo y estar atentos a quién queda afuera. Si hace falta, sumar al referente de protección del club.',
+  seguro_contacto: 'Reforzar las progresiones de contacto por niveles, sin apurar a los que todavía no están seguros.',
+  cuidan_golpe: 'Tener un protocolo visible ante golpes: quién atiende, cuándo se avisa a la familia y cuándo vuelve a jugar.',
+  aviso_tiempo: 'Avisar el cronograma con más anticipación y por un solo canal fijo.',
+}
+
+const cantidadDe = (r, ...valores) => (r?.opciones || [])
+  .filter((o) => valores.includes(o.value)).reduce((n, o) => n + o.cantidad, 0)
+
+function nivelDelIndice(indice) {
+  if (indice == null) return null
+  if (indice >= 75) return 'muy bueno'
+  if (indice >= 60) return 'bueno, con aspectos para mejorar'
+  if (indice >= 45) return 'intermedio: hay varios aspectos para trabajar'
+  return 'preocupante: conviene revisarlo con el staff'
+}
+
+const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`
+
+// `extra`: { links, respondieron, pedidos, pedidos_pendientes } de la encuesta
+export function analizarEncuesta(r, extra = {}) {
+  if (!r?.suficientes) return null
+  const porClave = Object.fromEntries(r.preguntas.map((p) => [p.clave, p]))
+  const cerradas = r.preguntas.filter((p) => p.favorable != null && p.tipo !== 'nota' && !p.segmento)
+  const lectura = []
+  const alertas = []
+
+  // Participación
+  const participacion = extra.links ? Math.round((100 * (extra.respondieron ?? r.respuestas)) / extra.links) : null
+  if (participacion != null) {
+    lectura.push(participacion >= 70
+      ? `Contestó el ${participacion}% del plantel: los resultados representan bien al grupo.`
+      : `Contestó el ${participacion}% del plantel: los resultados hay que leerlos con cuidado, porque falta la mirada de muchos chicos.`)
+  }
+
+  // Índice y nota
+  const nivel = nivelDelIndice(r.indice)
+  if (nivel) {
+    let frase = `El índice general es ${r.indice} sobre 100: ${nivel}.`
+    if (r.indice_anterior != null) {
+      const d = r.indice - r.indice_anterior
+      frase += d === 0 ? ' Igual que en la encuesta anterior.'
+        : ` ${d > 0 ? 'Subió' : 'Bajó'} ${Math.abs(d)} ${Math.abs(d) === 1 ? 'punto' : 'puntos'} contra la encuesta anterior.`
+    }
+    lectura.push(frase)
+  }
+  if (r.nota?.promedio != null) {
+    const n = r.nota.promedio
+    let frase = `Le ponen al año un ${String(n.toFixed(1)).replace('.', ',')} de nota promedio.`
+    if (r.nota.anterior != null) frase += ` La vez anterior fue ${String(r.nota.anterior.toFixed(1)).replace('.', ',')}.`
+    lectura.push(frase)
+  }
+
+  // Partes: la mejor y la más floja
+  if (r.bloques.length > 1) {
+    const orden = [...r.bloques].sort((a, b) => b.indice - a.indice)
+    const mejor = orden[0]
+    const peor = orden[orden.length - 1]
+    if (mejor.indice !== peor.indice) {
+      lectura.push(`Lo mejor valorado es "${mejor.nombre}" (${mejor.indice}) y lo más flojo, "${peor.nombre}" (${peor.indice}).`)
+    }
+  }
+
+  // Segmentos: si un grupo queda claramente por debajo
+  const segs = r.segmentos.filter((s) => s.suficientes && s.indice != null)
+  if (segs.length > 1) {
+    const orden = [...segs].sort((a, b) => a.indice - b.indice)
+    const bajo = orden[0]
+    const alto = orden[orden.length - 1]
+    if (alto.indice - bajo.indice >= VARIACION_NOTABLE) {
+      lectura.push(`Por años en el club, "${bajo.label}" queda ${alto.indice - bajo.indice} puntos por debajo de "${alto.label}".`)
+    }
+  }
+
+  // Alertas de cuidado: cantidades, porque un solo chico ya importa
+  const seguir = porClave.seguir
+  if (seguir?.tipo === 'si_nose_no') {
+    const dudan = cantidadDe(seguir, 'no', 'nose')
+    if (dudan) {
+      alertas.push(`${plural(dudan, 'chico no está seguro', 'chicos no están seguros')} de seguir el año que viene ` +
+        `(${cantidadDe(seguir, 'no')} dice que no y ${cantidadDe(seguir, 'nose')} que no sabe). Es el principal riesgo de abandono.`)
+    }
+  }
+  // Cada alerta en singular y en plural: "1 chico siente que no tiene",
+  // "4 chicos sienten que no tienen"
+  const alerta = (n, uno, varios) => { if (n) alertas.push(n === 1 ? `1 chico ${uno}` : `${n} chicos ${varios}`) }
+  const molestaron = porClave.molestaron
+  if (molestaron?.tipo === 'si_no') {
+    alerta(cantidadDe(molestaron, molestaron.negativa ? 'si' : 'no'),
+      'dice que este año alguien del equipo se burló de él o lo molestó seguido.',
+      'dicen que este año alguien del equipo se burló de ellos o los molestó seguido.')
+  }
+  const adulto = porClave.adulto_confianza
+  if (adulto?.tipo === 'si_no') {
+    alerta(cantidadDe(adulto, 'no'),
+      'siente que no tiene un adulto del club con quien hablar si le pasa algo.',
+      'sienten que no tienen un adulto del club con quien hablar si les pasa algo.')
+  }
+  const gritos = porClave.sin_gritos
+  if (gritos?.tipo === 'frecuencia') {
+    alerta(cantidadDe(gritos, 1),
+      'contesta "nunca" a que lo corrigen sin gritarle.',
+      'contestan "nunca" a que los corrigen sin gritarles.')
+  }
+  const contacto = porClave.seguro_contacto
+  if (contacto?.tipo === 'frecuencia') {
+    alerta(cantidadDe(contacto, 1),
+      'dice que nunca se siente seguro en el contacto y el tackle.',
+      'dicen que nunca se sienten seguros en el contacto y el tackle.')
+  }
+  if (extra.pedidos) {
+    alertas.push(`${plural(extra.pedidos, 'chico pidió', 'chicos pidieron')} que alguien del club hable con ${extra.pedidos === 1 ? 'él' : 'ellos'}` +
+      `${extra.pedidos_pendientes ? `: ${extra.pedidos_pendientes} sin atender todavía` : ', y ya se atendieron'}.`)
+  }
+
+  // Fortalezas y aspectos a mejorar
+  const orden = [...cerradas].sort((a, b) => b.favorable - a.favorable)
+  const fortalezas = orden.filter((p) => p.favorable >= FAVORABLE_BUENO).slice(0, 4)
+  const aMejorar = orden.filter((p) => p.favorable < FAVORABLE_FLOJO).reverse().slice(0, 4)
+
+  // Cambios contra la encuesta anterior
+  const cambios = r.preguntas
+    .filter((p) => p.tipo !== 'nota' && p.variacion != null && Math.abs(p.variacion) >= VARIACION_NOTABLE)
+    .sort((a, b) => Math.abs(b.variacion) - Math.abs(a.variacion))
+  const mejoras = cambios.filter((p) => p.variacion > 0).slice(0, 4)
+  const caidas = cambios.filter((p) => p.variacion < 0).slice(0, 4)
+
+  // Sugerencias: las de las preguntas flojas, y la de seguir si muchos dudan
+  const sugerencias = []
+  for (const p of [...cerradas].sort((a, b) => a.favorable - b.favorable)) {
+    if (p.favorable >= FAVORABLE_FLOJO || !SUGERENCIAS[p.clave]) continue
+    sugerencias.push({ pregunta: p.texto, favorable: p.favorable, sugerencia: SUGERENCIAS[p.clave] })
+  }
+  if (seguir?.tipo === 'si_nose_no' && seguir.n && cantidadDe(seguir, 'no', 'nose') / seguir.n >= 0.2) {
+    sugerencias.push({
+      pregunta: seguir.texto, favorable: seguir.favorable,
+      sugerencia: 'Antes de la reinscripción, contactar a las familias para conocer los motivos y qué los haría quedarse.',
+    })
+  }
+
+  return { participacion, lectura, alertas, fortalezas, aMejorar, mejoras, caidas, sugerencias }
+}
+
+// Cómo nombrar una pregunta en las listas del análisis. En las preguntas en
+// negativo lo favorable es el "no": dicho así se entiende que "me molestaron"
+// esté entre lo más fuerte.
+export const textoEnLista = (p) => (p.negativa ? `Dicen que no: ${p.texto}` : p.texto)
