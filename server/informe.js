@@ -94,6 +94,7 @@ export async function informe({ desde, hasta }) {
 
   const [
     plantelPeriodo, staff, evaluaciones, entrenado, tests, lesiones, partidos, administrativo, previo,
+    encuesta,
   ] = await Promise.all([
     plantelDe(desde, hastaEf, hoy),
     staffDe(desde, hastaEf, eventos),
@@ -104,6 +105,7 @@ export async function informe({ desde, hasta }) {
     partidosDe(desde, hastaEf, plantelActual),
     administrativoDe(desde, hastaEf, hoy, plantelActual),
     indicadores(anterior.desde, anterior.hasta),
+    encuestaDe(desde, hastaEf),
   ])
 
   const actividad = resumirActividad(eventos, desde, hastaEf)
@@ -135,6 +137,7 @@ export async function informe({ desde, hasta }) {
     lesiones,
     partidos,
     administrativo,
+    encuesta,
     registro: calidadDelRegistro(eventos, hoy),
   }
 }
@@ -1122,5 +1125,42 @@ async function indicadores(desde, hasta) {
     chicos_con_tests: tst.n,
     minutos_tecnica: minutos,
     promedio_evaluacion: generales.length ? redondear(promedio(generales), 1) : null,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Encuesta anónima a los jugadores: la última que cerró dentro del período,
+// con los mismos resultados que muestra su pantalla (server/encuestas.js).
+// Del pedido de ayuda va solo la cantidad: los nombres los ve la cabeza de
+// división en la encuesta.
+// ---------------------------------------------------------------------------
+async function encuestaDe(desde, hasta) {
+  const { cerrarVencidas, resultadosDe } = await import('./encuestas.js')
+  await cerrarVencidas()
+  const [e] = await query(
+    `select id, titulo, preguntas, (cerrada_en at time zone '${ZONA}')::date::text as cerrada
+     from encuestas
+     where estado = 'cerrada' and (cerrada_en at time zone '${ZONA}')::date between $1 and $2
+     order by cerrada_en desc limit 1`, [desde, hasta])
+  if (!e) {
+    const [abierta] = await query(
+      `select titulo, cierra::text as cierra from encuestas
+       where estado = 'abierta' order by created_at desc limit 1`)
+    return { encuesta: null, abierta: abierta || null }
+  }
+  const [c] = await query(
+    `select (select count(*)::int from encuesta_links where encuesta_id = $1) as links,
+            (select count(*)::int from encuesta_links where encuesta_id = $1 and usado) as respondieron,
+            (select count(*)::int from encuesta_pedidos where encuesta_id = $1) as pedidos,
+            (select count(*)::int from encuesta_pedidos where encuesta_id = $1 and not atendido) as pedidos_pendientes`,
+    [e.id])
+  return {
+    encuesta: { titulo: e.titulo, cerrada: e.cerrada },
+    links: c.links,
+    respondieron: c.respondieron,
+    participacion: pct(c.respondieron, c.links),
+    pedidos: c.pedidos,
+    pedidos_pendientes: c.pedidos_pendientes,
+    resultados: await resultadosDe(e),
   }
 }

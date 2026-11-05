@@ -95,7 +95,8 @@ export async function migracionesAplicadas(pool) {
         and to_regclass('public.cortes_tests') is not null
         and to_regclass('public.ajustes') is not null
         and to_regclass('public.jugadores_historial_estado') is not null
-        and to_regclass('public.lugares_alias') is not null as existe`)
+        and to_regclass('public.lugares_alias') is not null
+        and to_regclass('public.encuesta_pedidos') is not null as existe`)
   if (!t.existe) return false
   // Migraciones de datos, sin tabla ni columna que las delate: dejan su
   // marca en `ajustes`
@@ -566,6 +567,42 @@ export async function migrar(pool) {
   await pool.query(`create table if not exists lugares_alias (
     clave text primary key,
     lugar_id uuid not null references lugares(id) on delete cascade
+  )`)
+  // Encuesta anónima a los jugadores (ver db/schema.sql): el celular propio
+  // del chico y las tablas de la encuesta. Que exista encuesta_pedidos es el
+  // testigo más nuevo, así que va última.
+  await pool.query('alter table jugadores add column if not exists telefono text')
+  await pool.query(`create table if not exists encuestas (
+    id uuid primary key default gen_random_uuid(),
+    titulo text not null,
+    preguntas jsonb not null,
+    estado text not null default 'borrador' check (estado in ('borrador','abierta','cerrada')),
+    cierra date,
+    creada_por text,
+    created_at timestamptz not null default now(),
+    abierta_en timestamptz,
+    cerrada_en timestamptz
+  )`)
+  await pool.query(`create table if not exists encuesta_links (
+    token text primary key,
+    encuesta_id uuid not null references encuestas(id) on delete cascade,
+    jugador_id uuid not null references jugadores(id) on delete cascade,
+    enviado boolean not null default false,
+    usado boolean not null default false,
+    unique (encuesta_id, jugador_id)
+  )`)
+  await pool.query(`create table if not exists encuesta_respuestas (
+    id uuid primary key default gen_random_uuid(),
+    encuesta_id uuid not null references encuestas(id) on delete cascade,
+    respuestas jsonb not null
+  )`)
+  await pool.query(`create table if not exists encuesta_pedidos (
+    id uuid primary key default gen_random_uuid(),
+    encuesta_id uuid not null references encuestas(id) on delete cascade,
+    jugador_id uuid not null references jugadores(id) on delete cascade,
+    atendido boolean not null default false,
+    atendido_por text,
+    created_at timestamptz not null default now()
   )`)
 }
 

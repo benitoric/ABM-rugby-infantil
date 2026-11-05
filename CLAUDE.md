@@ -188,6 +188,32 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   con el estado actual (los dados de baja fechados en su última edición,
   marcados `migracion` = aproximado) y para las fechas sin historial el
   informe reconstruye con la fecha de alta en la app y el plantel congelado.
+- **Encuesta anónima a los jugadores**: Staff → "Encuesta a los jugadores"
+  (solo cabeza de división y dueño: `encuestas/*` devuelve 403
+  `solo_cabeza` al resto y es ruta cerrada a los managers). Cada encuesta
+  guarda sus propias preguntas en jsonb; arranca con las de siempre
+  (`preguntasPorDefecto` en `src/encuesta.js`, con claves fijas para comparar
+  un año con otro) y se pueden cambiar, ordenar, sacar o sumar hasta que llega
+  la primera respuesta (409 `preguntas_bloqueadas` después). Al abrirla se
+  arma un link por chico activo (`encuesta_links`, token aleatorio de un solo
+  uso); la pantalla manda cada link por WhatsApp al celular propio del chico
+  (`jugadores.telefono`, se carga en la ficha o en el padrón) o, si no tiene,
+  al del tutor. El chico la abre en `#/encuesta/<token>` sin login:
+  `src/main.jsx` muestra `EncuestaPublica.jsx` sola, sin tocar la posición
+  guardada de la app, y la API es `encuesta-publica/:token`, que va **antes
+  de `autenticar`** (el token es la credencial). **Anonimato**: al contestar,
+  una sola sentencia marca el link usado y guarda la respuesta en
+  `encuesta_respuestas` sin chico, sin token y sin hora (ni el link guarda
+  cuándo se usó); los resultados se ven recién con la encuesta cerrada y con
+  5 respuestas o más (`MINIMO_RESPUESTAS`, también por segmento), para que no
+  se pueda deducir quién dijo qué mirando cómo cambian. Las respuestas libres
+  salen en orden alfabético. Se cierra a mano o sola pasado el día `cierra`
+  (`cerrarVencidas`). "Quiero que alguien del club hable conmigo" va aparte,
+  con el nombre, en `encuesta_pedidos`: lo ve y lo atiende **solo el rol
+  Cabeza de división** (el dueño ve la cantidad), que recibe un push sin el
+  nombre. La última encuesta cerrada en el período entra como sección del
+  informe de gestión, con el índice (promedio del porcentaje favorable de las
+  preguntas cerradas) y la comparación con la encuesta anterior por clave.
 - **Viajes (giras)**: menú propio para las giras a otras provincias. Las
   rutas `viajes/...` viven en `server/viajes.js` (el router delega ahí) y la
   pantalla en `src/pages/Viajes.jsx`, con cuatro vistas: Jugadores (quiénes

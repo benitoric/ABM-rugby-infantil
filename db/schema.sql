@@ -47,6 +47,9 @@ create table if not exists jugadores (
   estado text not null default 'activo' check (estado in ('activo','inactivo','lesionado')),
   tutor_nombre text,
   tutor_telefono text,
+  -- Celular propio del chico, si tiene. Es adonde le llega el link de la
+  -- encuesta anónima (sin él, va al del tutor).
+  telefono text,
   ficha_medica_vigente boolean not null default false,
   ficha_medica_vence date,
   observaciones text,
@@ -476,6 +479,55 @@ create table if not exists boletines_guardados (
   mes text primary key,
   datos jsonb not null,
   generado_en timestamptz not null default now()
+);
+
+-- ---------- encuesta anónima a los jugadores ----------
+-- Los chicos la contestan desde el celular (el suyo o el del tutor) con un
+-- link personal de un solo uso, sin login. Cada encuesta guarda sus propias
+-- preguntas (ver src/encuesta.js), que se pueden cambiar hasta que llega la
+-- primera respuesta. Ver server/encuestas.js.
+create table if not exists encuestas (
+  id uuid primary key default gen_random_uuid(),
+  titulo text not null,
+  preguntas jsonb not null,
+  estado text not null default 'borrador' check (estado in ('borrador','abierta','cerrada')),
+  -- Último día para contestar: pasado ese día se cierra sola
+  cierra date,
+  creada_por text,
+  created_at timestamptz not null default now(),
+  abierta_en timestamptz,
+  cerrada_en timestamptz
+);
+
+-- Un link por chico. El token es la credencial: quien lo tiene contesta una
+-- vez. `usado` dice que ese chico ya contestó, pero nada de acá apunta a su
+-- respuesta: a propósito no hay fecha ni hora de uso.
+create table if not exists encuesta_links (
+  token text primary key,
+  encuesta_id uuid not null references encuestas(id) on delete cascade,
+  jugador_id uuid not null references jugadores(id) on delete cascade,
+  enviado boolean not null default false,
+  usado boolean not null default false,
+  unique (encuesta_id, jugador_id)
+);
+
+-- Las respuestas, anónimas: sin chico, sin token y sin hora. Así nadie puede
+-- unir una respuesta con quien la mandó, tampoco desde la base.
+create table if not exists encuesta_respuestas (
+  id uuid primary key default gen_random_uuid(),
+  encuesta_id uuid not null references encuestas(id) on delete cascade,
+  respuestas jsonb not null
+);
+
+-- "Quiero que alguien del club hable conmigo": el pedido viaja aparte de las
+-- respuestas, con el nombre, y lo ve solo la cabeza de división.
+create table if not exists encuesta_pedidos (
+  id uuid primary key default gen_random_uuid(),
+  encuesta_id uuid not null references encuestas(id) on delete cascade,
+  jugador_id uuid not null references jugadores(id) on delete cascade,
+  atendido boolean not null default false,
+  atendido_por text,
+  created_at timestamptz not null default now()
 );
 
 -- ---------- giras / viajes a otras provincias ----------

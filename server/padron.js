@@ -12,13 +12,22 @@ import { guardarBarrio } from './lugares.js'
 const COLS_PADRON = `j.id, j.nombre, j.apellido, j.fecha_nacimiento::text as fecha_nacimiento,
   j.dni, j.estado, j.posicion, j.puestos, j.puesto_principal, j.tutor_nombre, j.tutor_telefono,
   j.ficha_medica_vigente, j.ficha_medica_vence::text as ficha_medica_vence,
-  j.barrio, j.lugar_id`
+  j.barrio, j.lugar_id, j.telefono`
 
 const COLS_DOCUMENTO = `id, jugador_id, tipo, nombre, mime,
   octet_length(datos) as bytes, created_at::date::text as fecha, subido_por,
   miniatura is not null as tiene_miniatura`
 
 const esFecha = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || '')
+
+// Celular propio del chico (adonde le llega el link de la encuesta). Se
+// guarda solo si viene en el cuerpo, así un cliente viejo que no conoce el
+// campo no lo borra al editar. Lo usan el padrón y la ficha (router).
+export async function guardarTelefono(jugadorId, b) {
+  if (!b || !('telefono' in b)) return
+  const telefono = String(b.telefono ?? '').trim().slice(0, 40) || null
+  await query('update jugadores set telefono = $1 where id = $2', [telefono, jugadorId])
+}
 
 // Solo lo administrativo se puede editar desde acá: nombre, estado, puestos
 // y observaciones quedan para la ficha de los entrenadores. El barrio también
@@ -76,6 +85,7 @@ export async function enrutarPadron({ metodo, p, b }) {
        returning id`, [...d, jugadorId])
     if (!filas.length) throw { codigo: 404, error: 'no_existe' }
     await guardarBarrio(jugadorId, b)
+    await guardarTelefono(jugadorId, b)
     const [jugador] = await query(
       `select ${COLS_PADRON} from jugadores j where j.id = $1`, [jugadorId])
     return jugador

@@ -758,6 +758,58 @@ export function generarInformePDF({ datos, secciones, generadoPor }) {
     } else parrafo('No hubo giras ni encuentros con salida en el período.', { color: SUAVE })
   }
 
+  if (incluye('encuesta')) {
+    const en = d.encuesta
+    titulo('Encuesta a los jugadores',
+      'La encuesta anónima que contestaron los chicos desde el celular, con un link personal de un solo uso. Las respuestas se guardan sin el nombre. El índice es el promedio del porcentaje de respuestas favorables de las preguntas cerradas.')
+    if (!en?.encuesta) {
+      parrafo(en?.abierta
+        ? `No cerró ninguna encuesta en el período. "${en.abierta.titulo}" sigue abierta${en.abierta.cierra ? ` hasta el ${fechaCorta(en.abierta.cierra)}` : ''}: sus resultados se ven cuando cierre.`
+        : 'No cerró ninguna encuesta en el período.', { color: SUAVE })
+    } else {
+      const r = en.resultados
+      parrafo(`"${en.encuesta.titulo}", cerrada el ${fechaCorta(en.encuesta.cerrada)}${r.anterior ? `. Se compara con "${r.anterior.titulo}"` : ''}.`)
+      if (!r.suficientes) {
+        tarjetas([
+          { valor: `${en.respondieron}/${en.links}`, etiqueta: 'Respondieron', detalle: `${conPorcentaje(en.participacion)} de participación`, neutro: true },
+        ])
+        parrafo('Llegaron muy pocas respuestas para mostrar resultados sin dejar adivinar quién dijo qué (el mínimo es 5).', { color: SUAVE })
+      } else {
+        const vIndice = varN(r.indice, r.indice_anterior)
+        const vNota = r.nota ? varN(r.nota.promedio, r.nota.anterior, 1) : null
+        tarjetas([
+          { valor: `${en.respondieron}/${en.links}`, etiqueta: 'Respondieron', detalle: `${conPorcentaje(en.participacion)} de participación`, neutro: true },
+          { valor: oGuion(r.indice), etiqueta: 'Índice general (0 a 100)', detalle: vIndice.texto.replace('período anterior', 'encuesta anterior'), signo: vIndice.signo, color: VIOLETA },
+          { valor: r.nota ? oGuion(conComa(r.nota.promedio)) : '—', etiqueta: 'Nota al año (1 a 10)', detalle: vNota ? vNota.texto.replace('período anterior', 'encuesta anterior') : '', signo: vNota?.signo || 0, color: DORADO },
+          { valor: String(en.pedidos), etiqueta: 'Pidieron hablar con alguien', detalle: en.pedidos_pendientes ? `${en.pedidos_pendientes} sin atender` : 'todos atendidos', neutro: true, color: en.pedidos_pendientes ? ROJO : VERDE },
+        ])
+        const colorFav = (v) => (v == null ? AZUL : v >= 75 ? VERDE : v >= 50 ? AMBAR : ROJO)
+        const bajos = r.preguntas.filter((x) => x.favorable != null && x.tipo !== 'nota')
+          .sort((a, b) => a.favorable - b.favorable).slice(0, 5)
+        if (bajos.length) {
+          subtitulo('Para mirar primero')
+          for (const b of bajos) barra({ etiqueta: b.texto, valor: `${b.favorable}% favorable`, proporcion: b.favorable / 100, color: colorFav(b.favorable) })
+        }
+        subtitulo('Por parte')
+        for (const b of r.bloques) barra({ etiqueta: b.nombre, valor: String(b.indice), proporcion: b.indice / 100, color: colorFav(b.indice) })
+        const segs = r.segmentos.filter((s) => s.suficientes)
+        if (segs.length) parrafo(`${r.segmento} ${segs.map((s) => `${s.label}: índice ${oGuion(s.indice)}${s.nota != null ? `, nota ${conComa(s.nota)}` : ''} (${s.respuestas})`).join(' · ')}.`)
+        subtitulo('Pregunta por pregunta')
+        tabla([
+          { titulo: 'Pregunta', valor: 'texto' },
+          { titulo: 'Favorable', valor: (f) => (f.tipo === 'nota' ? `${conComa(f.promedio)} de 10` : conPorcentaje(f.favorable)), ancho: 64, alinear: 'der', negrita: true, color: (f) => (f.tipo === 'nota' ? TEXTO : colorFav(f.favorable)) },
+          { titulo: 'Antes', valor: (f) => conPorcentaje(f.favorable_anterior ?? null), ancho: 48, alinear: 'der' },
+          { titulo: 'Cambio', valor: (f) => (f.variacion == null ? '—' : `${f.variacion > 0 ? '+' : ''}${f.variacion}`), ancho: 48, alinear: 'der', color: (f) => (f.variacion > 0 ? VERDE : f.variacion < 0 ? ROJO : TEXTO) },
+          { titulo: 'Resp.', valor: 'n', ancho: 40, alinear: 'der' },
+        ], r.preguntas.filter((p) => p.tipo !== 'abierta' && !p.segmento && (p.favorable != null || p.tipo === 'nota')), { tam: 8 })
+        for (const p of r.preguntas.filter((x) => x.tipo === 'abierta' && x.textos.length)) {
+          subtitulo(p.texto)
+          for (const t of p.textos) vineta(`“${t}”`)
+        }
+      }
+    }
+  }
+
   if (incluye('registro')) {
     const r = d.registro
     titulo('Calidad del registro',

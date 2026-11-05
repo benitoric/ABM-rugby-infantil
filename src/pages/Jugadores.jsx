@@ -47,7 +47,7 @@ const hashBoletin = (b) => (b.solo
 const VACIO = {
   nombre: '', apellido: '', fecha_nacimiento: '', dni: '', posicion: '',
   puestos: [], puesto_principal: '',
-  aptitudes: [], estado: 'activo', tutor_nombre: '', tutor_telefono: '',
+  aptitudes: [], estado: 'activo', tutor_nombre: '', tutor_telefono: '', telefono: '',
   ficha_medica_vigente: false, ficha_medica_vence: '', observaciones: '', barrio: '',
 }
 
@@ -1028,6 +1028,10 @@ export function FormJugador({ inicial, onCerrar, onGuardado }) {
           <div className="campo">
             <label>Teléfono del tutor</label>
             <input inputMode="tel" {...campo('tutor_telefono')} />
+          </div>
+          <div className="campo">
+            <label>Celular del chico (si tiene)</label>
+            <input inputMode="tel" {...campo('telefono')} />
           </div>
           <CampoBarrio campo={campo} />
         </div>
