@@ -11,6 +11,8 @@
 import { createServer } from 'http'
 import { handle } from '../server/router.js'
 import { query } from '../server/db.js'
+import { analizarEncuesta } from '../src/encuesta.js'
+import { generarCuestionarioPDF, generarReporteEncuestaPDF } from '../src/encuestaPDF.js'
 
 process.env.PGLITE = process.env.PGLITE || '1'
 
@@ -573,6 +575,30 @@ async function main() {
     res.preguntas.find((q) => q.clave === 'x_comida')?.opciones.map((o) => o.cantidad).join() === '3,2', res.preguntas.find((q) => q.clave === 'x_comida'))
   esperar('"me molestaron" cuenta el no como favorable',
     res.preguntas.find((q) => q.clave === 'molestaron').favorable === 60, res.preguntas.find((q) => q.clave === 'molestaron'))
+  // El análisis y los PDF, sobre la encuesta recién cerrada
+  r = await pedir(`encuestas/${enc.id}`, { token: T })
+  esperar('el detalle trae la cantidad de pedidos para el reporte', r.datos.pedidos_total === 1, r.datos.pedidos_total)
+  const analisis = analizarEncuesta(r.datos.resultados, {
+    links: r.datos.links.length, respondieron: 5, pedidos: r.datos.pedidos_total, pedidos_pendientes: r.datos.pedidos_pendientes,
+  })
+  esperar('el análisis cuenta la participación', analisis.participacion === 83, analisis.participacion)
+  esperar('el análisis avisa de las burlas, en plural',
+    analisis.alertas.some((a) => a.startsWith('2 chicos dicen que este año alguien del equipo se burló de ellos')), analisis.alertas)
+  esperar('el análisis avisa de los que no tienen un adulto de confianza',
+    analisis.alertas.some((a) => a.startsWith('3 chicos sienten que no tienen un adulto')), analisis.alertas)
+  esperar('el análisis menciona el pedido ya atendido',
+    analisis.alertas.some((a) => a.includes('pidió que alguien del club hable con él') && a.includes('ya se atendieron')), analisis.alertas)
+  esperar('el análisis trae lectura y sugerencias', analisis.lectura.length >= 3 && analisis.sugerencias.length > 0, analisis)
+  const reporte = generarReporteEncuestaPDF({
+    encuesta: r.datos.encuesta, resultados: r.datos.resultados, links: r.datos.links.length, respondieron: 5,
+    pedidos: 1, pedidosPendientes: 0, generadoPor: 'Prueba',
+  })
+  const textoReporte = new TextDecoder('latin1').decode(reporte.bytes())
+  esperar('el reporte en PDF se arma', reporte.paginas >= 2 && textoReporte.startsWith('%PDF'), reporte.paginas)
+  esperar('el reporte no lleva el nombre del chico que pidió hablar', !textoReporte.includes('Juan') && !textoReporte.includes('rez'), null)
+  const cuestionario = generarCuestionarioPDF({ titulo: 'Fin de año', preguntas: r.datos.encuesta.preguntas, cierra })
+  esperar('el cuestionario en PDF se arma', cuestionario.paginas >= 2, cuestionario.paginas)
+
   r = await pedir(`encuesta-publica/${tokens[chicos[5]]}`, { method: 'POST', body: { respuestas: respuesta(5) } })
   esperar('cerrada, el link que quedaba ya no sirve', r.codigo === 409 && r.datos.error === 'encuesta_cerrada', r)
   r = await pedir(`encuestas/${enc.id}`, { method: 'DELETE', token: T })

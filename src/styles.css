@@ -1678,3 +1678,10 @@ details.tarjeta summary {
 .enc-dist-label { font-size: 0.8rem; margin-top: 2px; }
 .enc-dist-valor { font-size: 0.72rem; color: var(--texto-suave); }
 .enc-texto-libre { font-size: 0.88rem; padding: 6px 0; border-bottom: 1px dashed var(--borde); }
+
+/* Reporte de la encuesta en pantalla */
+.enc-lectura { font-size: 0.9rem; margin: 6px 0; line-height: 1.4; }
+.enc-alertas { margin: 6px 0 0 18px; display: grid; gap: 4px; }
+.enc-sugerencia { padding: 8px 0; border-bottom: 1px dashed var(--borde); }
+.enc-sugerencia:last-child { border-bottom: none; }
+.enc-vista-previa .crece { flex: 1; }

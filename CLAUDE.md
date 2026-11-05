@@ -214,6 +214,17 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   nombre. La última encuesta cerrada en el período entra como sección del
   informe de gestión, con el índice (promedio del porcentaje favorable de las
   preguntas cerradas) y la comparación con la encuesta anterior por clave.
+  PDFs (`src/encuestaPDF.js`): desde la vista previa, el **cuestionario**
+  imprimible con casilleros (lleva las preguntas tal como están en la vista
+  previa, aunque no estén guardadas); con la encuesta cerrada, el **reporte con
+  análisis**, que se comparte desde la solapa Resultados. El análisis
+  (`analizarEncuesta` en `src/encuesta.js`, sin DOM) son reglas simples sobre
+  el resumen: lectura general, alertas de cuidado con cantidades (dudan de
+  seguir, burlas, sin adulto de confianza, correcciones con gritos, miedo al
+  contacto, pedidos para hablar), lo más fuerte (75% o más) y lo más flojo
+  (menos de 60%), cambios de 10 puntos o más contra la anterior y sugerencias
+  para el staff atadas a las claves de las preguntas de siempre. El reporte no
+  lleva ningún nombre: de los pedidos va solo la cantidad (`pedidos_total`).
 - **Viajes (giras)**: menú propio para las giras a otras provincias. Las
   rutas `viajes/...` viven en `server/viajes.js` (el router delega ahí) y la
   pantalla en `src/pages/Viajes.jsx`, con cuatro vistas: Jugadores (quiénes

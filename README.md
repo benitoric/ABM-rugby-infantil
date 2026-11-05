@@ -101,7 +101,12 @@ pantalla de inicio" del teléfono y queda como una app más).
    guardan sin el nombre ni la hora, y los resultados se ven recién con la
    encuesta cerrada. Al final, el chico puede pedir que alguien del club hable
    con él: ese pedido le llega aparte, con el nombre, a la cabeza de división.
-   Los resultados se suman al informe de gestión.
+   Los resultados se suman al informe de gestión. Desde la vista previa se
+   comparte el cuestionario en PDF, para mostrarlo o tomarlo en papel, y con la
+   encuesta cerrada se comparte un reporte en PDF con análisis: lectura
+   general, alertas de cuidado, lo más fuerte y lo más flojo, cambios contra la
+   encuesta anterior, cada pregunta con sus respuestas, lo que escribieron los
+   chicos y sugerencias para conversar en el staff.
 
 ## Arquitectura
 
