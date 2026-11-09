@@ -527,6 +527,25 @@ async function main() {
   esperar('las estrellas dan promedio y 4 o 5 cuentan como favorables',
     est.promedio === 3.4 && est.favorable === 60 && resEstrellas.indice === 60, est)
 
+  // Casilleros: varias opciones
+  const conVarias = limpiarPreguntas([{ clave: 'x_varias', bloque: 'Prueba', tipo: 'varias', texto: '¿Qué te gusta?', opciones: ['Correr', 'Tacklear', 'Pasar'] }])
+  esperar('la pregunta de casilleros guarda sus opciones', conVarias[0].opciones?.length === 3 && !conVarias[0].segmento, conVarias[0])
+  let sinOpciones = null
+  try { limpiarPreguntas([{ clave: 'x_v2', bloque: 'P', tipo: 'varias', texto: 'X', opciones: ['Una'] }]) } catch (e) { sinOpciones = e.error }
+  esperar('los casilleros necesitan al menos dos opciones', sinOpciones === 'preguntas_invalidas', sinOpciones)
+  esperar('se pueden marcar varias, sin repetir y en orden',
+    JSON.stringify(validarRespuestas(conVarias, { x_varias: [2, 0, 2] }).x_varias) === '[0,2]', null)
+  let ningunaMarcada = null
+  try { validarRespuestas(conVarias, { x_varias: [] }) } catch (e) { ningunaMarcada = e.error }
+  esperar('obligatoria, sin ninguna marcada no se manda', ningunaMarcada === 'faltan_respuestas', ningunaMarcada)
+  let opcionInventada = null
+  try { validarRespuestas(conVarias, { x_varias: [7] }) } catch (e) { opcionInventada = e.error }
+  esperar('una opción que no existe no vale', opcionInventada === 'faltan_respuestas', opcionInventada)
+  const resVarias = resumirEncuesta(conVarias, [[0, 1], [0], [0, 2], [1, 2], [0, 1, 2]].map((v) => ({ x_varias: v })))
+  esperar('cada opción cuenta a los chicos que la marcaron',
+    resVarias.preguntas[0].opciones.map((o) => `${o.cantidad}/${o.pct}`).join(',') === '4/80,3/60,3/60' && resVarias.preguntas[0].favorable == null,
+    resVarias.preguntas[0].opciones)
+
   let sinNombre = null
   try { renombrarBloque(deSiempre, 'Grupo', '  ') } catch (e) { sinNombre = e.error }
   esperar('una parte no puede quedar sin nombre', sinNombre === 'nombre_vacio', sinNombre)

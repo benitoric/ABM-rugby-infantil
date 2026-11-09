@@ -19,7 +19,8 @@ export const TIPOS_PREGUNTA = [
   { value: 'si_no', label: 'Sí · No' },
   { value: 'estrellas', label: 'De 1 a 5 estrellas' },
   { value: 'nota', label: 'Nota del 1 al 10' },
-  { value: 'opciones', label: 'Opciones a elegir' },
+  { value: 'opciones', label: 'Opciones a elegir (una sola)' },
+  { value: 'varias', label: 'Varias opciones (casilleros)' },
   { value: 'abierta', label: 'Respuesta libre (texto)' },
 ]
 
@@ -44,6 +45,10 @@ const ESCALAS = {
     { value: 'no', label: 'No', cara: '👎', favorable: false },
   ],
 }
+
+// Los dos tipos que llevan opciones escritas por el staff: "opciones" (se
+// elige una) y "varias" (casilleros: se marcan todas las que correspondan)
+export const conOpciones = (tipo) => tipo === 'opciones' || tipo === 'varias'
 
 // Las respuestas posibles de una pregunta cerrada, en el orden en que se
 // muestran. Las de "opciones" usan el índice como valor, así corregir el texto
@@ -70,7 +75,7 @@ export function opcionesDe(p) {
       favorable: i + 1 >= ESTRELLAS_FAVORABLES,
     }))
   }
-  if (p.tipo === 'opciones') {
+  if (conOpciones(p.tipo)) {
     return (p.opciones || []).map((label, i) => ({ value: i, label, favorable: null }))
   }
   return []
@@ -136,7 +141,7 @@ function normalizar(p) {
     negativa: !!p.negativa,
     obligatoria: p.obligatoria ?? p.tipo !== 'abierta',
     segmento: p.tipo === 'opciones' && !!p.segmento,
-    ...(p.tipo === 'opciones' ? { opciones: [...(p.opciones || [])] } : {}),
+    ...(conOpciones(p.tipo) ? { opciones: [...(p.opciones || [])] } : {}),
   }
 }
 
@@ -173,7 +178,7 @@ export function limpiarPreguntas(crudo) {
     if (!TIPOS_POR_VALUE[p?.tipo]) throw error(`La pregunta ${n} no tiene un tipo de respuesta válido.`)
     const bloque = String(p?.bloque || '').trim().slice(0, 60) || 'Preguntas'
     const limpia = normalizar({ ...p, clave, texto, bloque })
-    if (p.tipo === 'opciones') {
+    if (conOpciones(p.tipo)) {
       const opciones = (Array.isArray(p.opciones) ? p.opciones : [])
         .map((o) => String(o || '').trim().slice(0, 80)).filter(Boolean)
       if (opciones.length < 2) throw error(`La pregunta ${n} necesita al menos dos opciones.`)
@@ -205,6 +210,11 @@ export function bloquesDe(preguntas) {
 export function respuestaValida(p, v) {
   if (v === undefined || v === null || v === '') return false
   if (p.tipo === 'abierta') return typeof v === 'string' && v.trim().length > 0
+  // Casilleros: la lista de las marcadas, sin repetir; vacía es sin contestar
+  if (p.tipo === 'varias') {
+    const validas = opcionesDe(p).map((o) => o.value)
+    return Array.isArray(v) && v.length > 0 && new Set(v).size === v.length && v.every((x) => validas.includes(x))
+  }
   return opcionesDe(p).some((o) => o.value === v)
 }
 
@@ -216,6 +226,7 @@ export function validarRespuestas(preguntas, crudo) {
   for (const p of preguntas) {
     let v = crudo?.[p.clave]
     if (p.tipo === 'abierta' && typeof v === 'string') v = v.trim().slice(0, LARGO_TEXTO_LIBRE)
+    if (p.tipo === 'varias' && Array.isArray(v)) v = [...new Set(v)].sort((a, b) => a - b)
     if (respuestaValida(p, v)) res[p.clave] = v
     else if (p.obligatoria) faltan.push(p.clave)
   }
@@ -242,8 +253,13 @@ function resumirPregunta(p, respuestas) {
     // leerse en ningún lado
     return { ...base, textos: [...valores].sort((a, b) => a.localeCompare(b, 'es')) }
   }
+  // En los casilleros cada opción cuenta a los chicos que la marcaron, sobre
+  // los que contestaron: los porcentajes pueden sumar más de 100
+  const marco = p.tipo === 'varias'
+    ? (v, valor) => v.includes(valor)
+    : (v, valor) => v === valor
   const opciones = opcionesDe(p).map((o) => {
-    const cantidad = valores.filter((v) => v === o.value).length
+    const cantidad = valores.filter((v) => marco(v, o.value)).length
     return { value: o.value, label: o.label, cara: o.cara, favorable: o.favorable, cantidad, pct: pct(cantidad, valores.length) }
   })
   const res = { ...base, opciones }

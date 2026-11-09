@@ -11,7 +11,7 @@
 
 import { anchoTexto, nuevoPDF, partirTexto } from './pdf.js'
 import { fechaCorta } from './helpers.js'
-import { analizarEncuesta, bloquesDe, MINIMO_RESPUESTAS, opcionesDe, textoEnLista } from './encuesta.js'
+import { analizarEncuesta, bloquesDe, conOpciones, MINIMO_RESPUESTAS, opcionesDe, textoEnLista } from './encuesta.js'
 
 const AZUL = [26, 74, 158]
 const DORADO = [255, 210, 0]
@@ -170,7 +170,9 @@ export function generarCuestionarioPDF({ titulo, preguntas, cierra, generadoPor 
   h.recuadro([
     'Es anónima: nadie va a saber qué contestaste, tampoco los entrenadores.',
     'Contestala vos solo. No es un examen: no hay respuestas buenas ni malas.',
-    'Marcá una sola opción en cada pregunta. Las que dicen "opcional" las podés dejar en blanco.',
+    preguntas.some((p) => p.tipo === 'varias')
+      ? 'Marcá una sola opción en cada pregunta, salvo donde dice que podés marcar varias. Las que dicen "opcional" las podés dejar en blanco.'
+      : 'Marcá una sola opción en cada pregunta. Las que dicen "opcional" las podés dejar en blanco.',
   ], { fondo: [227, 236, 251], color: AZUL })
 
   const casillero = (x, y) => {
@@ -183,14 +185,16 @@ export function generarCuestionarioPDF({ titulo, preguntas, cierra, generadoPor 
     h.titulo(b.nombre)
     for (const p of b.preguntas) {
       n++
-      const escala = p.tipo === 'estrellas' ? ' (de 1 a 5 estrellas: 5 es la más alta)' : ''
+      const escala = p.tipo === 'estrellas' ? ' (de 1 a 5 estrellas: 5 es la más alta)'
+        : p.tipo === 'varias' ? ' (podés marcar varias)'
+        : p.tipo === 'opciones' ? ' (marcá una)' : ''
       const enunciado = `${n}. ${p.texto}${escala}${p.obligatoria ? '' : ' (opcional)'}`
       const lineas = partirTexto(enunciado, ancho, 10, true)
       const opciones = opcionesDe(p)
       // Cuánto lugar ocupan las opciones, para no partir una pregunta entre hojas
       let altoOpciones = 18
       if (p.tipo === 'abierta') altoOpciones = 66
-      else if (p.tipo === 'opciones') altoOpciones = opciones.length * 15 + 4
+      else if (conOpciones(p.tipo)) altoOpciones = opciones.length * 15 + 4
       h.espacio(lineas.length * 13 + altoOpciones + 8)
       for (const l of lineas) {
         doc.texto(l, M, h.y, { tam: 10, negrita: true, color: TEXTO })
@@ -203,7 +207,7 @@ export function generarCuestionarioPDF({ titulo, preguntas, cierra, generadoPor 
           doc.linea(M, h.y, doc.ancho - M, h.y, GRIS, 0.6)
         }
         h.y += 10
-      } else if (p.tipo === 'opciones') {
+      } else if (conOpciones(p.tipo)) {
         for (const o of opciones) {
           casillero(M + 4, h.y)
           doc.texto(o.label, M + 20, h.y, { tam: 9.5, color: TEXTO })
@@ -256,7 +260,7 @@ export const nombreCuestionario = (titulo) =>
 function coloresDe(p) {
   if (p.tipo === 'nota') return p.opciones.map((o) => (o.value >= 9 ? VERDE : o.value >= 7 ? VERDE_CLARO : o.value >= 5 ? ROJO_CLARO : ROJO))
   if (p.tipo === 'estrellas') return p.opciones.map((o) => (o.value === 5 ? VERDE : o.value === 4 ? VERDE_CLARO : o.value === 3 ? GRIS : o.value === 2 ? ROJO_CLARO : ROJO))
-  if (p.tipo === 'opciones') {
+  if (conOpciones(p.tipo)) {
     const azules = [AZUL, [59, 130, 246], [147, 197, 253], [96, 165, 250], [30, 64, 175], [191, 219, 254], [37, 99, 235], [219, 234, 254]]
     return p.opciones.map((_, i) => azules[i % azules.length])
   }
@@ -345,12 +349,30 @@ export function generarReporteEncuestaPDF({ encuesta, resultados: r, links, resp
     const resumen = p.tipo === 'nota' ? `promedio ${conComa(p.promedio)}`
       : p.tipo === 'estrellas' ? `${p.favorable}% favorable · ${conComa(p.promedio)} de 5`
       : p.favorable != null ? `${p.favorable}% favorable` : `${p.n} respuestas`
-    doc.texto(resumen, doc.ancho - M, h.y, { tam: 9, negrita: true, color: p.tipo === 'opciones' ? TEXTO : colorFavorable(p.favorable), alinear: 'der' })
+    doc.texto(resumen, doc.ancho - M, h.y, { tam: 9, negrita: true, color: conOpciones(p.tipo) ? TEXTO : colorFavorable(p.favorable), alinear: 'der' })
     if (p.variacion != null) {
       doc.texto(`${p.variacion > 0 ? '+' : ''}${p.variacion} vs. anterior`, doc.ancho - M, h.y + 11,
         { tam: 7.5, color: p.variacion > 0 ? VERDE : p.variacion < 0 ? ROJO : SUAVE, alinear: 'der' })
     }
     h.y += Math.max(lineas.length * 12, p.variacion != null ? 22 : 12) + 2
+    // Casilleros: una barra por opción (cada chico pudo marcar varias, así
+    // que no se apilan: los porcentajes suman más de 100)
+    if (p.tipo === 'varias') {
+      for (const o of [...p.opciones].sort((a, b) => b.cantidad - a.cantidad)) {
+        h.espacio(14)
+        const etiqueta = partirTexto(o.label, ancho * 0.45, 8.5)[0]
+        doc.texto(etiqueta, M, h.y, { tam: 8.5, color: TEXTO })
+        const x0 = M + ancho * 0.47
+        const w = ancho * 0.4
+        doc.rect(x0, h.y + 1, w, 8, [237, 240, 246])
+        doc.rect(x0, h.y + 1, (w * (o.pct || 0)) / 100, 8, AZUL)
+        doc.texto(`${o.cantidad} · ${o.pct ?? 0}%`, doc.ancho - M, h.y, { tam: 8.5, negrita: true, color: TEXTO, alinear: 'der' })
+        h.y += 13
+      }
+      doc.texto('Cada chico pudo marcar varias: los porcentajes pueden sumar más de 100.', M, h.y, { tam: 7.5, color: SUAVE })
+      h.y += 16
+      continue
+    }
     // Barra apilada
     const colores = coloresDe(p)
     const total = p.opciones.reduce((s, o) => s + o.cantidad, 0) || 1

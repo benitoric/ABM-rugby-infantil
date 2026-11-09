@@ -98,8 +98,8 @@ pantalla de inicio" del teléfono y queda como una app más).
    de 11 y 12 años (disfrute y ganas de seguir, aprender, trato y justicia,
    grupo, cuerpo y seguridad, organización y tres preguntas libres), que se
    pueden cambiar o ampliar antes de la primera respuesta, con respuestas de
-   frecuencia, sí o no, de 1 a 5 estrellas, nota del 1 al 10, opciones o texto
-   libre. Cada parte tiene
+   frecuencia, sí o no, de 1 a 5 estrellas, nota del 1 al 10, opciones (una o
+   varias, con casilleros) o texto libre. Cada parte tiene
    su botón para sumarle una pregunta al final y para cambiarle el nombre. Las respuestas se
    guardan sin el nombre ni la hora, y los resultados se ven recién con la
    encuesta cerrada. Al final, el chico puede pedir que alguien del club hable

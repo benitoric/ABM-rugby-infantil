@@ -209,7 +209,11 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   (`TIPOS_PREGUNTA`): frecuencia (siempre a nunca), sí/no sé/no, sí/no, **de 1
   a 5 estrellas** (5 la mejor; 4 o 5 son favorables, `ESTRELLAS_FAVORABLES`,
   y entra en el índice con su promedio; el chico toca una fila de estrellas),
-  nota del 1 al 10, opciones y texto libre. Al abrirla se
+  nota del 1 al 10, opciones (se elige una), **varias opciones** (casilleros:
+  la respuesta es la lista de las marcadas, sin repetir; obligatoria pide al
+  menos una; cada opción cuenta a los chicos que la marcaron, así que los
+  porcentajes suman más de 100, y no entra en el índice; `conOpciones` junta
+  los dos tipos con opciones) y texto libre. Al abrirla se
   arma un link por chico activo (`encuesta_links`, token aleatorio de un solo
   uso); la pantalla manda cada link por WhatsApp al celular propio del chico
   (`jugadores.telefono`, se carga en la ficha o en el padrón) o, si no tiene,
