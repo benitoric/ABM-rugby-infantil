@@ -716,6 +716,7 @@ export function ResultadosEncuesta({ r, links }) {
             <div className="mini">
               {p.favorable != null ? `${p.favorable}% favorable` : ''}
               {p.tipo === 'nota' && p.promedio != null ? ` · promedio ${p.promedio.toFixed(1).replace('.', ',')}` : ''}
+              {p.tipo === 'estrellas' && p.promedio != null ? ` · promedio ${p.promedio.toFixed(1).replace('.', ',')} de 5` : ''}
               {textoVariacion(p.variacion)}
               {` · ${p.n} respuestas`}
             </div>

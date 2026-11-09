@@ -199,7 +199,11 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   (`insertarEnBloque`), una que cambia de parte se mueve al final de la nueva
   (`reemplazarPregunta`), y cada parte se renombra desde su encabezado
   (`renombrarBloque`; con el nombre de otra, las dos se juntan).
-  `limpiarPreguntas` también agrupa por parte al guardar. Al abrirla se
+  `limpiarPreguntas` también agrupa por parte al guardar. Tipos de respuesta
+  (`TIPOS_PREGUNTA`): frecuencia (siempre a nunca), sí/no sé/no, sí/no, **de 1
+  a 5 estrellas** (5 la mejor; 4 o 5 son favorables, `ESTRELLAS_FAVORABLES`,
+  y entra en el índice con su promedio; el chico toca una fila de estrellas),
+  nota del 1 al 10, opciones y texto libre. Al abrirla se
   arma un link por chico activo (`encuesta_links`, token aleatorio de un solo
   uso); la pantalla manda cada link por WhatsApp al celular propio del chico
   (`jugadores.telefono`, se carga en la ficha o en el padrón) o, si no tiene,

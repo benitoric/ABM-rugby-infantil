@@ -12,7 +12,8 @@ import { createServer } from 'http'
 import { handle } from '../server/router.js'
 import { query } from '../server/db.js'
 import {
-  analizarEncuesta, bloquesDe, insertarEnBloque, preguntasPorDefecto, reemplazarPregunta, renombrarBloque,
+  analizarEncuesta, bloquesDe, insertarEnBloque, limpiarPreguntas, preguntasPorDefecto, reemplazarPregunta,
+  renombrarBloque, resumirEncuesta, validarRespuestas,
 } from '../src/encuesta.js'
 import { generarCuestionarioPDF, generarReporteEncuestaPDF } from '../src/encuestaPDF.js'
 
@@ -514,6 +515,18 @@ async function main() {
   const juntas = renombrarBloque(deSiempre, 'Grupo', 'Aprender')
   esperar('renombrar con el nombre de otra parte las junta en una',
     bloquesDe(juntas).find((b) => b.nombre === 'Aprender').preguntas.length === 6 && bloquesDe(juntas).length === 7, bloquesDe(juntas).map((b) => b.nombre))
+  // Respuesta de 1 a 5 estrellas
+  const conEstrellas = limpiarPreguntas([{ clave: 'x_estrellas', bloque: 'Prueba', tipo: 'estrellas', texto: '¿Cómo calificás el año?' }])
+  esperar('la pregunta de estrellas se guarda', conEstrellas[0].tipo === 'estrellas' && conEstrellas[0].obligatoria, conEstrellas[0])
+  esperar('se aceptan de 1 a 5 estrellas', validarRespuestas(conEstrellas, { x_estrellas: 5 }).x_estrellas === 5, null)
+  let fueraDeRango = null
+  try { validarRespuestas(conEstrellas, { x_estrellas: 6 }) } catch (e) { fueraDeRango = e.error }
+  esperar('6 estrellas no vale', fueraDeRango === 'faltan_respuestas', fueraDeRango)
+  const resEstrellas = resumirEncuesta(conEstrellas, [5, 4, 4, 3, 1].map((v) => ({ x_estrellas: v })))
+  const est = resEstrellas.preguntas[0]
+  esperar('las estrellas dan promedio y 4 o 5 cuentan como favorables',
+    est.promedio === 3.4 && est.favorable === 60 && resEstrellas.indice === 60, est)
+
   let sinNombre = null
   try { renombrarBloque(deSiempre, 'Grupo', '  ') } catch (e) { sinNombre = e.error }
   esperar('una parte no puede quedar sin nombre', sinNombre === 'nombre_vacio', sinNombre)

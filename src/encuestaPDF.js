@@ -183,7 +183,8 @@ export function generarCuestionarioPDF({ titulo, preguntas, cierra, generadoPor 
     h.titulo(b.nombre)
     for (const p of b.preguntas) {
       n++
-      const enunciado = `${n}. ${p.texto}${p.obligatoria ? '' : ' (opcional)'}`
+      const escala = p.tipo === 'estrellas' ? ' (de 1 a 5 estrellas: 5 es la más alta)' : ''
+      const enunciado = `${n}. ${p.texto}${escala}${p.obligatoria ? '' : ' (opcional)'}`
       const lineas = partirTexto(enunciado, ancho, 10, true)
       const opciones = opcionesDe(p)
       // Cuánto lugar ocupan las opciones, para no partir una pregunta entre hojas
@@ -225,7 +226,11 @@ export function generarCuestionarioPDF({ titulo, preguntas, cierra, generadoPor 
     }
   }
 
-  h.titulo('Para cerrar')
+  // El pedido de ayuda va en la última parte si ya se llama "Para cerrar"
+  // (como en las preguntas de siempre); si no, con su propio título
+  const partes = bloquesDe(preguntas)
+  if (partes[partes.length - 1]?.nombre !== 'Para cerrar') h.titulo('Para cerrar')
+  else h.y += 6
   h.espacio(40)
   casillero(M + 4, h.y)
   doc.texto('Quiero que alguien del club hable conmigo.', M + 20, h.y, { tam: 10, negrita: true, color: TEXTO })
@@ -250,6 +255,7 @@ export const nombreCuestionario = (titulo) =>
 // del otro a rojo; las opciones sin lado, en azules
 function coloresDe(p) {
   if (p.tipo === 'nota') return p.opciones.map((o) => (o.value >= 9 ? VERDE : o.value >= 7 ? VERDE_CLARO : o.value >= 5 ? ROJO_CLARO : ROJO))
+  if (p.tipo === 'estrellas') return p.opciones.map((o) => (o.value === 5 ? VERDE : o.value === 4 ? VERDE_CLARO : o.value === 3 ? GRIS : o.value === 2 ? ROJO_CLARO : ROJO))
   if (p.tipo === 'opciones') {
     const azules = [AZUL, [59, 130, 246], [147, 197, 253], [96, 165, 250], [30, 64, 175], [191, 219, 254], [37, 99, 235], [219, 234, 254]]
     return p.opciones.map((_, i) => azules[i % azules.length])
@@ -337,6 +343,7 @@ export function generarReporteEncuestaPDF({ encuesta, resultados: r, links, resp
     h.espacio(lineas.length * 12 + 40)
     lineas.forEach((l, i) => doc.texto(l, M, h.y + i * 12, { tam: 9.5, negrita: true, color: TEXTO }))
     const resumen = p.tipo === 'nota' ? `promedio ${conComa(p.promedio)}`
+      : p.tipo === 'estrellas' ? `${p.favorable}% favorable · ${conComa(p.promedio)} de 5`
       : p.favorable != null ? `${p.favorable}% favorable` : `${p.n} respuestas`
     doc.texto(resumen, doc.ancho - M, h.y, { tam: 9, negrita: true, color: p.tipo === 'opciones' ? TEXTO : colorFavorable(p.favorable), alinear: 'der' })
     if (p.variacion != null) {
@@ -401,7 +408,7 @@ export function generarReporteEncuestaPDF({ encuesta, resultados: r, links, resp
   }
 
   h.titulo('Cómo se hizo')
-  h.parrafo(`Cada chico recibió un link personal de un solo uso. Las respuestas se guardan sin el nombre, sin el link y sin la hora, así que nadie puede saber qué contestó cada uno. Los resultados se ven recién con la encuesta cerrada y solo con ${MINIMO_RESPUESTAS} respuestas o más, también en los cortes por años en el club. El porcentaje favorable cuenta "siempre" y "casi siempre", o "sí" (o "no" en las preguntas en negativo, como "me molestaron"). Los pedidos para hablar con alguien del club los ve solo la cabeza de división, con el nombre; acá va solo la cantidad.`,
+  h.parrafo(`Cada chico recibió un link personal de un solo uso. Las respuestas se guardan sin el nombre, sin el link y sin la hora, así que nadie puede saber qué contestó cada uno. Los resultados se ven recién con la encuesta cerrada y solo con ${MINIMO_RESPUESTAS} respuestas o más, también en los cortes por años en el club. El porcentaje favorable cuenta "siempre" y "casi siempre", "sí" (o "no" en las preguntas en negativo, como "me molestaron"), 4 o 5 estrellas y las notas de 7 o más. Los pedidos para hablar con alguien del club los ve solo la cabeza de división, con el nombre; acá va solo la cantidad.`,
     { tam: 8.5, color: SUAVE })
 
   return h.cerrar(generadoPor, 'Reporte de la encuesta')

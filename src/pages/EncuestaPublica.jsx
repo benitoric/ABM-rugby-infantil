@@ -28,7 +28,28 @@ function Pregunta({ p, valor, onChange, marcarFalta }) {
   return (
     <div className={`enc-pregunta${falta ? ' falta' : ''}`}>
       <div className="enc-texto">{p.texto}</div>
-      {p.tipo === 'abierta' ? (
+      {p.tipo === 'estrellas' ? (
+        <>
+          <div className="enc-estrellas" role="radiogroup" aria-label={p.texto}>
+            {opciones.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                role="radio"
+                aria-checked={valor === o.value}
+                aria-label={o.label}
+                className={`enc-estrella${valor >= o.value ? ' llena' : ''}`}
+                onClick={() => onChange(o.value)}
+              >
+                {valor >= o.value ? '★' : '☆'}
+              </button>
+            ))}
+          </div>
+          <div className="enc-estrellas-texto">
+            {valor ? `${valor} de 5 estrellas` : 'Tocá las estrellas: 1 es lo más bajo y 5 lo más alto'}
+          </div>
+        </>
+      ) : p.tipo === 'abierta' ? (
         <>
           <textarea
             rows={3}

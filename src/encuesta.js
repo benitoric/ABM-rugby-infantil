@@ -17,6 +17,7 @@ export const TIPOS_PREGUNTA = [
   { value: 'frecuencia', label: 'Siempre · Casi siempre · A veces · Nunca' },
   { value: 'si_nose_no', label: 'Sí · No sé · No' },
   { value: 'si_no', label: 'Sí · No' },
+  { value: 'estrellas', label: 'De 1 a 5 estrellas' },
   { value: 'nota', label: 'Nota del 1 al 10' },
   { value: 'opciones', label: 'Opciones a elegir' },
   { value: 'abierta', label: 'Respuesta libre (texto)' },
@@ -60,14 +61,26 @@ export function opcionesDe(p) {
   if (p.tipo === 'nota') {
     return Array.from({ length: 10 }, (_, i) => ({ value: i + 1, label: String(i + 1), favorable: i + 1 >= 7 }))
   }
+  // De 1 a 5 estrellas, 5 la mejor: 4 o 5 cuentan como favorables
+  if (p.tipo === 'estrellas') {
+    return Array.from({ length: 5 }, (_, i) => ({
+      value: i + 1,
+      label: `${i + 1} ${i ? 'estrellas' : 'estrella'}`,
+      cara: `${i + 1}⭐`,
+      favorable: i + 1 >= ESTRELLAS_FAVORABLES,
+    }))
+  }
   if (p.tipo === 'opciones') {
     return (p.opciones || []).map((label, i) => ({ value: i, label, favorable: null }))
   }
   return []
 }
 
+// Desde cuántas estrellas la respuesta cuenta como favorable
+export const ESTRELLAS_FAVORABLES = 4
+
 // Tipos que entran en el índice general: los que tienen un lado favorable
-const TIPOS_CON_INDICE = ['frecuencia', 'si_nose_no', 'si_no']
+const TIPOS_CON_INDICE = ['frecuencia', 'si_nose_no', 'si_no', 'estrellas']
 
 // Con menos respuestas que esto no se muestra nada: en un plantel chico, tres
 // respuestas alcanzan para adivinar quién dijo qué. Vale también para los
@@ -242,6 +255,7 @@ function resumirPregunta(p, respuestas) {
     res.favorable = pct(valores.filter((v) => v >= 7).length, valores.length)
   }
   if (p.tipo === 'frecuencia') res.promedio = redondear(promedio(valores), 2)
+  if (p.tipo === 'estrellas') res.promedio = redondear(promedio(valores), 1)
   return res
 }
 
