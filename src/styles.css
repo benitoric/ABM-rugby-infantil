@@ -1707,3 +1707,6 @@ details.tarjeta summary {
 .enc-estrella.llena { color: #f5b301; }
 .enc-estrella:active { transform: scale(1.15); }
 .enc-estrellas-texto { text-align: center; font-size: 0.85rem; color: var(--texto-suave); margin-top: 4px; }
+
+/* Aviso de guardado automático en el editor de la encuesta */
+.enc-guardado { margin-left: 8px; font-size: 0.75rem; font-weight: 600; color: var(--ok); }
