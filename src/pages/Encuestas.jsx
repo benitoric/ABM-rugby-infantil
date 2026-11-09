@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api.js'
 import { fechaCorta } from '../helpers.js'
 import { descargarArchivo, verOCompartirArchivo } from '../pdf.js'
@@ -8,7 +8,7 @@ import {
 import { irA, reponer } from '../navegacion.js'
 import { numeroWhatsApp, Telefono } from '../telefono.jsx'
 import {
-  analizarEncuesta, claveNueva, limpiarPreguntas, MINIMO_RESPUESTAS, opcionesDe, preguntasPorDefecto, puntosBajos,
+  analizarEncuesta, claveNueva, insertarEnBloque, limpiarPreguntas, reemplazarPregunta, renombrarBloque, MINIMO_RESPUESTAS, opcionesDe, preguntasPorDefecto, puntosBajos,
   TIPOS_POR_VALUE, TIPOS_PREGUNTA,
 } from '../encuesta.js'
 import EncuestaPublica from './EncuestaPublica.jsx'
@@ -200,10 +200,24 @@ function Preguntas({ datos, onGuardado, onVistaPrevia }) {
   const editable = datos.editable
   const [preguntas, setPreguntas] = useState(datos.encuesta.preguntas)
   const [editando, setEditando] = useState(null) // índice, o 'nueva'
+  // Parte en la que nace la pregunta nueva (la del "+" de cada parte)
+  const [bloqueNueva, setBloqueNueva] = useState(null)
+  const [renombrando, setRenombrando] = useState(null) // { viejo, nombre }
+  const [resaltada, setResaltada] = useState(null) // clave de la recién agregada o movida
   const [cambios, setCambios] = useState(false)
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
   const bloques = [...new Set(preguntas.map((p) => p.bloque))]
+  const lista = useRef(null)
+
+  // La pregunta recién puesta en su lugar se lleva a la vista y se marca un
+  // momento, para que se vea dónde quedó
+  useEffect(() => {
+    if (!resaltada) return
+    lista.current?.querySelector(`[data-clave="${resaltada}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const t = setTimeout(() => setResaltada(null), 2500)
+    return () => clearTimeout(t)
+  }, [resaltada])
 
   function cambiar(nuevas) {
     setPreguntas(nuevas)
@@ -219,14 +233,39 @@ function Preguntas({ datos, onGuardado, onVistaPrevia }) {
     cambiar(n)
   }
 
+  // La pregunta nueva va al final de su parte; una editada que cambió de
+  // parte, también (src/encuesta.js)
   function confirmar(i, p) {
     if (i === 'nueva') {
       const clave = claveNueva(p.texto, preguntas.map((x) => x.clave))
-      cambiar([...preguntas, { ...p, clave }])
+      cambiar(insertarEnBloque(preguntas, { ...p, clave }))
+      setResaltada(clave)
     } else {
-      cambiar(preguntas.map((x, k) => (k === i ? p : x)))
+      cambiar(reemplazarPregunta(preguntas, i, p))
+      if (preguntas[i].bloque !== p.bloque) setResaltada(p.clave)
     }
     setEditando(null)
+    setBloqueNueva(null)
+  }
+
+  function nuevaEn(bloque) {
+    setRenombrando(null)
+    setBloqueNueva(bloque)
+    setEditando('nueva')
+  }
+
+  function confirmarNombre(e) {
+    e.preventDefault()
+    const { viejo, nombre } = renombrando
+    if (nombre.trim() === viejo) { setRenombrando(null); return }
+    if (bloques.includes(nombre.trim())
+        && !confirm(`Ya hay una parte "${nombre.trim()}". ¿Juntar las dos en una sola?`)) return
+    try {
+      cambiar(renombrarBloque(preguntas, viejo, nombre))
+      setRenombrando(null)
+    } catch (err) {
+      setError(err.detalle || 'La parte necesita un nombre.')
+    }
   }
 
   async function guardar() {
@@ -248,9 +287,21 @@ function Preguntas({ datos, onGuardado, onVistaPrevia }) {
   }
 
   const nueva = {
-    clave: '', texto: '', tipo: 'frecuencia', bloque: bloques[bloques.length - 2] || bloques[0] || 'Preguntas',
+    clave: '', texto: '', tipo: 'frecuencia',
+    bloque: bloqueNueva || bloques[bloques.length - 2] || bloques[0] || 'Preguntas',
     obligatoria: true, negativa: false,
   }
+  // El formulario de la nueva se abre al final de su parte (o abajo de todo)
+  const ultimaDe = (b) => preguntas.reduce((u, p, i) => (p.bloque === b ? i : u), -1)
+  const formNuevaEn = editando === 'nueva' && bloqueNueva ? ultimaDe(bloqueNueva) : -1
+  const formNueva = (
+    <EditorPregunta
+      inicial={nueva}
+      bloques={bloques}
+      onListo={(x) => confirmar('nueva', x)}
+      onCancelar={() => { setEditando(null); setBloqueNueva(null) }}
+    />
+  )
 
   return (
     <div className="tarjeta">
@@ -272,14 +323,43 @@ function Preguntas({ datos, onGuardado, onVistaPrevia }) {
           así se pueden comparar.
         </p>
       )}
+      <div ref={lista}>
       {preguntas.map((p, i) => (
-        <div key={p.clave || i} className="enc-fila-pregunta">
+        <div key={p.clave || i}>
+        {(i === 0 || preguntas[i - 1].bloque !== p.bloque) && (
+          renombrando?.viejo === p.bloque ? (
+            <form className="enc-renombrar" onSubmit={confirmarNombre}>
+              <input
+                autoFocus
+                maxLength={60}
+                value={renombrando.nombre}
+                onChange={(e) => setRenombrando({ ...renombrando, nombre: e.target.value })}
+              />
+              <button className="btn chico">Listo</button>
+              <button type="button" className="btn sec chico" onClick={() => setRenombrando(null)}>Cancelar</button>
+            </form>
+          ) : (
+            <div className="enc-bloque-fila">
+              <span className="enc-bloque">{p.bloque}</span>
+              {editable && (
+                <span className="enc-bloque-acciones">
+                  <button type="button" title="Cambiar el nombre de la parte" onClick={() => { setEditando(null); setRenombrando({ viejo: p.bloque, nombre: p.bloque }) }}>
+                    ✏️ Nombre
+                  </button>
+                  <button type="button" title="Agregar una pregunta al final de esta parte" onClick={() => nuevaEn(p.bloque)}>
+                    + Pregunta
+                  </button>
+                </span>
+              )}
+            </div>
+          )
+        )}
+        <div data-clave={p.clave} className={`enc-fila-pregunta${resaltada === p.clave ? ' resaltada' : ''}`}>
           {editando === i ? (
             <EditorPregunta inicial={p} bloques={bloques} onListo={(x) => confirmar(i, x)} onCancelar={() => setEditando(null)} />
           ) : (
             <>
               <div className="crece">
-                {(i === 0 || preguntas[i - 1].bloque !== p.bloque) && <div className="enc-bloque">{p.bloque}</div>}
                 <div style={{ fontSize: '0.92rem' }}><b>{i + 1}.</b> {p.texto}</div>
                 <div className="mini">
                   {TIPOS_POR_VALUE[p.tipo]?.label}
@@ -306,15 +386,16 @@ function Preguntas({ datos, onGuardado, onVistaPrevia }) {
             </>
           )}
         </div>
+        {editable && formNuevaEn === i && formNueva}
+        </div>
       ))}
-      {editable && editando === 'nueva' && (
-        <EditorPregunta inicial={nueva} bloques={bloques} onListo={(x) => confirmar('nueva', x)} onCancelar={() => setEditando(null)} />
-      )}
+      </div>
+      {editable && editando === 'nueva' && formNuevaEn === -1 && formNueva}
       {editable && (
         <>
           {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
           <div className="fila" style={{ marginTop: 10 }}>
-            <button className="btn sec" onClick={() => setEditando('nueva')}>+ Pregunta nueva</button>
+            <button className="btn sec" onClick={() => nuevaEn(null)}>+ Pregunta nueva</button>
             <button
               className="btn sec"
               onClick={() => confirm('¿Volver a las preguntas de siempre? Se pierden los cambios.') && cambiar(preguntasPorDefecto())}

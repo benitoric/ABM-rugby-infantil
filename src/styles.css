@@ -1685,3 +1685,15 @@ details.tarjeta summary {
 .enc-sugerencia { padding: 8px 0; border-bottom: 1px dashed var(--borde); }
 .enc-sugerencia:last-child { border-bottom: none; }
 .enc-vista-previa .crece { flex: 1; }
+
+/* Editor de la encuesta: encabezado de cada parte con sus acciones */
+.enc-bloque-fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 4px; }
+.enc-bloque-fila .enc-bloque { margin-bottom: 0; }
+.enc-bloque-acciones { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.enc-bloque-acciones button {
+  background: var(--celeste); color: var(--primario); border: none; border-radius: 999px;
+  padding: 3px 10px; font-size: 0.75rem; font-weight: 600;
+}
+.enc-renombrar { display: flex; gap: 6px; margin-top: 12px; }
+.enc-renombrar input { flex: 1; min-width: 0; border: 1px solid var(--primario); border-radius: 8px; padding: 6px 8px; font-weight: 600; }
+.enc-fila-pregunta.resaltada { background: #fff6cc; border-radius: 8px; transition: background 0.4s; }

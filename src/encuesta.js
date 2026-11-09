@@ -172,7 +172,8 @@ export function limpiarPreguntas(crudo) {
   // Un solo segmento: es el que separa los resultados (años en el club)
   let segmentos = 0
   for (const p of res) if (p.segmento && ++segmentos > 1) p.segmento = false
-  return res
+  // Las preguntas de una misma parte quedan juntas (ver agruparPorBloque)
+  return agruparPorBloque(res)
 }
 
 // Las preguntas agrupadas por bloque, en el orden en que aparece cada bloque.
@@ -495,3 +496,43 @@ export function analizarEncuesta(r, extra = {}) {
 // negativo lo favorable es el "no": dicho así se entiende que "me molestaron"
 // esté entre lo más fuerte.
 export const textoEnLista = (p) => (p.negativa ? `Dicen que no: ${p.texto}` : p.texto)
+
+// ---------------------------------------------------------------------------
+// Orden de las preguntas por parte (para el editor)
+//
+// En la encuesta, cada parte es una pantalla, y el editor muestra las
+// preguntas en el orden en que están guardadas. Para que una parte no quede
+// partida en dos tramos, sus preguntas van siempre juntas.
+// ---------------------------------------------------------------------------
+
+// Junta las preguntas de cada parte, respetando el orden en que aparece cada
+// parte y el de las preguntas dentro de ella
+export function agruparPorBloque(preguntas) {
+  return bloquesDe(preguntas).flatMap((b) => b.preguntas)
+}
+
+// Pone la pregunta al final de su parte. Si la parte todavía no existe, queda
+// al final de la encuesta, como parte nueva.
+export function insertarEnBloque(preguntas, pregunta) {
+  let ultima = -1
+  preguntas.forEach((p, i) => { if (p.bloque === pregunta.bloque) ultima = i })
+  if (ultima === -1) return [...preguntas, pregunta]
+  return [...preguntas.slice(0, ultima + 1), pregunta, ...preguntas.slice(ultima + 1)]
+}
+
+// Reemplaza la pregunta del lugar `indice`. Si cambió de parte, la lleva al
+// final de la nueva; si no, queda donde estaba.
+export function reemplazarPregunta(preguntas, indice, pregunta) {
+  if (preguntas[indice]?.bloque === pregunta.bloque) {
+    return preguntas.map((p, i) => (i === indice ? pregunta : p))
+  }
+  return insertarEnBloque(preguntas.filter((_, i) => i !== indice), pregunta)
+}
+
+// Cambia el nombre de una parte en todas sus preguntas. Si el nombre nuevo
+// ya era el de otra parte, las dos se juntan en la que aparece primero.
+export function renombrarBloque(preguntas, viejo, nuevo) {
+  const nombre = String(nuevo || '').trim().slice(0, 60)
+  if (!nombre) throw { codigo: 400, error: 'nombre_vacio', detalle: 'La parte necesita un nombre.' }
+  return agruparPorBloque(preguntas.map((p) => (p.bloque === viejo ? { ...p, bloque: nombre } : p)))
+}
