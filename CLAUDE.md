@@ -233,9 +233,11 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   nombre. La última encuesta cerrada en el período entra como sección del
   informe de gestión, con el índice (promedio del porcentaje favorable de las
   preguntas cerradas) y la comparación con la encuesta anterior por clave.
-  PDFs (`src/encuestaPDF.js`): desde la vista previa, el **cuestionario**
-  imprimible con casilleros (lleva las preguntas tal como están en la vista
-  previa, aunque no estén guardadas); con la encuesta cerrada, el **reporte con
+  PDFs (`src/encuestaPDF.js`): el **cuestionario** imprimible con casilleros,
+  desde la vista previa (con las preguntas tal como están ahí, aunque no estén
+  guardadas) o desde el encabezado de la encuesta, que tiene "Vista previa" y
+  "Compartir en PDF" en cualquier estado y solapa (también abierta, mientras
+  se mandan los links, y cerrada); con la encuesta cerrada, el **reporte con
   análisis**, que se comparte desde la solapa Resultados. El análisis
   (`analizarEncuesta` en `src/encuesta.js`, sin DOM) son reglas simples sobre
   el resumen: lectura general, alertas de cuidado con cantidades (dudan de

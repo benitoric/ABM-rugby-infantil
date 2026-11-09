@@ -876,21 +876,23 @@ function DetalleEncuesta({ id, vista, yo }) {
 
   if (error) return <div className="vacio">No se pudo abrir la encuesta.</div>
   if (!datos) return <div className="vacio">Cargando…</div>
+  // El cuestionario en PDF. Desde la vista previa lleva las preguntas tal
+  // como están ahí, aunque todavía no se hayan guardado; desde el encabezado,
+  // las guardadas.
+  const compartirCuestionario = (preguntas) => verOCompartirArchivo(
+    generarCuestionarioPDF({
+      titulo: datos.encuesta.titulo, preguntas, cierra: datos.encuesta.cierra,
+      generadoPor: yo?.nombre || yo?.email,
+    }).blob(),
+    nombreCuestionario(datos.encuesta.titulo),
+    `Encuesta a los jugadores · ${datos.encuesta.titulo}`)
+
   if (vistaPrevia) {
-    // El PDF lleva las preguntas tal como están en la vista previa, aunque
-    // todavía no se hayan guardado
-    const compartirCuestionario = () => verOCompartirArchivo(
-      generarCuestionarioPDF({
-        titulo: datos.encuesta.titulo, preguntas: vistaPrevia, cierra: datos.encuesta.cierra,
-        generadoPor: yo?.nombre || yo?.email,
-      }).blob(),
-      nombreCuestionario(datos.encuesta.titulo),
-      `Encuesta a los jugadores · ${datos.encuesta.titulo}`)
     return (
       <EncuestaPublica
         vistaPrevia={{ titulo: datos.encuesta.titulo, preguntas: vistaPrevia }}
         onCerrar={() => setVistaPrevia(null)}
-        onPDF={compartirCuestionario}
+        onPDF={() => compartirCuestionario(vistaPrevia)}
       />
     )
   }
@@ -984,6 +986,13 @@ function DetalleEncuesta({ id, vista, yo }) {
                 </button>
               )}
               {datos.respuestas === 0 && <button className="btn peligro chico" onClick={borrar}>Borrar</button>}
+            </div>
+            {/* La encuesta tal como la ven los chicos, en cualquier estado y
+                desde cualquier solapa: también abierta, mientras se mandan los
+                links, y cerrada */}
+            <div className="fila" style={{ marginTop: 8 }}>
+              <button className="btn sec chico crece" onClick={() => setVistaPrevia(encuesta.preguntas)}>👀 Vista previa</button>
+              <button className="btn sec chico crece" onClick={() => compartirCuestionario(encuesta.preguntas)}>📄 Compartir en PDF</button>
             </div>
           </>
         )}
