@@ -129,15 +129,22 @@ function ListaEncuestas({ onAbrir }) {
 // ---------------------------------------------------------------------------
 // Editor de preguntas
 // ---------------------------------------------------------------------------
+// `onListo` guarda la pregunta: devuelve un texto de error si no se pudo, y
+// entonces el formulario queda abierto con lo que se escribió
 function EditorPregunta({ inicial, bloques, onListo, onCancelar }) {
   const [p, setP] = useState({ ...inicial, opcionesTexto: (inicial.opciones || []).join('\n') })
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
   const set = (k, v) => setP((x) => ({ ...x, [k]: v }))
   const conLado = ['frecuencia', 'si_no', 'si_nose_no'].includes(p.tipo)
 
-  function confirmar(e) {
+  async function confirmar(e) {
     e.preventDefault()
+    if (guardando) return
+    setError('')
+    setGuardando(true)
     const { opcionesTexto, ...resto } = p
-    onListo({
+    const problema = await onListo({
       ...resto,
       texto: p.texto.trim(),
       bloque: p.bloque.trim() || 'Preguntas',
@@ -145,6 +152,11 @@ function EditorPregunta({ inicial, bloques, onListo, onCancelar }) {
       negativa: conLado && p.negativa,
       segmento: p.tipo === 'opciones' && p.segmento,
     })
+    // Si salió bien, el formulario ya se cerró; si no, se muestra el problema
+    if (problema) {
+      setError(problema)
+      setGuardando(false)
+    }
   }
 
   return (
@@ -188,9 +200,10 @@ function EditorPregunta({ inicial, bloques, onListo, onCancelar }) {
           <span>Separar los resultados por esta pregunta<span className="mini"> · como los años en el club; solo puede haber una</span></span>
         </label>
       )}
+      {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
       <div className="fila" style={{ marginTop: 8 }}>
-        <button className="btn chico crece">Listo</button>
-        <button type="button" className="btn sec chico" onClick={onCancelar}>Cancelar</button>
+        <button className="btn chico crece" disabled={guardando}>{guardando ? 'Guardando…' : 'Listo'}</button>
+        <button type="button" className="btn sec chico" disabled={guardando} onClick={onCancelar}>Cancelar</button>
       </div>
     </form>
   )
@@ -207,8 +220,15 @@ function Preguntas({ datos, onGuardado, onVistaPrevia }) {
   const [cambios, setCambios] = useState(false)
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
+  const [guardado, setGuardado] = useState(false) // aviso "Guardado" un momento
   const bloques = [...new Set(preguntas.map((p) => p.bloque))]
   const lista = useRef(null)
+
+  useEffect(() => {
+    if (!guardado) return
+    const t = setTimeout(() => setGuardado(false), 2500)
+    return () => clearTimeout(t)
+  }, [guardado])
 
   // La pregunta recién puesta en su lugar se lleva a la vista y se marca un
   // momento, para que se vea dónde quedó
@@ -233,19 +253,45 @@ function Preguntas({ datos, onGuardado, onVistaPrevia }) {
     cambiar(n)
   }
 
-  // La pregunta nueva va al final de su parte; una editada que cambió de
-  // parte, también (src/encuesta.js)
-  function confirmar(i, p) {
-    if (i === 'nueva') {
-      const clave = claveNueva(p.texto, preguntas.map((x) => x.clave))
-      cambiar(insertarEnBloque(preguntas, { ...p, clave }))
-      setResaltada(clave)
-    } else {
-      cambiar(reemplazarPregunta(preguntas, i, p))
-      if (preguntas[i].bloque !== p.bloque) setResaltada(p.clave)
+  // Guarda la lista entera en el servidor y la deja como quedó guardada.
+  // Devuelve el problema en palabras si no se pudo (y no toca nada).
+  async function persistir(nuevas) {
+    let limpias
+    try { limpias = limpiarPreguntas(nuevas) } catch (e) { return e.detalle || 'Revisá la pregunta.' }
+    try {
+      const d = await api(`encuestas/${datos.encuesta.id}`, { method: 'PUT', body: { preguntas: limpias } })
+      setPreguntas(d.encuesta.preguntas)
+      setCambios(false)
+      setError('')
+      setGuardado(true)
+      onGuardado(d)
+      return null
+    } catch (e) {
+      return e.error === 'preguntas_bloqueadas'
+        ? 'Ya llegó al menos una respuesta: las preguntas no se pueden cambiar.'
+        : e.detalle || 'No se pudo guardar. Revisá la conexión y probá de nuevo.'
     }
+  }
+
+  // "Listo" guarda en el momento. La pregunta nueva va al final de su parte;
+  // una editada que cambió de parte, también (src/encuesta.js). Si hay otros
+  // cambios sin guardar (orden, preguntas sacadas), se guardan junto con ella.
+  async function confirmar(i, p) {
+    const clave = i === 'nueva' ? claveNueva(p.texto, preguntas.map((x) => x.clave)) : p.clave
+    // Primero la pregunta sola, para que el error hable de ella y no de su
+    // número en la lista
+    try { limpiarPreguntas([{ ...p, clave }]) } catch (e) {
+      return (e.detalle || 'Revisá la pregunta.').replace(/^La pregunta 1 /, 'Esta pregunta ')
+    }
+    const nuevas = i === 'nueva'
+      ? insertarEnBloque(preguntas, { ...p, clave })
+      : reemplazarPregunta(preguntas, i, p)
+    const problema = await persistir(nuevas)
+    if (problema) return problema
+    if (i === 'nueva' || preguntas[i].bloque !== p.bloque) setResaltada(clave)
     setEditando(null)
     setBloqueNueva(null)
+    return null
   }
 
   function nuevaEn(bloque) {
@@ -254,36 +300,36 @@ function Preguntas({ datos, onGuardado, onVistaPrevia }) {
     setEditando('nueva')
   }
 
-  function confirmarNombre(e) {
+  // El "Listo" del nombre de una parte también guarda en el momento
+  async function confirmarNombre(e) {
     e.preventDefault()
     const { viejo, nombre } = renombrando
     if (nombre.trim() === viejo) { setRenombrando(null); return }
     if (bloques.includes(nombre.trim())
         && !confirm(`Ya hay una parte "${nombre.trim()}". ¿Juntar las dos en una sola?`)) return
+    let nuevas
     try {
-      cambiar(renombrarBloque(preguntas, viejo, nombre))
-      setRenombrando(null)
+      nuevas = renombrarBloque(preguntas, viejo, nombre)
     } catch (err) {
       setError(err.detalle || 'La parte necesita un nombre.')
+      return
     }
+    setRenombrando({ ...renombrando, guardando: true })
+    const problema = await persistir(nuevas)
+    if (problema) {
+      setError(problema)
+      setRenombrando({ ...renombrando, guardando: false })
+      return
+    }
+    setRenombrando(null)
   }
 
   async function guardar() {
     setError('')
-    let limpias
-    try { limpias = limpiarPreguntas(preguntas) } catch (e) { setError(e.detalle || 'Revisá las preguntas.'); return }
     setGuardando(true)
-    try {
-      const d = await api(`encuestas/${datos.encuesta.id}`, { method: 'PUT', body: { preguntas: limpias } })
-      setCambios(false)
-      onGuardado(d)
-    } catch (e) {
-      setError(e.error === 'preguntas_bloqueadas'
-        ? 'Ya llegó al menos una respuesta: las preguntas no se pueden cambiar.'
-        : e.detalle || 'No se pudieron guardar las preguntas.')
-    } finally {
-      setGuardando(false)
-    }
+    const problema = await persistir(preguntas)
+    if (problema) setError(problema)
+    setGuardando(false)
   }
 
   const nueva = {
@@ -306,7 +352,10 @@ function Preguntas({ datos, onGuardado, onVistaPrevia }) {
   return (
     <div className="tarjeta">
       <div className="fila entre">
-        <h3>Preguntas ({preguntas.length})</h3>
+        <h3>
+          Preguntas ({preguntas.length})
+          {guardado && <span className="enc-guardado">✓ Guardado</span>}
+        </h3>
         <button className="btn sec chico" onClick={() => onVistaPrevia(preguntas)}>👀 Vista previa</button>
       </div>
       {!editable && (
@@ -335,8 +384,8 @@ function Preguntas({ datos, onGuardado, onVistaPrevia }) {
                 value={renombrando.nombre}
                 onChange={(e) => setRenombrando({ ...renombrando, nombre: e.target.value })}
               />
-              <button className="btn chico">Listo</button>
-              <button type="button" className="btn sec chico" onClick={() => setRenombrando(null)}>Cancelar</button>
+              <button className="btn chico" disabled={renombrando.guardando}>{renombrando.guardando ? 'Guardando…' : 'Listo'}</button>
+              <button type="button" className="btn sec chico" disabled={renombrando.guardando} onClick={() => setRenombrando(null)}>Cancelar</button>
             </form>
           ) : (
             <div className="enc-bloque-fila">
@@ -404,8 +453,13 @@ function Preguntas({ datos, onGuardado, onVistaPrevia }) {
             </button>
           </div>
           <button className="btn" style={{ width: '100%', marginTop: 8 }} disabled={!cambios || guardando} onClick={guardar}>
-            {guardando ? 'Guardando…' : cambios ? 'Guardar las preguntas' : 'Sin cambios'}
+            {guardando ? 'Guardando…' : cambios ? 'Guardar los cambios' : 'Todo guardado'}
           </button>
+          <p className="mini" style={{ marginTop: 6 }}>
+            Al tocar "Listo", la pregunta o el nombre de la parte se guardan solos. El
+            botón de arriba guarda el orden, las preguntas que sacaste y la vuelta a las
+            de siempre.
+          </p>
         </>
       )}
     </div>
@@ -931,7 +985,7 @@ function DetalleEncuesta({ id, vista, yo }) {
         ))}
       </div>
 
-      {actual === 'preguntas' && <Preguntas key={JSON.stringify(encuesta.preguntas)} datos={datos} onGuardado={setDatos} onVistaPrevia={setVistaPrevia} />}
+      {actual === 'preguntas' && <Preguntas key={encuesta.id} datos={datos} onGuardado={setDatos} onVistaPrevia={setVistaPrevia} />}
       {actual === 'links' && <Links datos={datos} onCambio={cargar} />}
       {actual === 'resultados' && (
         <>

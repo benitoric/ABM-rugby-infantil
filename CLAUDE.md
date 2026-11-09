@@ -199,7 +199,13 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   (`insertarEnBloque`), una que cambia de parte se mueve al final de la nueva
   (`reemplazarPregunta`), y cada parte se renombra desde su encabezado
   (`renombrarBloque`; con el nombre de otra, las dos se juntan).
-  `limpiarPreguntas` también agrupa por parte al guardar. Tipos de respuesta
+  `limpiarPreguntas` también agrupa por parte al guardar. En el editor,
+  "Listo" (de una pregunta nueva o editada, y del nombre de una parte) guarda
+  en el momento con `PUT encuestas/:id` (toda la lista, con cualquier otro
+  cambio pendiente); si no se puede, el formulario queda abierto con el error.
+  El orden, las preguntas sacadas y volver a las de siempre se guardan con el
+  botón de abajo. La lista se monta con `key` = id de la encuesta, así un
+  guardado no la vuelve a montar. Tipos de respuesta
   (`TIPOS_PREGUNTA`): frecuencia (siempre a nunca), sí/no sé/no, sí/no, **de 1
   a 5 estrellas** (5 la mejor; 4 o 5 son favorables, `ESTRELLAS_FAVORABLES`,
   y entra en el índice con su promedio; el chico toca una fila de estrellas),
