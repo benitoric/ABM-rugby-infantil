@@ -1697,3 +1697,13 @@ details.tarjeta summary {
 .enc-renombrar { display: flex; gap: 6px; margin-top: 12px; }
 .enc-renombrar input { flex: 1; min-width: 0; border: 1px solid var(--primario); border-radius: 8px; padding: 6px 8px; font-weight: 600; }
 .enc-fila-pregunta.resaltada { background: #fff6cc; border-radius: 8px; transition: background 0.4s; }
+
+/* Respuesta de 1 a 5 estrellas */
+.enc-estrellas { display: flex; justify-content: space-between; gap: 4px; }
+.enc-estrella {
+  flex: 1; background: none; border: none; font-size: 2.6rem; line-height: 1; padding: 4px 0;
+  color: #c7ccd6; transition: transform 0.1s;
+}
+.enc-estrella.llena { color: #f5b301; }
+.enc-estrella:active { transform: scale(1.15); }
+.enc-estrellas-texto { text-align: center; font-size: 0.85rem; color: var(--texto-suave); margin-top: 4px; }
