@@ -60,6 +60,31 @@ function Pregunta({ p, valor, onChange, marcarFalta }) {
           />
           <div className="mini" style={{ textAlign: 'right' }}>{(valor || '').length}/{LARGO_TEXTO_LIBRE}</div>
         </>
+      ) : p.tipo === 'varias' ? (
+        <>
+          <div className="enc-varias-ayuda">Podés marcar todas las que quieras.</div>
+          <div className="enc-opciones tipo-opciones">
+            {opciones.map((o) => {
+              const marcadas = Array.isArray(valor) ? valor : []
+              const marcada = marcadas.includes(o.value)
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={marcada}
+                  className={`enc-opcion${marcada ? ' elegida' : ''}`}
+                  onClick={() => onChange(marcada
+                    ? marcadas.filter((x) => x !== o.value)
+                    : [...marcadas, o.value].sort((a, b) => a - b))}
+                >
+                  <span className={`enc-casillero${marcada ? ' marcado' : ''}`}>{marcada ? '✓' : ''}</span>
+                  <span>{o.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </>
       ) : (
         <div className={`enc-opciones tipo-${p.tipo}`}>
           {opciones.map((o) => (

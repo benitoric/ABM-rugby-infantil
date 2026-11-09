@@ -8,7 +8,7 @@ import {
 import { irA, reponer } from '../navegacion.js'
 import { numeroWhatsApp, Telefono } from '../telefono.jsx'
 import {
-  analizarEncuesta, claveNueva, insertarEnBloque, limpiarPreguntas, reemplazarPregunta, renombrarBloque, MINIMO_RESPUESTAS, opcionesDe, preguntasPorDefecto, puntosBajos,
+  analizarEncuesta, claveNueva, conOpciones, insertarEnBloque, limpiarPreguntas, reemplazarPregunta, renombrarBloque, MINIMO_RESPUESTAS, opcionesDe, preguntasPorDefecto, puntosBajos,
   TIPOS_POR_VALUE, TIPOS_PREGUNTA,
 } from '../encuesta.js'
 import EncuestaPublica from './EncuestaPublica.jsx'
@@ -148,7 +148,7 @@ function EditorPregunta({ inicial, bloques, onListo, onCancelar }) {
       ...resto,
       texto: p.texto.trim(),
       bloque: p.bloque.trim() || 'Preguntas',
-      opciones: p.tipo === 'opciones' ? opcionesTexto.split('\n').map((o) => o.trim()).filter(Boolean) : undefined,
+      opciones: conOpciones(p.tipo) ? opcionesTexto.split('\n').map((o) => o.trim()).filter(Boolean) : undefined,
       negativa: conLado && p.negativa,
       segmento: p.tipo === 'opciones' && p.segmento,
     })
@@ -178,9 +178,12 @@ function EditorPregunta({ inicial, bloques, onListo, onCancelar }) {
           </select>
         </div>
       </div>
-      {p.tipo === 'opciones' && (
+      {conOpciones(p.tipo) && (
         <div className="campo">
-          <label>Opciones (una por renglón, de 2 a 8)</label>
+          <label>
+            Opciones (una por renglón, de 2 a 8)
+            {p.tipo === 'varias' ? ' · el chico puede marcar varias' : ' · el chico elige una'}
+          </label>
           <textarea rows={4} value={p.opcionesTexto} onChange={(e) => set('opcionesTexto', e.target.value)} />
         </div>
       )}
@@ -412,7 +415,7 @@ function Preguntas({ datos, onGuardado, onVistaPrevia }) {
                 <div style={{ fontSize: '0.92rem' }}><b>{i + 1}.</b> {p.texto}</div>
                 <div className="mini">
                   {TIPOS_POR_VALUE[p.tipo]?.label}
-                  {p.tipo === 'opciones' ? `: ${(p.opciones || []).join(' · ')}` : ''}
+                  {conOpciones(p.tipo) ? `: ${(p.opciones || []).join(' · ')}` : ''}
                   {p.negativa ? ' · en negativo' : ''}
                   {!p.obligatoria ? ' · opcional' : ''}
                   {p.segmento ? ' · separa los resultados' : ''}
@@ -774,6 +777,14 @@ export function ResultadosEncuesta({ r, links }) {
               {textoVariacion(p.variacion)}
               {` · ${p.n} respuestas`}
             </div>
+            {p.tipo === 'varias' ? (
+              <div style={{ marginTop: 8 }}>
+                <div className="mini" style={{ marginBottom: 4 }}>Cada chico pudo marcar varias: los porcentajes pueden sumar más de 100.</div>
+                {[...p.opciones].sort((a, b) => b.cantidad - a.cantidad).map((o) => (
+                  <Barra key={o.value} etiqueta={o.label} valor={`${o.cantidad} · ${o.pct ?? 0}%`} proporcion={(o.pct || 0) / 100} color="var(--primario)" />
+                ))}
+              </div>
+            ) : (
             <div
               className={`enc-distribucion${p.tipo === 'nota' ? ' nota' : ''}`}
               style={p.tipo === 'nota' ? undefined : { gridTemplateColumns: `repeat(${p.opciones.length}, 1fr)` }}
@@ -788,6 +799,7 @@ export function ResultadosEncuesta({ r, links }) {
                 </div>
               ))}
             </div>
+            )}
           </div>
         ))}
       </div>
