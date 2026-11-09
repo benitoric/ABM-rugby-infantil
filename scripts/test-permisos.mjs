@@ -11,7 +11,9 @@
 import { createServer } from 'http'
 import { handle } from '../server/router.js'
 import { query } from '../server/db.js'
-import { analizarEncuesta } from '../src/encuesta.js'
+import {
+  analizarEncuesta, bloquesDe, insertarEnBloque, preguntasPorDefecto, reemplazarPregunta, renombrarBloque,
+} from '../src/encuesta.js'
 import { generarCuestionarioPDF, generarReporteEncuestaPDF } from '../src/encuestaPDF.js'
 
 process.env.PGLITE = process.env.PGLITE || '1'
@@ -493,6 +495,29 @@ async function main() {
     r.codigo === 200 && r.datos.encuesta.preguntas.length === 22
       && r.datos.encuesta.preguntas.find((q) => q.clave === 'ganas').texto === 'Tengo ganas de venir al club.'
       && !r.datos.encuesta.preguntas.some((q) => q.clave === 'mensaje'), r.datos.encuesta?.preguntas?.length)
+  const guardadas = r.datos.encuesta.preguntas.map((q) => q.clave)
+  esperar('la pregunta sumada al final queda al final de su parte',
+    guardadas.indexOf('x_comida') === guardadas.indexOf('nota_anio') + 1 && guardadas.at(-1) !== 'x_comida', guardadas.slice(-6))
+  // El orden por parte del editor (src/encuesta.js)
+  const deSiempre = preguntasPorDefecto()
+  const conNueva = insertarEnBloque(deSiempre, { clave: 'x_nueva', bloque: 'Aprender', texto: 'Nueva' })
+  esperar('una pregunta nueva va al final de su parte',
+    conNueva[conNueva.findIndex((q) => q.clave === 'sin_gritos') + 1].clave === 'x_nueva', conNueva.map((q) => q.clave))
+  const parteNueva = insertarEnBloque(deSiempre, { clave: 'x_otra', bloque: 'Parte nueva', texto: 'Otra' })
+  esperar('una pregunta de una parte nueva va al final de todo', parteNueva.at(-1).clave === 'x_otra', null)
+  const movida = reemplazarPregunta(deSiempre, 1, { ...deSiempre[1], bloque: 'Grupo' })
+  esperar('una pregunta que cambia de parte va al final de la nueva',
+    movida[movida.findIndex((q) => q.clave === 'molestaron') + 1].clave === deSiempre[1].clave, movida.map((q) => q.clave))
+  const renombrada = renombrarBloque(deSiempre, 'Aprender', 'Lo que aprendí')
+  esperar('renombrar una parte cambia todas sus preguntas',
+    renombrada.filter((q) => q.bloque === 'Lo que aprendí').length === 3 && !renombrada.some((q) => q.bloque === 'Aprender'), null)
+  const juntas = renombrarBloque(deSiempre, 'Grupo', 'Aprender')
+  esperar('renombrar con el nombre de otra parte las junta en una',
+    bloquesDe(juntas).find((b) => b.nombre === 'Aprender').preguntas.length === 6 && bloquesDe(juntas).length === 7, bloquesDe(juntas).map((b) => b.nombre))
+  let sinNombre = null
+  try { renombrarBloque(deSiempre, 'Grupo', '  ') } catch (e) { sinNombre = e.error }
+  esperar('una parte no puede quedar sin nombre', sinNombre === 'nombre_vacio', sinNombre)
+
   r = await pedir('encuesta-publica/token-que-no-existe-123')
   esperar('un link inventado no abre nada', r.codigo === 404 && r.datos.error === 'link_invalido', r)
   r = await pedir(`encuestas/${enc.id}/abrir`, { method: 'POST', token: T })

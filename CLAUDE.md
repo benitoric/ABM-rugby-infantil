@@ -194,7 +194,12 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   guarda sus propias preguntas en jsonb; arranca con las de siempre
   (`preguntasPorDefecto` en `src/encuesta.js`, con claves fijas para comparar
   un año con otro) y se pueden cambiar, ordenar, sacar o sumar hasta que llega
-  la primera respuesta (409 `preguntas_bloqueadas` después). Al abrirla se
+  la primera respuesta (409 `preguntas_bloqueadas` después). Las preguntas de
+  una parte van siempre juntas: una nueva va al final de su parte
+  (`insertarEnBloque`), una que cambia de parte se mueve al final de la nueva
+  (`reemplazarPregunta`), y cada parte se renombra desde su encabezado
+  (`renombrarBloque`; con el nombre de otra, las dos se juntan).
+  `limpiarPreguntas` también agrupa por parte al guardar. Al abrirla se
   arma un link por chico activo (`encuesta_links`, token aleatorio de un solo
   uso); la pantalla manda cada link por WhatsApp al celular propio del chico
   (`jugadores.telefono`, se carga en la ficha o en el padrón) o, si no tiene,
