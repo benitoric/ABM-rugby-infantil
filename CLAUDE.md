@@ -236,7 +236,15 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   texto y la aclaración, se saca o se vuelve a poner, mientras la encuesta no
   esté cerrada (aunque ya haya respuestas: no toca ninguna). Sacado, la
   pantalla del chico y el cuestionario en PDF no lo muestran y el servidor
-  ignora un `hablar` que llegue igual; el reporte dice que no se ofreció. La última encuesta cerrada en el período entra como sección del
+  ignora un `hablar` que llegue igual; el reporte dice que no se ofreció.
+  **Aviso por cada respuesta**: un push "📝 Llegó una respuesta · van N de M"
+  (y "🎉 Contestaron todos" con la última) a quienes figuran en
+  `encuestas.avisar_a` (null = quien la creó) y siguen pudiendo administrar.
+  Cada uno lo prende o lo apaga para sí mismo con `PUT encuestas/:id/avisarme`
+  desde la solapa Links. Solo dice la cuenta, nunca quién ni qué contestó
+  (quién contestó ya se ve en Links; lo que contestaron sigue oculto hasta el
+  cierre). Se manda antes de responder al chico, para que la función de
+  Vercel no se congele con el envío a medias. La última encuesta cerrada en el período entra como sección del
   informe de gestión, con el índice (promedio del porcentaje favorable de las
   preguntas cerradas) y la comparación con la encuesta anterior por clave.
   PDFs (`src/encuestaPDF.js`): el **cuestionario** imprimible con casilleros,

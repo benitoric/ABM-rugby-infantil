@@ -28,7 +28,7 @@ const ROL_CABEZA = 'Cabeza de división'
 
 const COLS_ENCUESTA = `e.id, e.titulo, e.preguntas, e.estado, e.cierra::text as cierra,
   e.creada_por, e.created_at::date::text as creada, e.abierta_en::date::text as abierta,
-  e.cerrada_en::date::text as cerrada, e.pedido_ayuda`
+  e.cerrada_en::date::text as cerrada, e.pedido_ayuda, e.avisar_a`
 
 // Las que ya pasaron su último día se cierran solas. Se corre antes de leer.
 export async function cerrarVencidas() {
@@ -38,11 +38,15 @@ export async function cerrarVencidas() {
        and cierra < (now() at time zone '${ZONA}')::date`)
 }
 
+// Quiénes reciben un push por cada respuesta: lo elegido, o quien la creó
+const avisarA = (e) => (Array.isArray(e.avisar_a) ? e.avisar_a : e.creada_por ? [e.creada_por] : [])
+
 async function leerEncuesta(id) {
   const [e] = await query(`select ${COLS_ENCUESTA} from encuestas e where e.id::text = $1`, [id])
   if (!e) throw { codigo: 404, error: 'no_existe' }
   // Siempre completo: lo guardado, o el de siempre
   e.pedido_ayuda = pedidoAyudaDe(e.pedido_ayuda)
+  e.avisar_a = avisarA(e)
   return e
 }
 
@@ -173,6 +177,16 @@ export async function enrutarEncuestas({ metodo, p, b, yo }) {
     return detalle(e.id, veoPedidos)
   }
 
+  // Aviso al celular por cada respuesta que llega: cada uno lo prende o lo
+  // apaga para sí mismo. Solo dice cuántas van, nunca quién ni qué.
+  if (metodo === 'PUT' && p[2] === 'avisarme') {
+    if (e.estado === 'cerrada') throw { codigo: 409, error: 'encuesta_cerrada' }
+    const lista = e.avisar_a.filter((x) => x !== yo.email)
+    if (b?.activo) lista.push(yo.email)
+    await query('update encuestas set avisar_a = $1::jsonb where id = $2', [JSON.stringify(lista), e.id])
+    return detalle(e.id, veoPedidos)
+  }
+
   if (metodo === 'POST' && p[2] === 'cerrar') {
     if (e.estado !== 'abierta') throw { codigo: 409, error: 'no_esta_abierta' }
     await query(
@@ -261,7 +275,7 @@ export async function enrutarEncuestaPublica({ metodo, p, b }) {
   await cerrarVencidas()
   const [link] = await query(
     `select l.usado, e.id as encuesta_id, e.titulo, e.preguntas, e.estado, e.cierra::text as cierra,
-            e.pedido_ayuda
+            e.pedido_ayuda, e.avisar_a, e.creada_por
      from encuesta_links l join encuestas e on e.id = l.encuesta_id
      where l.token = $1`, [token])
   if (!link) throw { codigo: 404, error: 'link_invalido' }
@@ -307,6 +321,7 @@ export async function enrutarEncuestaPublica({ metodo, p, b }) {
       [token, JSON.stringify(respuestas), pideAyuda])
     if (!r.guardada) throw { codigo: 409, error: 'ya_respondida' }
     if (r.pedido) await avisarPedido(link.encuesta_id)
+    await avisarRespuesta(link)
     return { ok: true }
   }
 
@@ -315,6 +330,42 @@ export async function enrutarEncuestaPublica({ metodo, p, b }) {
 
 // El aviso a la cabeza de división no lleva el nombre: se ve en la pantalla
 // bloqueada del celular. El nombre está adentro de la app.
+// Un push a quienes lo pidieron cada vez que llega una respuesta: solo la
+// cuenta (nunca quién ni qué contestó; lo que contestaron sigue oculto hasta
+// que la encuesta cierra). Va solo a quienes siguen pudiendo administrar.
+export function textoAvisoRespuesta(titulo, respondieron, links) {
+  if (links && respondieron >= links) {
+    return { titulo: '🎉 Contestaron todos', cuerpo: `${titulo}: llegaron las ${links} respuestas. Ya podés cerrarla y ver los resultados.` }
+  }
+  return {
+    titulo: '📝 Llegó una respuesta',
+    cuerpo: `${titulo}: van ${respondieron} de ${links}${links ? ` (${Math.round((100 * respondieron) / links)}%)` : ''}.`,
+  }
+}
+
+async function avisarRespuesta(link) {
+  try {
+    const emails = avisarA(link)
+    if (!emails.length) return
+    const [c] = await query(
+      `select count(*)::int as links, count(*) filter (where usado)::int as respondieron
+       from encuesta_links where encuesta_id = $1`, [link.encuesta_id])
+    const { enviar } = await import('./push.js')
+    const { EMAIL_DUENIO } = await import('./permisos.js')
+    const suscripciones = await query(
+      `select ps.endpoint, ps.p256dh, ps.auth
+       from push_suscripciones ps join staff s on s.email = ps.staff_email
+       where s.activo and s.email = any($1) and (s.email = $2 or s.rol = $3)`,
+      [emails, EMAIL_DUENIO, ROL_CABEZA])
+    await enviar(suscripciones, {
+      ...textoAvisoRespuesta(link.titulo, c.respondieron, c.links),
+      url: `/#/staff/encuestas/${link.encuesta_id}/links`,
+    })
+  } catch (e) {
+    console.error('No se pudo avisar la respuesta de la encuesta', e)
+  }
+}
+
 async function avisarPedido(encuestaId) {
   try {
     const { enviar } = await import('./push.js')

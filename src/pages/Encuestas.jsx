@@ -565,9 +565,24 @@ const FILTROS = [
   { value: 'respondieron', label: 'Respondieron' },
 ]
 
-function Links({ datos, onCambio }) {
+function Links({ datos, onCambio, yo }) {
   const { encuesta, links } = datos
   const [filtro, setFiltro] = useState('sin_enviar')
+  // Aviso al celular por cada respuesta (cada uno lo prende para sí mismo)
+  const meAvisa = (encuesta.avisar_a || []).includes(yo?.email)
+  const [cambiandoAviso, setCambiandoAviso] = useState(false)
+
+  async function alternarAviso() {
+    setCambiandoAviso(true)
+    try {
+      await api(`encuestas/${encuesta.id}/avisarme`, { method: 'PUT', body: { activo: !meAvisa } })
+      onCambio()
+    } catch {
+      alert('No se pudo cambiar el aviso. Probá de nuevo.')
+    } finally {
+      setCambiandoAviso(false)
+    }
+  }
   const [copiado, setCopiado] = useState(null)
   const respondieron = links.filter((l) => l.usado).length
   const enviados = links.filter((l) => l.enviado).length
@@ -620,6 +635,18 @@ function Links({ datos, onCambio }) {
   return (
     <div className="tarjeta">
       <h3>Links de cada chico</h3>
+      {encuesta.estado === 'abierta' && (
+        <label className="opcion-seccion enc-aviso-respuestas">
+          <input type="checkbox" checked={meAvisa} disabled={cambiandoAviso} onChange={alternarAviso} />
+          <span>
+            <b>🔔 Avisarme al celular cada vez que llega una respuesta</b>
+            <span className="mini" style={{ display: 'block' }}>
+              El aviso dice cuántas van, nunca quién ni qué contestó. Llega a los celulares
+              donde activaste los avisos (Staff → Avisos en este celular).
+            </span>
+          </span>
+        </label>
+      )}
       <div className="stat-grid" style={{ margin: '8px 0' }}>
         <div className="stat"><div className="valor">{respondieron}/{links.length}</div><div className="etiqueta">Respondieron</div></div>
         <div className="stat"><div className="valor">{enviados}</div><div className="etiqueta">Links enviados</div></div>
@@ -1093,7 +1120,7 @@ function DetalleEncuesta({ id, vista, yo }) {
       </div>
 
       {actual === 'preguntas' && <Preguntas key={encuesta.id} datos={datos} onGuardado={setDatos} onVistaPrevia={setVistaPrevia} />}
-      {actual === 'links' && <Links datos={datos} onCambio={cargar} />}
+      {actual === 'links' && <Links datos={datos} onCambio={cargar} yo={yo} />}
       {actual === 'resultados' && (
         <>
           <ReporteEncuesta datos={datos} yo={yo} />

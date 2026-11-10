@@ -499,7 +499,10 @@ create table if not exists encuestas (
   cerrada_en timestamptz,
   -- El pedido para hablar del final: { activo, texto, aclaracion }. Null =
   -- el de siempre (ver src/encuesta.js, pedidoAyudaDe)
-  pedido_ayuda jsonb
+  pedido_ayuda jsonb,
+  -- Emails de quienes reciben un push cada vez que llega una respuesta.
+  -- Null = solo quien la creó
+  avisar_a jsonb
 );
 
 -- Un link por chico. El token es la credencial: quien lo tiene contesta una
