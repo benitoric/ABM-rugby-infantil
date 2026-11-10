@@ -8,7 +8,7 @@ import {
 import { irA, reponer } from '../navegacion.js'
 import { numeroWhatsApp, Telefono } from '../telefono.jsx'
 import {
-  analizarEncuesta, claveNueva, conOpciones, insertarEnBloque, limpiarPreguntas, reemplazarPregunta, renombrarBloque, MINIMO_RESPUESTAS, opcionesDe, preguntasPorDefecto, puntosBajos,
+  analizarEncuesta, claveNueva, conOpciones, PEDIDO_AYUDA_POR_DEFECTO, insertarEnBloque, limpiarPreguntas, reemplazarPregunta, renombrarBloque, MINIMO_RESPUESTAS, opcionesDe, preguntasPorDefecto, puntosBajos,
   TIPOS_POR_VALUE, TIPOS_PREGUNTA,
 } from '../encuesta.js'
 import EncuestaPublica from './EncuestaPublica.jsx'
@@ -209,6 +209,91 @@ function EditorPregunta({ inicial, bloques, onListo, onCancelar }) {
         <button type="button" className="btn sec chico" disabled={guardando} onClick={onCancelar}>Cancelar</button>
       </div>
     </form>
+  )
+}
+
+// El pedido para hablar del final ("Quiero que alguien del club hable
+// conmigo"): se edita o se saca acá. No es una pregunta: va aparte de las
+// respuestas anónimas y llega con el nombre. Se puede cambiar mientras la
+// encuesta no esté cerrada, aunque ya haya respuestas (no toca ninguna).
+function PedidoAyuda({ datos, onGuardado }) {
+  const pedido = datos.encuesta.pedido_ayuda
+  const editable = datos.encuesta.estado !== 'cerrada'
+  const [form, setForm] = useState(null) // { texto, aclaracion } mientras se edita
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+
+  async function guardar(nuevo) {
+    setGuardando(true)
+    setError('')
+    try {
+      onGuardado(await api(`encuestas/${datos.encuesta.id}`, { method: 'PUT', body: { pedido_ayuda: nuevo } }))
+      setForm(null)
+    } catch (e) {
+      setError(e.detalle || 'No se pudo guardar. Revisá la conexión y probá de nuevo.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  function sacar() {
+    if (!confirm('¿Sacar el pedido para hablar? Los chicos no van a tener cómo pedir, desde la encuesta, '
+      + 'que alguien del club hable con ellos. Se puede volver a poner.')) return
+    guardar({ ...pedido, activo: false })
+  }
+
+  return (
+    <div className={`enc-pedido${pedido.activo ? '' : ' sacado'}`}>
+      <div className="enc-bloque">Al final · Pedido para hablar</div>
+      {form ? (
+        <form className="enc-editor" onSubmit={(e) => { e.preventDefault(); guardar({ activo: true, ...form }) }}>
+          <div className="campo">
+            <label>Lo que marca el chico</label>
+            <textarea rows={2} required autoFocus maxLength={200} value={form.texto}
+              onChange={(e) => setForm({ ...form, texto: e.target.value })} />
+          </div>
+          <div className="campo">
+            <label>Aclaración (opcional)</label>
+            <textarea rows={3} maxLength={400} value={form.aclaracion}
+              onChange={(e) => setForm({ ...form, aclaracion: e.target.value })} />
+          </div>
+          <button type="button" className="enc-desmarcar" onClick={() => setForm({ texto: PEDIDO_AYUDA_POR_DEFECTO.texto, aclaracion: PEDIDO_AYUDA_POR_DEFECTO.aclaracion })}>
+            Usar el texto de siempre
+          </button>
+          <p className="mini" style={{ marginTop: 6 }}>
+            Llega siempre a la cabeza de división, con el nombre del chico y aparte de sus respuestas.
+          </p>
+          {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
+          <div className="fila" style={{ marginTop: 8 }}>
+            <button className="btn chico crece" disabled={guardando}>{guardando ? 'Guardando…' : 'Listo'}</button>
+            <button type="button" className="btn sec chico" disabled={guardando} onClick={() => { setForm(null); setError('') }}>Cancelar</button>
+          </div>
+        </form>
+      ) : pedido.activo ? (
+        <div className="enc-fila-pregunta">
+          <div className="crece">
+            <div style={{ fontSize: '0.92rem' }}>☐ {pedido.texto}</div>
+            {pedido.aclaracion && <div className="mini">{pedido.aclaracion}</div>}
+          </div>
+          {editable && (
+            <div className="enc-acciones">
+              <button className="btn sec chico" title="Editar" onClick={() => setForm({ texto: pedido.texto, aclaracion: pedido.aclaracion })}>✏️</button>
+              <button className="btn peligro chico" title="Sacar" disabled={guardando} onClick={sacar}>🗑</button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="fila entre" style={{ marginTop: 4 }}>
+          <span className="mini crece">Esta encuesta no tiene pedido para hablar.</span>
+          {editable && (
+            <button className="btn sec chico" disabled={guardando} onClick={() => guardar({ ...pedido, activo: true })}>
+              + Volver a ponerlo
+            </button>
+          )}
+        </div>
+      )}
+      {!form && error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
+    </div>
   )
 }
 
@@ -443,6 +528,7 @@ function Preguntas({ datos, onGuardado, onVistaPrevia }) {
       ))}
       </div>
       {editable && editando === 'nueva' && formNuevaEn === -1 && formNueva}
+      <PedidoAyuda datos={datos} onGuardado={onGuardado} />
       {editable && (
         <>
           {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
@@ -882,7 +968,7 @@ function DetalleEncuesta({ id, vista, yo }) {
   const compartirCuestionario = (preguntas) => verOCompartirArchivo(
     generarCuestionarioPDF({
       titulo: datos.encuesta.titulo, preguntas, cierra: datos.encuesta.cierra,
-      generadoPor: yo?.nombre || yo?.email,
+      generadoPor: yo?.nombre || yo?.email, pedidoAyuda: datos.encuesta.pedido_ayuda,
     }).blob(),
     nombreCuestionario(datos.encuesta.titulo),
     `Encuesta a los jugadores · ${datos.encuesta.titulo}`)
@@ -890,7 +976,7 @@ function DetalleEncuesta({ id, vista, yo }) {
   if (vistaPrevia) {
     return (
       <EncuestaPublica
-        vistaPrevia={{ titulo: datos.encuesta.titulo, preguntas: vistaPrevia }}
+        vistaPrevia={{ titulo: datos.encuesta.titulo, preguntas: vistaPrevia, pedido_ayuda: datos.encuesta.pedido_ayuda }}
         onCerrar={() => setVistaPrevia(null)}
         onPDF={() => compartirCuestionario(vistaPrevia)}
       />
@@ -957,7 +1043,7 @@ function DetalleEncuesta({ id, vista, yo }) {
                 : encuesta.cierra ? `Se puede contestar hasta el ${fechaCorta(encuesta.cierra)} inclusive` : 'Sin fecha de cierre'}
               {datos.links.length ? ` · respondieron ${datos.links.filter((l) => l.usado).length} de ${datos.links.length}` : ''}
             </div>
-            {!datos.hay_cabeza && (
+            {!datos.hay_cabeza && datos.encuesta.pedido_ayuda?.activo && (
               <div className="aviso" style={{ marginTop: 8 }}>
                 No hay nadie activo con el rol Cabeza de división: si un chico pide hablar
                 con alguien del club, el pedido no le llega a nadie.

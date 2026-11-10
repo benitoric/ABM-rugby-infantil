@@ -230,7 +230,13 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   (`cerrarVencidas`). "Quiero que alguien del club hable conmigo" va aparte,
   con el nombre, en `encuesta_pedidos`: lo ve y lo atiende **solo el rol
   Cabeza de división** (el dueño ve la cantidad), que recibe un push sin el
-  nombre. La última encuesta cerrada en el período entra como sección del
+  nombre. Ese pedido se configura por encuesta (`encuestas.pedido_ayuda`,
+  `{ activo, texto, aclaracion }`; null = el de siempre, `pedidoAyudaDe`):
+  desde el bloque "Al final · Pedido para hablar" del editor se le cambia el
+  texto y la aclaración, se saca o se vuelve a poner, mientras la encuesta no
+  esté cerrada (aunque ya haya respuestas: no toca ninguna). Sacado, la
+  pantalla del chico y el cuestionario en PDF no lo muestran y el servidor
+  ignora un `hablar` que llegue igual; el reporte dice que no se ofreció. La última encuesta cerrada en el período entra como sección del
   informe de gestión, con el índice (promedio del porcentaje favorable de las
   preguntas cerradas) y la comparación con la encuesta anterior por clave.
   PDFs (`src/encuestaPDF.js`): el **cuestionario** imprimible con casilleros,

@@ -1719,3 +1719,7 @@ details.tarjeta summary {
   font-size: 0.9rem; font-weight: 800; color: #fff; background: #fff;
 }
 .enc-casillero.marcado { background: var(--primario); border-color: var(--primario); }
+
+/* Pedido para hablar al final de la encuesta (editor) */
+.enc-pedido { margin-top: 14px; padding-top: 10px; border-top: 2px dashed var(--borde); }
+.enc-pedido.sacado .enc-bloque { color: var(--texto-suave); }

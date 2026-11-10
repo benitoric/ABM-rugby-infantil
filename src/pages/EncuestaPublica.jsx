@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
-import { bloquesDe, LARGO_TEXTO_LIBRE, opcionesDe, respuestaValida } from '../encuesta.js'
+import { bloquesDe, LARGO_TEXTO_LIBRE, opcionesDe, pedidoAyudaDe, respuestaValida } from '../encuesta.js'
 
 // La encuesta tal como la ve el chico: la abre con su link personal
 // (#/encuesta/<token>), sin login. Va de a un bloque por pantalla, con botones
@@ -131,6 +131,8 @@ export default function EncuestaPublica({ token, vistaPrevia = null, onCerrar, o
   useEffect(() => { window.scrollTo(0, 0) }, [paso, estado])
 
   const bloques = useMemo(() => bloquesDe(encuesta?.preguntas || []), [encuesta])
+  // El pedido para hablar del final, como lo configuró la encuesta (o nada)
+  const pedido = pedidoAyudaDe(encuesta?.pedido_ayuda)
   const bloque = bloques[paso]
   const ultimo = paso === bloques.length - 1
 
@@ -154,7 +156,7 @@ export default function EncuestaPublica({ token, vistaPrevia = null, onCerrar, o
     setError('')
     setEstado('enviando')
     try {
-      await api(`encuesta-publica/${token}`, { method: 'POST', body: { respuestas, hablar } })
+      await api(`encuesta-publica/${token}`, { method: 'POST', body: { respuestas, hablar: pedido.activo && hablar } })
       borrarBorrador(token)
       setEstado('gracias')
     } catch (e) {
@@ -213,8 +215,8 @@ export default function EncuestaPublica({ token, vistaPrevia = null, onCerrar, o
         <div className="enc-grande">🙌</div>
         <h2>¡Gracias!</h2>
         <p>{vistaPrevia ? 'Acá termina la encuesta para los chicos.' : 'Tu respuesta llegó. Ya podés cerrar esta página.'}</p>
-        {hablar && !vistaPrevia && (
-          <p>Le avisamos a la cabeza de división que querés hablar con alguien del club.</p>
+        {pedido.activo && hablar && !vistaPrevia && (
+          <p>Le avisamos al club que querés que alguien hable con vos.</p>
         )}
         {vistaPrevia && onCerrar && <button className="btn" onClick={onCerrar}>Volver</button>}
       </div>
@@ -250,15 +252,14 @@ export default function EncuestaPublica({ token, vistaPrevia = null, onCerrar, o
             marcarFalta={marcarFalta}
           />
         ))}
-        {ultimo && (
+        {ultimo && pedido.activo && (
           <label className="enc-pregunta enc-hablar">
             <input type="checkbox" checked={hablar} onChange={(e) => setHablar(e.target.checked)} />
             <span>
-              <b>Quiero que alguien del club hable conmigo.</b>
-              <span className="mini" style={{ display: 'block', marginTop: 4 }}>
-                Si lo marcás, le llega tu nombre a la cabeza de división, aparte de
-                tus respuestas. Lo que contestaste sigue siendo anónimo.
-              </span>
+              <b>{pedido.texto}</b>
+              {pedido.aclaracion && (
+                <span className="mini" style={{ display: 'block', marginTop: 4 }}>{pedido.aclaracion}</span>
+              )}
             </span>
           </label>
         )}

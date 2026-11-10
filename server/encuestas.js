@@ -17,7 +17,8 @@
 import { randomBytes } from 'crypto'
 import { query } from './db.js'
 import {
-  bloquesDe, limpiarPreguntas, preguntasPorDefecto, resumirEncuesta, validarRespuestas,
+  bloquesDe, limpiarPedidoAyuda, limpiarPreguntas, pedidoAyudaDe, preguntasPorDefecto, resumirEncuesta,
+  validarRespuestas,
 } from '../src/encuesta.js'
 
 const ZONA = 'America/Argentina/Tucuman'
@@ -27,7 +28,7 @@ const ROL_CABEZA = 'Cabeza de división'
 
 const COLS_ENCUESTA = `e.id, e.titulo, e.preguntas, e.estado, e.cierra::text as cierra,
   e.creada_por, e.created_at::date::text as creada, e.abierta_en::date::text as abierta,
-  e.cerrada_en::date::text as cerrada`
+  e.cerrada_en::date::text as cerrada, e.pedido_ayuda`
 
 // Las que ya pasaron su último día se cierran solas. Se corre antes de leer.
 export async function cerrarVencidas() {
@@ -40,6 +41,8 @@ export async function cerrarVencidas() {
 async function leerEncuesta(id) {
   const [e] = await query(`select ${COLS_ENCUESTA} from encuestas e where e.id::text = $1`, [id])
   if (!e) throw { codigo: 404, error: 'no_existe' }
+  // Siempre completo: lo guardado, o el de siempre
+  e.pedido_ayuda = pedidoAyudaDe(e.pedido_ayuda)
   return e
 }
 
@@ -142,6 +145,13 @@ export async function enrutarEncuestas({ metodo, p, b, yo }) {
       if (!await preguntasEditables(e)) throw { codigo: 409, error: 'preguntas_bloqueadas' }
       const preguntas = limpiarPreguntas(b.preguntas)
       await query('update encuestas set preguntas = $1::jsonb where id = $2', [JSON.stringify(preguntas), e.id])
+    }
+    // El pedido para hablar del final: se puede cambiar o sacar hasta que la
+    // encuesta cierra (no toca ninguna respuesta)
+    if ('pedido_ayuda' in (b || {})) {
+      if (e.estado === 'cerrada') throw { codigo: 409, error: 'encuesta_cerrada' }
+      const pedido = limpiarPedidoAyuda(b.pedido_ayuda)
+      await query('update encuestas set pedido_ayuda = $1::jsonb where id = $2', [JSON.stringify(pedido), e.id])
     }
     if ('titulo' in (b || {})) {
       const titulo = String(b.titulo || '').trim()
@@ -250,7 +260,8 @@ export async function enrutarEncuestaPublica({ metodo, p, b }) {
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(token) || p[2]) throw { codigo: 404, error: 'link_invalido' }
   await cerrarVencidas()
   const [link] = await query(
-    `select l.usado, e.id as encuesta_id, e.titulo, e.preguntas, e.estado, e.cierra::text as cierra
+    `select l.usado, e.id as encuesta_id, e.titulo, e.preguntas, e.estado, e.cierra::text as cierra,
+            e.pedido_ayuda
      from encuesta_links l join encuestas e on e.id = l.encuesta_id
      where l.token = $1`, [token])
   if (!link) throw { codigo: 404, error: 'link_invalido' }
@@ -261,6 +272,7 @@ export async function enrutarEncuestaPublica({ metodo, p, b }) {
     return {
       estado: 'abierta', titulo: link.titulo, cierra: link.cierra,
       preguntas: link.preguntas, bloques: bloquesDe(link.preguntas).length,
+      pedido_ayuda: pedidoAyudaDe(link.pedido_ayuda),
     }
   }
 
@@ -268,7 +280,9 @@ export async function enrutarEncuestaPublica({ metodo, p, b }) {
     if (link.usado) throw { codigo: 409, error: 'ya_respondida' }
     if (link.estado !== 'abierta') throw { codigo: 409, error: 'encuesta_cerrada' }
     const respuestas = validarRespuestas(link.preguntas, b?.respuestas)
-    const pideAyuda = !!b?.hablar
+    // Si la encuesta no ofrece el pedido para hablar, no se registra aunque
+    // llegue (un celular con la página vieja abierta, por ejemplo)
+    const pideAyuda = pedidoAyudaDe(link.pedido_ayuda).activo && !!b?.hablar
     // Todo en una sola sentencia: marcar el link (solo si sigue sin usar y la
     // encuesta abierta), guardar la respuesta anónima y, si lo pidió, el
     // pedido de ayuda con su nombre. Si dos envíos llegan juntos, uno solo

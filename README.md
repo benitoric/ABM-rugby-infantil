@@ -104,6 +104,7 @@ pantalla de inicio" del teléfono y queda como una app más).
    guardan sin el nombre ni la hora, y los resultados se ven recién con la
    encuesta cerrada. Al final, el chico puede pedir que alguien del club hable
    con él: ese pedido le llega aparte, con el nombre, a la cabeza de división.
+   El texto de ese pedido se puede cambiar, o sacarlo, desde el editor.
    Los resultados se suman al informe de gestión. Desde la vista previa se
    comparte el cuestionario en PDF, para mostrarlo o tomarlo en papel, y con la
    encuesta cerrada se comparte un reporte en PDF con análisis: lectura
