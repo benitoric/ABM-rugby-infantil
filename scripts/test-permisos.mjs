@@ -16,6 +16,7 @@ import {
   renombrarBloque, resumirEncuesta, validarRespuestas,
 } from '../src/encuesta.js'
 import { generarCuestionarioPDF, generarReporteEncuestaPDF } from '../src/encuestaPDF.js'
+import { textoAvisoRespuesta } from '../server/encuestas.js'
 
 process.env.PGLITE = process.env.PGLITE || '1'
 
@@ -485,6 +486,18 @@ async function main() {
   esperar('el dueño crea una encuesta con las preguntas de siempre',
     r.codigo === 200 && r.datos.encuesta.estado === 'borrador' && r.datos.encuesta.preguntas.length === 22 && r.datos.editable, r.datos)
   const enc = r.datos.encuesta
+  esperar('quien crea la encuesta recibe el aviso de cada respuesta', JSON.stringify(enc.avisar_a) === JSON.stringify([DUENIO]), enc.avisar_a)
+  r = await pedir(`encuestas/${enc.id}/avisarme`, { method: 'PUT', token: C, body: { activo: true } })
+  esperar('la cabeza de división se suma al aviso', r.codigo === 200 && r.datos.encuesta.avisar_a.includes('cabeza@prueba.test') && r.datos.encuesta.avisar_a.includes(DUENIO), r.datos.encuesta?.avisar_a)
+  r = await pedir(`encuestas/${enc.id}/avisarme`, { method: 'PUT', token: T, body: { activo: false } })
+  esperar('cada uno apaga su aviso sin tocar el de los demás', JSON.stringify(r.datos.encuesta.avisar_a) === JSON.stringify(['cabeza@prueba.test']), r.datos.encuesta?.avisar_a)
+  r = await pedir(`encuestas/${enc.id}/avisarme`, { method: 'PUT', token: T, body: { activo: true } })
+  esperar('y lo vuelve a prender', r.datos.encuesta.avisar_a.includes(DUENIO), r.datos.encuesta?.avisar_a)
+  r = await pedir(`encuestas/${enc.id}/avisarme`, { method: 'PUT', token: E, body: { activo: true } })
+  esperar('el entrenador no se suma a los avisos', r.codigo === 403, r)
+  const aviso = textoAvisoRespuesta('Fin de año', 12, 40)
+  esperar('el aviso dice cuántas van', aviso.cuerpo === 'Fin de año: van 12 de 40 (30%).', aviso)
+  esperar('con todas, el aviso lo dice', textoAvisoRespuesta('Fin de año', 40, 40).titulo.includes('Contestaron todos'), null)
   r = await pedir(`encuestas/${enc.id}`, { method: 'PUT', token: T, body: { preguntas: [] } })
   esperar('una encuesta sin preguntas se rechaza', r.codigo === 400 && r.datos.error === 'preguntas_invalidas', r)
   const preguntas = enc.preguntas

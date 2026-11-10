@@ -1723,3 +1723,6 @@ details.tarjeta summary {
 /* Pedido para hablar al final de la encuesta (editor) */
 .enc-pedido { margin-top: 14px; padding-top: 10px; border-top: 2px dashed var(--borde); }
 .enc-pedido.sacado .enc-bloque { color: var(--texto-suave); }
+
+/* Encuesta: aviso por cada respuesta (solapa Links) */
+.enc-aviso-respuestas { background: var(--celeste); border-radius: 10px; padding: 10px; margin: 8px 0 4px; }
