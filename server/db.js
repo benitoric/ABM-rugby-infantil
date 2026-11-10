@@ -83,9 +83,13 @@ export async function migracionesAplicadas(pool) {
          and column_name = 'evento_id') as existe_encuentros,
        exists (select 1 from information_schema.columns
        where table_schema = 'public' and table_name = 'tests_fisicos'
-         and column_name = 'semaforo_auto') as existe_semaforo_auto`)
+         and column_name = 'semaforo_auto') as existe_semaforo_auto,
+       exists (select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'encuestas'
+         and column_name = 'pedido_ayuda') as existe_pedido_ayuda`)
   if (!col.existe || !col.existe_alta || !col.existe_dni_devuelto || col.sobra_ficha_medica
-      || !col.existe_contacto || !col.existe_encuentros || !col.existe_semaforo_auto) return false
+      || !col.existe_contacto || !col.existe_encuentros || !col.existe_semaforo_auto
+      || !col.existe_pedido_ayuda) return false
   const { rows: [t] } = await pool.query(
     `select to_regclass('public.evento_plantel') is not null
         and to_regclass('public.plan_tecnico') is not null
@@ -604,6 +608,9 @@ export async function migrar(pool) {
     atendido_por text,
     created_at timestamptz not null default now()
   )`)
+  // El pedido para hablar del final, configurable por encuesta (null = el de
+  // siempre). Su columna es testigo en migracionesAplicadas.
+  await pool.query('alter table encuestas add column if not exists pedido_ayuda jsonb')
 }
 
 

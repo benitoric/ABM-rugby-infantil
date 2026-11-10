@@ -566,3 +566,39 @@ export function renombrarBloque(preguntas, viejo, nuevo) {
   if (!nombre) throw { codigo: 400, error: 'nombre_vacio', detalle: 'La parte necesita un nombre.' }
   return agruparPorBloque(preguntas.map((p) => (p.bloque === viejo ? { ...p, bloque: nombre } : p)))
 }
+
+// ---------------------------------------------------------------------------
+// Pedido para hablar ("Quiero que alguien del club hable conmigo")
+//
+// No es una pregunta más: va al final, aparte de las respuestas anónimas, y
+// si el chico lo marca el pedido llega con su nombre (server/encuestas.js).
+// Cada encuesta puede cambiarle el texto y la aclaración, o sacarlo. Una
+// encuesta sin nada guardado usa el de siempre.
+// ---------------------------------------------------------------------------
+export const PEDIDO_AYUDA_POR_DEFECTO = {
+  activo: true,
+  texto: 'Quiero que alguien del club hable conmigo.',
+  aclaracion: 'Si lo marcás, le llega tu nombre a la cabeza de división, aparte de tus respuestas. Lo que contestaste sigue siendo anónimo.',
+}
+
+// El pedido de una encuesta, con lo de siempre donde no tenga nada guardado
+export function pedidoAyudaDe(guardado) {
+  return { ...PEDIDO_AYUDA_POR_DEFECTO, ...(guardado || {}) }
+}
+
+export function limpiarPedidoAyuda(crudo) {
+  const activo = crudo?.activo !== false
+  const texto = String(crudo?.texto ?? '').trim()
+  const aclaracion = String(crudo?.aclaracion ?? '').trim()
+  if (activo && !texto) {
+    throw { codigo: 400, error: 'pedido_invalido', detalle: 'El pedido para hablar necesita un texto.' }
+  }
+  if (texto.length > 200) throw { codigo: 400, error: 'pedido_invalido', detalle: 'El texto del pedido es demasiado largo (máximo 200).' }
+  if (aclaracion.length > 400) throw { codigo: 400, error: 'pedido_invalido', detalle: 'La aclaración es demasiado larga (máximo 400).' }
+  // Sacado, conserva los textos para poder volver a ponerlo como estaba
+  return {
+    activo,
+    texto: texto || PEDIDO_AYUDA_POR_DEFECTO.texto,
+    aclaracion,
+  }
+}

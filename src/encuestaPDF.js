@@ -11,7 +11,9 @@
 
 import { anchoTexto, nuevoPDF, partirTexto } from './pdf.js'
 import { fechaCorta } from './helpers.js'
-import { analizarEncuesta, bloquesDe, conOpciones, MINIMO_RESPUESTAS, opcionesDe, textoEnLista } from './encuesta.js'
+import {
+  analizarEncuesta, bloquesDe, conOpciones, MINIMO_RESPUESTAS, opcionesDe, pedidoAyudaDe, textoEnLista,
+} from './encuesta.js'
 
 const AZUL = [26, 74, 158]
 const DORADO = [255, 210, 0]
@@ -159,7 +161,10 @@ function documento({ titulo, subtitulo, derecha }) {
 // ---------------------------------------------------------------------------
 // Cuestionario para imprimir o compartir
 // ---------------------------------------------------------------------------
-export function generarCuestionarioPDF({ titulo, preguntas, cierra, generadoPor }) {
+// `pedidoAyuda`: el pedido para hablar del final como lo configuró la encuesta
+// (sin él va el de siempre; sacado, no sale)
+export function generarCuestionarioPDF({ titulo, preguntas, cierra, generadoPor, pedidoAyuda }) {
+  const pedido = pedidoAyudaDe(pedidoAyuda)
   const h = documento({
     titulo: titulo || 'Encuesta a los jugadores',
     subtitulo: 'Encuesta anónima',
@@ -232,16 +237,23 @@ export function generarCuestionarioPDF({ titulo, preguntas, cierra, generadoPor 
 
   // El pedido de ayuda va en la última parte si ya se llama "Para cerrar"
   // (como en las preguntas de siempre); si no, con su propio título
-  const partes = bloquesDe(preguntas)
-  if (partes[partes.length - 1]?.nombre !== 'Para cerrar') h.titulo('Para cerrar')
-  else h.y += 6
-  h.espacio(40)
-  casillero(M + 4, h.y)
-  doc.texto('Quiero que alguien del club hable conmigo.', M + 20, h.y, { tam: 10, negrita: true, color: TEXTO })
-  h.y += 15
-  h.parrafo('Si lo marcás, tu nombre le llega a la cabeza de división, aparte de tus respuestas. Lo que contestaste sigue siendo anónimo.',
-    { tam: 8.5, color: SUAVE, sangria: 20 })
-  h.y += 6
+  if (pedido.activo) {
+    const partes = bloquesDe(preguntas)
+    if (partes[partes.length - 1]?.nombre !== 'Para cerrar') h.titulo('Para cerrar')
+    else h.y += 6
+    const lineas = partirTexto(pedido.texto, ancho - 20, 10, true)
+    h.espacio(lineas.length * 13 + 30)
+    casillero(M + 4, h.y)
+    for (const l of lineas) {
+      doc.texto(l, M + 20, h.y, { tam: 10, negrita: true, color: TEXTO })
+      h.y += 13
+    }
+    h.y += 2
+    if (pedido.aclaracion) h.parrafo(pedido.aclaracion, { tam: 8.5, color: SUAVE, sangria: 20 })
+    h.y += 6
+  } else {
+    h.y += 12
+  }
   h.parrafo('¡Gracias por contestar!', { tam: 11, negrita: true, color: AZUL })
 
   return h.cerrar(generadoPor, 'Encuesta a los jugadores')
@@ -289,6 +301,7 @@ export function generarReporteEncuestaPDF({ encuesta, resultados: r, links, resp
   }
 
   const a = analizarEncuesta(r, { links, respondieron, pedidos, pedidos_pendientes: pedidosPendientes })
+  const conPedido = pedidoAyudaDe(encuesta.pedido_ayuda).activo
 
   // --- resumen
   h.titulo('Resumen')
@@ -296,7 +309,9 @@ export function generarReporteEncuestaPDF({ encuesta, resultados: r, links, resp
     { valor: `${a.participacion ?? '—'}%`, etiqueta: 'Participación', detalle: `${respondieron} de ${links} chicos`, color: AZUL },
     { valor: String(r.indice ?? '—'), etiqueta: 'Índice general (0 a 100)', detalle: r.indice_anterior != null ? `antes ${r.indice_anterior}` : 'primera medición', color: VIOLETA },
     { valor: r.nota ? conComa(r.nota.promedio) : '—', etiqueta: 'Nota al año (1 a 10)', detalle: r.nota?.anterior != null ? `antes ${conComa(r.nota.anterior)}` : '', color: DORADO },
-    { valor: String(pedidos || 0), etiqueta: 'Pidieron hablar con alguien', detalle: pedidosPendientes ? `${pedidosPendientes} sin atender` : 'ninguno pendiente', color: pedidosPendientes ? ROJO : VERDE },
+    conPedido
+      ? { valor: String(pedidos || 0), etiqueta: 'Pidieron hablar con alguien', detalle: pedidosPendientes ? `${pedidosPendientes} sin atender` : 'ninguno pendiente', color: pedidosPendientes ? ROJO : VERDE }
+      : { valor: '—', etiqueta: 'Pedido para hablar', detalle: 'no se ofreció en esta encuesta', color: GRIS },
   ])
 
   h.subtitulo('Lectura general')
@@ -430,7 +445,7 @@ export function generarReporteEncuestaPDF({ encuesta, resultados: r, links, resp
   }
 
   h.titulo('Cómo se hizo')
-  h.parrafo(`Cada chico recibió un link personal de un solo uso. Las respuestas se guardan sin el nombre, sin el link y sin la hora, así que nadie puede saber qué contestó cada uno. Los resultados se ven recién con la encuesta cerrada y solo con ${MINIMO_RESPUESTAS} respuestas o más, también en los cortes por años en el club. El porcentaje favorable cuenta "siempre" y "casi siempre", "sí" (o "no" en las preguntas en negativo, como "me molestaron"), 4 o 5 estrellas y las notas de 7 o más. Los pedidos para hablar con alguien del club los ve solo la cabeza de división, con el nombre; acá va solo la cantidad.`,
+  h.parrafo(`Cada chico recibió un link personal de un solo uso. Las respuestas se guardan sin el nombre, sin el link y sin la hora, así que nadie puede saber qué contestó cada uno. Los resultados se ven recién con la encuesta cerrada y solo con ${MINIMO_RESPUESTAS} respuestas o más, también en los cortes por años en el club. El porcentaje favorable cuenta "siempre" y "casi siempre", "sí" (o "no" en las preguntas en negativo, como "me molestaron"), 4 o 5 estrellas y las notas de 7 o más. ${conPedido ? 'Los pedidos para hablar con alguien del club los ve solo la cabeza de división, con el nombre; acá va solo la cantidad.' : 'Esta encuesta no ofreció la opción de pedir que alguien del club hable con el chico.'}`,
     { tam: 8.5, color: SUAVE })
 
   return h.cerrar(generadoPor, 'Reporte de la encuesta')

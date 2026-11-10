@@ -669,6 +669,47 @@ async function main() {
   r = await pedir(`encuestas/${r.datos.encuesta.id}`, { method: 'DELETE', token: T })
   esperar('una encuesta sin respuestas se borra', r.codigo === 200, r)
 
+  // El pedido para hablar del final: se edita, se saca y se vuelve a poner
+  r = await pedir('encuestas', { method: 'POST', token: T, body: { titulo: 'Con pedido configurable', cierra } })
+  const enc2 = r.datos.encuesta
+  esperar('una encuesta nueva trae el pedido para hablar de siempre',
+    enc2.pedido_ayuda?.activo === true && enc2.pedido_ayuda.texto.startsWith('Quiero que alguien del club'), enc2.pedido_ayuda)
+  r = await pedir(`encuestas/${enc2.id}`, { method: 'PUT', token: T, body: { pedido_ayuda: { activo: true, texto: '  ', aclaracion: '' } } })
+  esperar('el pedido no puede quedar sin texto', r.codigo === 400 && r.datos.error === 'pedido_invalido', r)
+  r = await pedir(`encuestas/${enc2.id}`, { method: 'PUT', token: T, body: { pedido_ayuda: { activo: true, texto: 'Quiero hablar con un entrenador.', aclaracion: '' } } })
+  esperar('se cambia el texto del pedido y se saca la aclaración',
+    r.codigo === 200 && r.datos.encuesta.pedido_ayuda.texto === 'Quiero hablar con un entrenador.' && r.datos.encuesta.pedido_ayuda.aclaracion === '', r.datos.encuesta?.pedido_ayuda)
+  r = await pedir(`encuestas/${enc2.id}/abrir`, { method: 'POST', token: T })
+  const link2 = r.datos.links.find((l) => l.jugador_id === chicos[1]).token
+  const link3 = r.datos.links.find((l) => l.jugador_id === chicos[2]).token
+  r = await pedir(`encuesta-publica/${link2}`)
+  esperar('el chico ve el pedido con el texto configurado', r.datos.pedido_ayuda?.texto === 'Quiero hablar con un entrenador.', r.datos.pedido_ayuda)
+  const respuestas2 = {}
+  for (const q of r.datos.preguntas) {
+    if (q.tipo === 'frecuencia') respuestas2[q.clave] = 3
+    else if (q.tipo === 'si_no' || q.tipo === 'si_nose_no') respuestas2[q.clave] = 'si'
+    else if (q.tipo === 'nota') respuestas2[q.clave] = 8
+    else if (q.tipo === 'opciones') respuestas2[q.clave] = 0
+  }
+  r = await pedir(`encuesta-publica/${link2}`, { method: 'POST', body: { respuestas: respuestas2, hablar: true } })
+  esperar('con el pedido puesto, el chico lo puede marcar', r.codigo === 200, r)
+  r = await pedir(`encuestas/${enc2.id}`, { method: 'PUT', token: T, body: { pedido_ayuda: { activo: false, texto: 'Quiero hablar con un entrenador.', aclaracion: '' } } })
+  esperar('el pedido se saca aunque ya haya respuestas', r.codigo === 200 && r.datos.encuesta.pedido_ayuda.activo === false, r.datos.encuesta?.pedido_ayuda)
+  r = await pedir(`encuesta-publica/${link3}`)
+  esperar('sin pedido, la encuesta del chico lo trae apagado', r.datos.pedido_ayuda?.activo === false, r.datos.pedido_ayuda)
+  r = await pedir(`encuesta-publica/${link3}`, { method: 'POST', body: { respuestas: respuestas2, hablar: true } })
+  esperar('sin pedido, la respuesta se guarda igual', r.codigo === 200, r)
+  r = await pedir(`encuestas/${enc2.id}`, { token: C })
+  esperar('sin pedido, un "hablar" que llega no se registra (queda solo el de antes)', r.datos.pedidos?.length === 1, r.datos.pedidos)
+  r = await pedir(`encuestas/${enc2.id}/cerrar`, { method: 'POST', token: T })
+  r = await pedir(`encuestas/${enc2.id}`, { method: 'PUT', token: T, body: { pedido_ayuda: { activo: true, texto: 'X', aclaracion: '' } } })
+  esperar('cerrada, el pedido ya no se toca', r.codigo === 409 && r.datos.error === 'encuesta_cerrada', r)
+  const cuestionarioSin = generarCuestionarioPDF({ titulo: 'X', preguntas: deSiempre, pedidoAyuda: { activo: false } })
+  const cuestionarioCon = generarCuestionarioPDF({ titulo: 'X', preguntas: deSiempre, pedidoAyuda: { activo: true, texto: 'Quiero hablar con un entrenador.', aclaracion: '' } })
+  const texto = (doc) => new TextDecoder('latin1').decode(doc.bytes())
+  esperar('el cuestionario sin pedido no lo muestra', !texto(cuestionarioSin).includes('hable conmigo'), null)
+  esperar('el cuestionario muestra el texto configurado', texto(cuestionarioCon).includes('Quiero hablar con un entrenador.'), null)
+
   // ---------- el cambio de rol corta de inmediato ----------
   console.log('Cambio de rol:')
   r = await pedir(`staff/${MANAGER}`, { method: 'PUT', token: T, body: { rol: 'Entrenador' } })
