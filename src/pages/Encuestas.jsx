@@ -565,6 +565,90 @@ const FILTROS = [
   { value: 'respondieron', label: 'Respondieron' },
 ]
 
+// Los dados de baja no reciben link solos: se suman acá, eligiéndolos
+function SumarInactivos({ encuesta, onCambio }) {
+  const [abierto, setAbierto] = useState(false)
+  const [lista, setLista] = useState(null)
+  const [elegidos, setElegidos] = useState([])
+  const [busqueda, setBusqueda] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+
+  async function abrir() {
+    setAbierto(true)
+    setElegidos([])
+    setBusqueda('')
+    setError('')
+    setLista(null)
+    try { setLista(await api(`encuestas/${encuesta.id}/inactivos`)) } catch { setError('No se pudo traer la lista.') }
+  }
+
+  async function sumar() {
+    setGuardando(true)
+    setError('')
+    try {
+      await api(`encuestas/${encuesta.id}/links`, { method: 'POST', body: { jugador_ids: elegidos } })
+      setAbierto(false)
+      onCambio()
+    } catch {
+      setError('No se pudieron sumar. Probá de nuevo.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  const alternar = (id) => setElegidos((e) => (e.includes(id) ? e.filter((x) => x !== id) : [...e, id]))
+  const normal = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const visibles = (lista || []).filter((j) => normal(`${j.apellido} ${j.nombre}`).includes(normal(busqueda)))
+
+  if (!abierto) {
+    return (
+      <button className="btn sec chico" style={{ marginBottom: 8 }} onClick={abrir}>
+        + Sumar jugadores dados de baja
+      </button>
+    )
+  }
+  return (
+    <div className="enc-editor" style={{ marginBottom: 10 }}>
+      <b style={{ fontSize: '0.9rem' }}>Sumar jugadores dados de baja</b>
+      <p className="mini" style={{ margin: '2px 0 8px' }}>
+        Elegí a quiénes mandarles la encuesta. Cada uno recibe su link, igual que el resto.
+      </p>
+      {lista === null && !error && <div className="mini">Cargando…</div>}
+      {lista?.length === 0 && <div className="mini">No hay jugadores dados de baja.</div>}
+      {lista?.length > 6 && (
+        <input className="enc-buscar" placeholder="Buscar por nombre" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+      )}
+      <div className="enc-inactivos">
+        {visibles.map((j) => (
+          <label key={j.id} className={`opcion-seccion${j.tiene_link ? ' deshabilitada' : ''}`}>
+            <input
+              type="checkbox"
+              disabled={j.tiene_link}
+              checked={j.tiene_link || elegidos.includes(j.id)}
+              onChange={() => alternar(j.id)}
+            />
+            <span>
+              {j.apellido}, {j.nombre}
+              <span className="mini">
+                {j.tiene_link ? ' · ya tiene su link'
+                  : !numeroWhatsApp(j.telefono) && !numeroWhatsApp(j.tutor_telefono) ? ' · sin celular cargado' : ''}
+              </span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
+      <div className="fila" style={{ marginTop: 8 }}>
+        <button className="btn chico crece" disabled={!elegidos.length || guardando} onClick={sumar}>
+          {guardando ? 'Sumando…' : elegidos.length ? `Sumar ${elegidos.length}` : 'Elegí al menos uno'}
+        </button>
+        <button className="btn sec chico" disabled={guardando} onClick={() => setAbierto(false)}>Cancelar</button>
+      </div>
+    </div>
+  )
+}
+
 function Links({ datos, onCambio, yo }) {
   const { encuesta, links } = datos
   const [filtro, setFiltro] = useState('sin_enviar')
@@ -617,6 +701,16 @@ function Links({ datos, onCambio, yo }) {
     }
   }
 
+  async function quitar(l) {
+    if (!confirm(`¿Sacar a ${l.nombre} de esta encuesta? Si ya le mandaste el link, deja de funcionar.`)) return
+    try {
+      await api(`encuestas/${encuesta.id}/links/${l.jugador_id}`, { method: 'DELETE' })
+      onCambio()
+    } catch {
+      alert('No se pudo sacar. Probá de nuevo.')
+    }
+  }
+
   async function linkNuevo(l) {
     if (!confirm(`¿Darle un link nuevo a ${l.nombre}? El que ya le mandaste deja de funcionar.`)) return
     await api(`encuestas/${encuesta.id}/links/${l.jugador_id}/nuevo`, { method: 'POST' })
@@ -624,10 +718,22 @@ function Links({ datos, onCambio, yo }) {
   }
 
   if (encuesta.estado === 'borrador') {
+    const sumados = links.filter((l) => l.estado === 'inactivo')
     return (
       <div className="tarjeta">
         <h3>Links</h3>
-        <p className="suave">Cuando abras la encuesta, la app arma un link para cada chico y te deja mandarlo por WhatsApp.</p>
+        <p className="suave" style={{ marginBottom: 8 }}>
+          Cuando abras la encuesta, la app arma un link para cada chico activo y te deja
+          mandarlo por WhatsApp. Los dados de baja no reciben link solos: si querés que
+          algunos la contesten, sumalos acá.
+        </p>
+        <SumarInactivos encuesta={encuesta} onCambio={onCambio} />
+        {sumados.map((l) => (
+          <div key={l.jugador_id} className="fila entre enc-link">
+            <span className="crece">{l.apellido}, {l.nombre} <span className="badge inactivo">Dado de baja</span></span>
+            <button className="btn sec chico" onClick={() => quitar(l)}>Quitar</button>
+          </div>
+        ))}
       </div>
     )
   }
@@ -665,6 +771,7 @@ function Links({ datos, onCambio, yo }) {
           Cargalo en su ficha o en el padrón, o copiales el link y mandalo a mano.
         </div>
       )}
+      {encuesta.estado === 'abierta' && <SumarInactivos encuesta={encuesta} onCambio={onCambio} />}
       <div className="chips" style={{ marginBottom: 8 }}>
         {FILTROS.map((f) => (
           <button key={f.value} type="button" className={`chip${filtro === f.value ? ' activo' : ''}`} onClick={() => setFiltro(f.value)}>
@@ -678,7 +785,10 @@ function Links({ datos, onCambio, yo }) {
         return (
           <div key={l.jugador_id} className="enc-link">
             <div className="fila entre" style={{ flexWrap: 'nowrap' }}>
-              <b className="crece">{l.apellido}, {l.nombre}</b>
+              <b className="crece">
+                {l.apellido}, {l.nombre}
+                {l.estado === 'inactivo' && <span className="badge inactivo" style={{ marginLeft: 6 }}>Dado de baja</span>}
+              </b>
               {l.usado
                 ? <span className="badge medica-ok">Respondió</span>
                 : l.enviado ? <span className="badge activo">Enviado</span>
@@ -702,6 +812,9 @@ function Links({ datos, onCambio, yo }) {
                 </div>
                 {l.enviado && (
                   <button className="enc-desmarcar" onClick={() => marcar(l, false)}>No le llegó: marcar como sin enviar</button>
+                )}
+                {l.estado === 'inactivo' && (
+                  <button className="enc-desmarcar" style={{ marginLeft: 12 }} onClick={() => quitar(l)}>Sacarlo de esta encuesta</button>
                 )}
               </>
             )}

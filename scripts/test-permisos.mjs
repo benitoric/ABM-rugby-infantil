@@ -152,6 +152,7 @@ async function main() {
     ['GET', `boletin/${jugador.id}`],
     ['GET', 'informe?desde=2026-01-01&hasta=2026-03-31'],
     ['GET', 'encuestas'],
+    ['GET', 'encuestas/00000000-0000-0000-0000-000000000000/inactivos'],
     ['POST', 'encuestas', { titulo: 'X' }],
     ['POST', 'evaluaciones', { jugador_id: jugador.id, valores: {} }],
     ['POST', 'seguimientos', { jugador_id: jugador.id, area: 'tecnica' }],
@@ -722,6 +723,40 @@ async function main() {
   const texto = (doc) => new TextDecoder('latin1').decode(doc.bytes())
   esperar('el cuestionario sin pedido no lo muestra', !texto(cuestionarioSin).includes('hable conmigo'), null)
   esperar('el cuestionario muestra el texto configurado', texto(cuestionarioCon).includes('Quiero hablar con un entrenador.'), null)
+
+  // Jugadores dados de baja: no reciben link solos, pero se suman eligiéndolos
+  r = await pedir('jugadores', { method: 'POST', token: T, body: { nombre: 'Baja', apellido: 'Encuesta', estado: 'inactivo', tutor_telefono: '3815550000' } })
+  const deBaja = r.datos
+  esperar('hay un jugador dado de baja', deBaja.estado === 'inactivo', deBaja)
+  r = await pedir('encuestas', { method: 'POST', token: T, body: { titulo: 'Con dados de baja', cierra } })
+  const enc3 = r.datos.encuesta
+  r = await pedir(`encuestas/${enc3.id}/abrir`, { method: 'POST', token: T })
+  const linksAntes = r.datos.links.length
+  esperar('al abrirla, el dado de baja no recibe link', !r.datos.links.some((l) => l.jugador_id === deBaja.id), linksAntes)
+  r = await pedir(`encuestas/${enc3.id}/inactivos`, { token: T })
+  esperar('la lista de dados de baja lo trae sin link', r.datos.some((j) => j.id === deBaja.id && !j.tiene_link), r.datos)
+  r = await pedir(`encuestas/${enc3.id}/inactivos`, { token: E })
+  esperar('el entrenador no ve la lista', r.codigo === 403, r)
+  r = await pedir(`encuestas/${enc3.id}/links`, { method: 'POST', token: T, body: { jugador_ids: [deBaja.id, chicos[0]] } })
+  const linkBaja = r.datos.links?.find((l) => l.jugador_id === deBaja.id)
+  esperar('se suma el dado de baja elegido (y un activo no se duplica)',
+    r.codigo === 200 && r.datos.links.length === linksAntes + 1 && linkBaja?.token && linkBaja.estado === 'inactivo', r.datos.links?.length)
+  r = await pedir(`encuesta-publica/${linkBaja.token}`)
+  esperar('el dado de baja abre su encuesta', r.codigo === 200 && r.datos.estado === 'abierta', r.datos)
+  r = await pedir(`encuestas/${enc3.id}`, { token: T })
+  esperar('mirar la encuesta no le saca el link', r.datos.links.some((l) => l.jugador_id === deBaja.id), null)
+  r = await pedir(`encuestas/${enc3.id}/links/${chicos[0]}`, { method: 'DELETE', token: T })
+  esperar('a un activo no se lo saca de la encuesta', r.codigo === 409 && r.datos.error === 'jugador_activo', r)
+  r = await pedir(`encuestas/${enc3.id}/links/${deBaja.id}`, { method: 'DELETE', token: T })
+  esperar('al dado de baja se lo saca', r.codigo === 200 && !r.datos.links.some((l) => l.jugador_id === deBaja.id), r.datos.links?.length)
+  r = await pedir(`encuesta-publica/${linkBaja.token}`)
+  esperar('su link deja de funcionar', r.codigo === 404, r)
+  r = await pedir(`encuestas/${enc3.id}/links`, { method: 'POST', token: T, body: { jugador_ids: [deBaja.id] } })
+  const linkBaja2 = r.datos.links.find((l) => l.jugador_id === deBaja.id).token
+  r = await pedir(`encuesta-publica/${linkBaja2}`, { method: 'POST', body: { respuestas: respuestas2 } })
+  esperar('el dado de baja contesta', r.codigo === 200, r)
+  r = await pedir(`encuestas/${enc3.id}/links/${deBaja.id}`, { method: 'DELETE', token: T })
+  esperar('si ya contestó no se lo saca', r.codigo === 409 && r.datos.error === 'ya_respondio', r)
 
   // ---------- el cambio de rol corta de inmediato ----------
   console.log('Cambio de rol:')

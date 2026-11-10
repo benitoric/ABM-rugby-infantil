@@ -196,10 +196,45 @@ export async function enrutarEncuestas({ metodo, p, b, yo }) {
 
   // Marcar el link de un chico como enviado (lo hace solo el botón de
   // WhatsApp) o darle uno nuevo si el anterior se mandó mal
+  // Jugadores dados de baja: no reciben link solos (completarLinks suma solo
+  // a los activos), pero se pueden sumar uno por uno, eligiéndolos
+  if (metodo === 'GET' && p[2] === 'inactivos' && !p[3]) {
+    return query(
+      `select j.id, j.nombre, j.apellido, j.telefono, j.tutor_nombre, j.tutor_telefono,
+              exists (select 1 from encuesta_links l where l.encuesta_id = $1 and l.jugador_id = j.id) as tiene_link
+       from jugadores j
+       where j.estado = 'inactivo'
+       order by j.apellido, j.nombre`, [e.id])
+  }
+
+  if (metodo === 'POST' && p[2] === 'links' && !p[3]) {
+    if (e.estado === 'cerrada') throw { codigo: 409, error: 'encuesta_cerrada' }
+    const ids = Array.isArray(b?.jugador_ids) ? b.jugador_ids.map(String) : []
+    if (!ids.length) throw { codigo: 400, error: 'faltan_jugadores' }
+    // Solo dados de baja: los activos ya tienen el suyo
+    const elegidos = await query(
+      `select j.id from jugadores j where j.id::text = any($1) and j.estado = 'inactivo'`, [ids])
+    for (const j of elegidos) {
+      await query(
+        `insert into encuesta_links (token, encuesta_id, jugador_id) values ($1, $2, $3)
+         on conflict (encuesta_id, jugador_id) do nothing`, [nuevoToken(), e.id, j.id])
+    }
+    return detalle(e.id, veoPedidos)
+  }
+
   if (p[2] === 'links' && p[3]) {
     const [link] = await query(
-      'select usado from encuesta_links where encuesta_id = $1 and jugador_id::text = $2', [e.id, p[3]])
+      `select l.usado, j.estado from encuesta_links l join jugadores j on j.id = l.jugador_id
+       where l.encuesta_id = $1 and l.jugador_id::text = $2`, [e.id, p[3]])
     if (!link) throw { codigo: 404, error: 'no_existe' }
+    // Sacar a un dado de baja que se sumó a mano (si todavía no contestó)
+    if (metodo === 'DELETE' && !p[4]) {
+      if (e.estado === 'cerrada') throw { codigo: 409, error: 'encuesta_cerrada' }
+      if (link.usado) throw { codigo: 409, error: 'ya_respondio' }
+      if (link.estado !== 'inactivo') throw { codigo: 409, error: 'jugador_activo' }
+      await query('delete from encuesta_links where encuesta_id = $1 and jugador_id::text = $2', [e.id, p[3]])
+      return detalle(e.id, veoPedidos)
+    }
     if (metodo === 'PUT' && !p[4]) {
       await query(
         'update encuesta_links set enviado = $1 where encuesta_id = $2 and jugador_id::text = $3',

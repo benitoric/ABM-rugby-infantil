@@ -215,7 +215,12 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   porcentajes suman más de 100, y no entra en el índice; `conOpciones` junta
   los dos tipos con opciones) y texto libre. Al abrirla se
   arma un link por chico activo (`encuesta_links`, token aleatorio de un solo
-  uso); la pantalla manda cada link por WhatsApp al celular propio del chico
+  uso); los dados de baja no reciben link solos, pero se suman eligiéndolos
+  desde la solapa Links ("+ Sumar jugadores dados de baja": `GET
+  encuestas/:id/inactivos` y `POST encuestas/:id/links` con `jugador_ids`,
+  que acepta solo inactivos), con la marca "Dado de baja", y se sacan con
+  `DELETE encuestas/:id/links/:jid` mientras no hayan contestado (a un activo
+  no: 409 `jugador_activo`); la pantalla manda cada link por WhatsApp al celular propio del chico
   (`jugadores.telefono`, se carga en la ficha o en el padrón) o, si no tiene,
   al del tutor. El chico la abre en `#/encuesta/<token>` sin login:
   `src/main.jsx` muestra `EncuestaPublica.jsx` sola, sin tocar la posición

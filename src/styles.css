@@ -1726,3 +1726,8 @@ details.tarjeta summary {
 
 /* Encuesta: aviso por cada respuesta (solapa Links) */
 .enc-aviso-respuestas { background: var(--celeste); border-radius: 10px; padding: 10px; margin: 8px 0 4px; }
+
+/* Encuesta: sumar jugadores dados de baja */
+.enc-buscar { width: 100%; border: 1px solid var(--borde); border-radius: 8px; padding: 8px; margin-bottom: 6px; }
+.enc-inactivos { max-height: 320px; overflow-y: auto; }
+.opcion-seccion.deshabilitada { opacity: 0.6; }
