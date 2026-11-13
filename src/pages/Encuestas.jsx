@@ -11,6 +11,7 @@ import {
   analizarEncuesta, claveNueva, conOpciones, PEDIDO_AYUDA_POR_DEFECTO, insertarEnBloque, limpiarPreguntas, reemplazarPregunta, renombrarBloque, MINIMO_RESPUESTAS, opcionesDe, preguntasPorDefecto, puntosBajos,
   TIPOS_POR_VALUE, TIPOS_PREGUNTA,
 } from '../encuesta.js'
+import { analizarTextosLibres, textoTonos } from '../encuestaTextos.js'
 import EncuestaPublica from './EncuestaPublica.jsx'
 
 // Encuesta anónima a los jugadores, del lado de la cabeza de división y el
@@ -889,14 +890,35 @@ function ReporteEncuesta({ datos, yo }) {
               <ul className="enc-alertas">{a.alertas.map((t, i) => <li key={i}>{t}</li>)}</ul>
             </div>
           )}
-          {a.sugerencias.length > 0 && (
+          {a.libres?.escritas > 0 && (a.libres.tendencias.length > 0 || a.libres.sensibles.length > 0) && (
+            <div className="enc-libres">
+              <b>Lo que escribieron, en resumen</b>
+              <ul className="enc-alertas">{a.libres.tendencias.map((t, i) => <li key={i}>{t}</li>)}</ul>
+              {a.libres.cruces.map((c, i) => <p key={i} className="mini enc-cruce">{c}</p>)}
+              {a.libres.sensibles.length > 0 && (
+                <details style={{ marginTop: 6 }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--bad)' }}>
+                    Para leer con atención ({a.libres.sensibles.length})
+                  </summary>
+                  {a.libres.sensibles.map((t, i) => <p key={i} className="enc-texto-libre">“{t}”</p>)}
+                </details>
+              )}
+            </div>
+          )}
+          {(a.sugerencias.length > 0 || a.libres?.sugerencias.length > 0) && (
             <details style={{ marginTop: 8 }}>
               <summary style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--primario)' }}>
-                Sugerencias para el staff ({a.sugerencias.length})
+                Sugerencias para el staff ({a.sugerencias.length + (a.libres?.sugerencias.length || 0)})
               </summary>
               {a.sugerencias.map((s, i) => (
                 <div key={i} className="enc-sugerencia">
                   <div className="mini"><b>{s.pregunta}</b> · {s.favorable}% favorable</div>
+                  <div style={{ fontSize: '0.88rem' }}>{s.sugerencia}</div>
+                </div>
+              ))}
+              {(a.libres?.sugerencias || []).map((s, i) => (
+                <div key={`l${i}`} className="enc-sugerencia">
+                  <div className="mini"><b>{s.tema}</b> · {s.menciones} lo {s.menciones === 1 ? 'pide' : 'piden'} cambiar por escrito</div>
                   <div style={{ fontSize: '0.88rem' }}>{s.sugerencia}</div>
                 </div>
               ))}
@@ -919,6 +941,37 @@ function ReporteEncuesta({ datos, yo }) {
   )
 }
 
+// Los temas de una pregunta libre, arriba de los textos: cuántos lo nombran y
+// de qué lado (verde a favor, rojo para cambiar)
+function TemasLibres({ a }) {
+  if (!a || !a.total) return null
+  const extras = []
+  if (a.vacias) extras.push(`${a.vacias} ${a.vacias === 1 ? 'dice' : 'dicen'} "nada" o "no sé"`)
+  if (a.nada_que_cambiar) extras.push(`${a.nada_que_cambiar} no ${a.nada_que_cambiar === 1 ? 'cambiaría' : 'cambiarían'} nada`)
+  if (a.sentido === 'mensaje' && a.con_contenido) extras.push(textoTonos(a.tonos))
+  return (
+    <div className="enc-temas">
+      {a.suficientes && a.temas.length > 0 && (
+        <div className="enc-temas-lista">
+          {a.temas.map((t) => (
+            <span
+              key={t.id}
+              className={`enc-tema${t.en_contra > t.a_favor ? ' contra' : t.a_favor > t.en_contra ? ' favor' : ''}`}
+              title={t.citas.map((c) => `“${c}”`).join('  ')}
+            >
+              {t.nombre} · {t.menciones}
+            </span>
+          ))}
+        </div>
+      )}
+      {a.suficientes && a.repetidas.length > 0 && (
+        <div className="mini">Se repite: {a.repetidas.map((w) => `${w.palabra} (${w.veces})`).join(', ')}</div>
+      )}
+      {extras.length > 0 && <div className="mini">{extras.join(' · ')}</div>}
+    </div>
+  )
+}
+
 export function ResultadosEncuesta({ r, links }) {
   if (!r) return null
   if (!r.suficientes) {
@@ -933,6 +986,7 @@ export function ResultadosEncuesta({ r, links }) {
     )
   }
   const bajos = puntosBajos(r)
+  const libres = analizarTextosLibres(r)
   return (
     <>
       <div className="tarjeta">
@@ -1033,6 +1087,7 @@ export function ResultadosEncuesta({ r, links }) {
       {r.preguntas.filter((p) => p.tipo === 'abierta').map((p) => (
         <div key={p.clave} className="tarjeta">
           <h3>{p.texto}</h3>
+          <TemasLibres a={libres?.preguntas.find((x) => x.clave === p.clave)} />
           {!p.textos.length && <p className="mini">Nadie escribió nada.</p>}
           {p.textos.map((t, i) => <p key={i} className="enc-texto-libre">“{t}”</p>)}
         </div>

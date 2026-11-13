@@ -11,6 +11,7 @@
 
 import { anchoTexto, nuevoPDF, partirTexto } from './pdf.js'
 import { fechaCorta } from './helpers.js'
+import { textoTonos } from './encuestaTextos.js'
 import {
   analizarEncuesta, bloquesDe, conOpciones, MINIMO_RESPUESTAS, opcionesDe, pedidoAyudaDe, textoEnLista,
 } from './encuesta.js'
@@ -36,6 +37,18 @@ const M = 40
 const PIE = 60
 
 const conComa = (n, d = 1) => (n == null ? '—' : Number(n).toFixed(d).replace('.', ','))
+// Las citas de un tema en un solo renglón: las que entran enteras, y si ni
+// la primera entra, su comienzo
+function citasQueEntran(citas, ancho, tam = 7.5) {
+  let linea = ''
+  for (const c of citas) {
+    const prueba = `${linea}${linea ? '   ' : ''}“${c}”`
+    if (anchoTexto(prueba, tam) > ancho) break
+    linea = prueba
+  }
+  if (!linea && citas.length) linea = `“${partirTexto(citas[0], ancho - 20, tam)[0]}…”`
+  return linea
+}
 const colorFavorable = (v) => (v == null ? AZUL : v >= 75 ? VERDE : v >= 60 ? AMBAR : ROJO)
 
 // Lo común a los dos documentos: márgenes, saltos de hoja, textos y pie
@@ -423,7 +436,57 @@ export function generarReporteEncuestaPDF({ encuesta, resultados: r, links, resp
     }
   }
 
-  // --- respuestas libres
+  // --- respuestas libres: primero las tendencias, después cada texto
+  const libres = a.libres
+  if (libres?.escritas) {
+    h.titulo('Lo que escribieron: tendencias',
+      `Sale solo de las ${libres.escritas} respuestas escritas: cada una se busca en un diccionario de temas del rugby infantil y se mira si habla a favor o en contra. Es una lectura de conjunto para orientar la charla, no reemplaza leer los textos, que van completos más abajo.`)
+    if (libres.tendencias.length) for (const t of libres.tendencias) h.vineta(t)
+    else h.parrafo('No aparece ningún tema repetido: las respuestas van cada una por su lado.', { color: SUAVE })
+    if (libres.cruces.length) {
+      h.subtitulo('Lo escrito y los números dicen lo mismo')
+      for (const c of libres.cruces) h.vineta(c, { color: ROJO })
+    }
+    if (libres.sensibles.length) {
+      h.subtitulo('Para leer con atención')
+      h.recuadro(libres.sensibles.map((t) => `“${t}”`))
+    }
+    for (const p of libres.preguntas) {
+      // El título de la pregunta no queda solo al pie de la hoja
+      h.espacio(p.suficientes && p.temas.length ? 90 : 50)
+      h.subtitulo(`${p.texto} (${p.total} ${p.total === 1 ? 'respuesta' : 'respuestas'})`)
+      const extras = []
+      if (p.vacias) extras.push(`${p.vacias} ${p.vacias === 1 ? 'dice' : 'dicen'} "nada" o "no sé"`)
+      if (p.nada_que_cambiar) extras.push(`${p.nada_que_cambiar} no ${p.nada_que_cambiar === 1 ? 'cambiaría' : 'cambiarían'} nada`)
+      if (p.sentido === 'mensaje' && p.con_contenido) extras.push(`tono: ${textoTonos(p.tonos)}`)
+      if (extras.length) h.parrafo(`${extras.join(' · ')}.`, { tam: 8.5, color: SUAVE })
+      if (!p.suficientes) {
+        h.parrafo(p.con_contenido
+          ? `Con ${p.con_contenido} ${p.con_contenido === 1 ? 'texto' : 'textos'} no se buscan tendencias: alcanza con leerlos abajo.`
+          : 'Nadie escribió algo para analizar.', { tam: 8.5, color: SUAVE })
+        continue
+      }
+      if (!p.temas.length) {
+        h.parrafo('Ningún tema del diccionario: hay que leer los textos.', { tam: 8.5, color: SUAVE })
+      }
+      for (const t of p.temas.slice(0, 6)) {
+        const color = t.en_contra > t.a_favor ? ROJO : t.a_favor > t.en_contra ? VERDE : AZUL
+        h.barra({
+          etiqueta: t.nombre,
+          valor: `${t.menciones} · ${t.pct}%`,
+          proporcion: t.pct / 100,
+          color,
+          detalle: citasQueEntran(t.citas, ancho),
+        })
+      }
+      const resto = p.temas.slice(6)
+      if (resto.length) h.parrafo(`También: ${resto.map((t) => `${t.nombre.toLowerCase()} (${t.menciones})`).join(', ')}.`, { tam: 8.5, color: SUAVE })
+      if (p.sin_tema) h.parrafo(`${p.sin_tema} ${p.sin_tema === 1 ? 'respuesta no entra' : 'respuestas no entran'} en ningún tema.`, { tam: 8.5, color: SUAVE })
+      if (p.repetidas.length) h.parrafo(`Palabras que se repiten: ${p.repetidas.map((w) => `"${w.palabra}" (${w.veces})`).join(', ')}.`, { tam: 8.5, color: SUAVE })
+    }
+    h.parrafo('Verde: lo nombran más a favor. Rojo: más como algo para cambiar. El porcentaje es sobre las respuestas con algo escrito. Las citas son las más cortas de cada tema.', { tam: 7.5, color: SUAVE })
+  }
+
   const abiertas = r.preguntas.filter((p) => p.tipo === 'abierta')
   if (abiertas.length) {
     h.titulo('Lo que escribieron', 'Las respuestas libres, tal cual, en orden alfabético (no en el orden en que llegaron).')
@@ -440,6 +503,16 @@ export function generarReporteEncuestaPDF({ encuesta, resultados: r, links, resp
       'Salen solas de las preguntas con menos de 60% favorable. Son un punto de partida para la charla, no una receta.')
     for (const s of a.sugerencias) {
       h.parrafo(`${s.pregunta} (${s.favorable}% favorable)`, { negrita: true, tam: 9 })
+      h.parrafo(s.sugerencia, { sangria: 12, tam: 9 })
+    }
+  }
+  if (libres?.sugerencias.length) {
+    if (!a.sugerencias.length) {
+      h.titulo('Sugerencias para conversar en el staff', 'Son un punto de partida para la charla, no una receta.')
+    }
+    h.subtitulo('De lo que escribieron')
+    for (const s of libres.sugerencias) {
+      h.parrafo(`${s.tema} (${s.menciones} ${s.menciones === 1 ? 'lo pide' : 'lo piden'} cambiar)`, { negrita: true, tam: 9 })
       h.parrafo(s.sugerencia, { sangria: 12, tam: 9 })
     }
   }

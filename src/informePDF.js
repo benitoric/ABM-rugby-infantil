@@ -6,6 +6,7 @@
 // sigue con las listas que explican esos números. Las secciones se eligen
 // antes de emitirlo (SECCIONES_INFORME en src/informe.js).
 
+import { analizarTextosLibres } from './encuestaTextos.js'
 import { anchoTexto, nuevoPDF, partirTexto } from './pdf.js'
 import { fechaCorta, PUESTOS, APTITUDES } from './helpers.js'
 import { conUnidad } from './tests.js'
@@ -802,6 +803,15 @@ export function generarInformePDF({ datos, secciones, generadoPor }) {
           { titulo: 'Cambio', valor: (f) => (f.variacion == null ? '—' : `${f.variacion > 0 ? '+' : ''}${f.variacion}`), ancho: 48, alinear: 'der', color: (f) => (f.variacion > 0 ? VERDE : f.variacion < 0 ? ROJO : TEXTO) },
           { titulo: 'Resp.', valor: 'n', ancho: 40, alinear: 'der' },
         ], r.preguntas.filter((p) => p.tipo !== 'abierta' && !p.segmento && (p.favorable != null || p.tipo === 'nota')), { tam: 8 })
+        const libres = analizarTextosLibres(r)
+        if (libres?.tendencias.length || libres?.sensibles.length) {
+          subtitulo('Lo que escribieron: tendencias')
+          for (const t of libres.tendencias) vineta(t)
+          for (const c of libres.cruces) vineta(c)
+          if (libres.sensibles.length) {
+            vineta(`Para leer con atención (${libres.sensibles.length}): ${libres.sensibles.map((t) => `“${t}”`).join(' ')}`)
+          }
+        }
         for (const p of r.preguntas.filter((x) => x.tipo === 'abierta' && x.textos.length)) {
           subtitulo(p.texto)
           for (const t of p.textos) vineta(`“${t}”`)

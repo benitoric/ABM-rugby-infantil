@@ -1686,6 +1686,15 @@ details.tarjeta summary {
 .enc-sugerencia:last-child { border-bottom: none; }
 .enc-vista-previa .crece { flex: 1; }
 
+/* Respuestas libres: temas que se repiten */
+.enc-libres { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: var(--celeste); font-size: 0.9rem; }
+.enc-cruce { margin: 6px 0 0; color: var(--bad); }
+.enc-temas { margin: 2px 0 8px; display: grid; gap: 4px; }
+.enc-temas-lista { display: flex; flex-wrap: wrap; gap: 6px; }
+.enc-tema { font-size: 0.78rem; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--borde); background: #fff; color: var(--texto); }
+.enc-tema.favor { border-color: var(--ok); background: #ecfdf3; color: #166534; }
+.enc-tema.contra { border-color: var(--bad); background: #fef2f2; color: #991b1b; }
+
 /* Editor de la encuesta: encabezado de cada parte con sus acciones */
 .enc-bloque-fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 4px; }
 .enc-bloque-fila .enc-bloque { margin-bottom: 0; }
