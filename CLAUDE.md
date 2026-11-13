@@ -265,6 +265,26 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   (menos de 60%), cambios de 10 puntos o más contra la anterior y sugerencias
   para el staff atadas a las claves de las preguntas de siempre. El reporte no
   lleva ningún nombre: de los pedidos va solo la cantidad (`pedidos_total`).
+  **Respuestas libres** (`src/encuestaTextos.js`, sin DOM, `analizarTextosLibres`;
+  `analizarEncuesta` lo devuelve en `libres`): se procesan en la app, **nunca
+  se mandan a un servicio de afuera**. Cada texto se normaliza y se busca en
+  un diccionario de temas del rugby infantil (`TEMAS`: viajes, partidos,
+  minutos, grupo, entrenadores, entrenamientos, aprender, físico, gritos,
+  burlas, contacto, organización, lugar, tercer tiempo, diversión,
+  agradecimiento, dudas de seguir), con el tono por una lista corta de
+  palabras y la negación ("no me gustó"; "que no griten" es un pedido). El
+  lado sale de la pregunta (`sentidoDePregunta`: en "lo que más me gustó" lo
+  nombrado es a favor, en "lo que cambiaría" es para cambiar, en el mensaje
+  decide el tono). "Nada" o "no sé" no cuentan; "nada, todo bien" en lo que
+  cambiaría es no cambiar nada. Por pregunta: temas con menciones, % y las dos
+  citas más cortas (desde 4 textos con contenido, `MINIMO_TEXTOS`) y palabras
+  que se repiten fuera de los temas. En conjunto: tendencias redactadas (lo
+  que más valoran, lo que más piden cambiar, lo que divide opiniones), el
+  cruce con la pregunta cerrada del mismo tema cuando salió por debajo de
+  75%, sugerencias por tema y las frases sensibles (burlas, miedo, maltrato,
+  ganas de dejar) enteras "para leer con atención", que además suman una
+  alerta. Sale en la solapa Resultados (resumen y chips por pregunta), en el
+  reporte PDF y en la sección encuesta del informe de gestión.
 - **Viajes (giras)**: menú propio para las giras a otras provincias. Las
   rutas `viajes/...` viven en `server/viajes.js` (el router delega ahí) y la
   pantalla en `src/pages/Viajes.jsx`, con cuatro vistas: Jugadores (quiénes

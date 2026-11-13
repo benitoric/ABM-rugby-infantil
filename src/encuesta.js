@@ -10,6 +10,8 @@
 // comparan de un año al otro por su `clave`, que no cambia aunque se corrija
 // el texto: por eso las de siempre tienen claves fijas.
 
+import { analizarTextosLibres } from './encuestaTextos.js'
+
 // Tipos de respuesta. Las escalas cerradas tienen un lado "favorable" que se
 // usa para el porcentaje de cada pregunta; `negativa` lo da vuelta (en "me
 // molestaron", lo favorable es el "no").
@@ -489,6 +491,13 @@ export function analizarEncuesta(r, extra = {}) {
       'dice que nunca se siente seguro en el contacto y el tackle.',
       'dicen que nunca se sienten seguros en el contacto y el tackle.')
   }
+  // Lo escrito que pide leerse con atención (burlas, miedo, ganas de dejar)
+  const libres = analizarTextosLibres(r)
+  if (libres?.sensibles.length) {
+    const n = libres.sensibles.length
+    alertas.push(`${n === 1 ? '1 respuesta escrita habla' : `${n} respuestas escritas hablan`} de burlas, maltrato, miedo o ganas de dejar: ` +
+      `${n === 1 ? 'está' : 'están'} en el reporte para leer${n === 1 ? 'la' : 'las'} con atención.`)
+  }
   if (extra.pedidos) {
     alertas.push(`${plural(extra.pedidos, 'chico pidió', 'chicos pidieron')} que alguien del club hable con ${extra.pedidos === 1 ? 'él' : 'ellos'}` +
       `${extra.pedidos_pendientes ? `: ${extra.pedidos_pendientes} sin atender todavía` : ', y ya se atendieron'}.`)
@@ -519,7 +528,7 @@ export function analizarEncuesta(r, extra = {}) {
     })
   }
 
-  return { participacion, lectura, alertas, fortalezas, aMejorar, mejoras, caidas, sugerencias }
+  return { participacion, lectura, alertas, fortalezas, aMejorar, mejoras, caidas, sugerencias, libres }
 }
 
 // Cómo nombrar una pregunta en las listas del análisis. En las preguntas en

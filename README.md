@@ -110,7 +110,11 @@ pantalla de inicio" del teléfono y queda como una app más).
    encuesta cerrada se comparte un reporte en PDF con análisis: lectura
    general, alertas de cuidado, lo más fuerte y lo más flojo, cambios contra la
    encuesta anterior, cada pregunta con sus respuestas, lo que escribieron los
-   chicos y sugerencias para conversar en el staff.
+   chicos y sugerencias para conversar en el staff. Las respuestas libres se
+   procesan solas, dentro de la app: temas que se repiten (viajes, minutos de
+   juego, gritos, amigos…), si los nombran a favor o para cambiar, el tono de
+   los mensajes, el cruce con las preguntas cerradas y las frases que hay que
+   leer con atención (burlas, miedo, ganas de dejar).
 
 ## Arquitectura
 

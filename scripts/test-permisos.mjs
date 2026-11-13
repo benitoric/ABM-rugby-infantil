@@ -16,6 +16,7 @@ import {
   renombrarBloque, resumirEncuesta, validarRespuestas,
 } from '../src/encuesta.js'
 import { generarCuestionarioPDF, generarReporteEncuestaPDF } from '../src/encuestaPDF.js'
+import { analizarTextosLibres, normalizar, tonoDe } from '../src/encuestaTextos.js'
 import { textoAvisoRespuesta } from '../server/encuestas.js'
 
 process.env.PGLITE = process.env.PGLITE || '1'
@@ -669,6 +670,56 @@ async function main() {
   esperar('el reporte no lleva el nombre del chico que pidió hablar', !textoReporte.includes('Juan') && !textoReporte.includes('rez'), null)
   const cuestionario = generarCuestionarioPDF({ titulo: 'Fin de año', preguntas: r.datos.encuesta.preguntas, cierra })
   esperar('el cuestionario en PDF se arma', cuestionario.paginas >= 2, cuestionario.paginas)
+
+  // Las respuestas libres: temas, tono y tendencias (sin servicios de afuera)
+  {
+    const conTextos = {
+      ...r.datos.resultados,
+      preguntas: [...r.datos.resultados.preguntas.filter((q) => q.tipo !== 'abierta' && q.clave !== 'juego_suficiente'),
+        { clave: 'mas_gusto', tipo: 'abierta' }, { clave: 'cambiaria', tipo: 'abierta' }, { clave: 'mensaje', tipo: 'abierta' },
+        { clave: 'juego_suficiente', tipo: 'frecuencia', texto: 'En los partidos juego lo suficiente.', opciones: [], n: 5 }].map((q) => {
+        if (q.clave === 'juego_suficiente') return { ...q, favorable: 52 }
+        if (q.clave === 'mas_gusto') {
+          return { ...q, texto: 'Lo que más me gustó del año fue…', textos: ['El viaje a Salta con mis amigos', 'La gira a Mendoza!!!', 'los viajes', 'Jugar con mis compañeros',
+            'Cuando ganamos el torneo', 'Los partidos', 'nada', 'Los entrenamientos', 'Ir a Jujuy con el equipo', 'Que nos divertimos muchoooo'] }
+        }
+        if (q.clave === 'cambiaria') {
+          return { ...q, texto: 'Lo que cambiaría es…', textos: ['Nada', 'nada, está todo bien', 'Que todos jueguen lo mismo', 'jugar más minutos en los partidos',
+            'Que no griten tanto', 'no se', 'Que siempre juegan los mismos', 'Que no me dejen en el banco', 'que algunos se burlan de los mas chicos'] }
+        }
+        if (q.clave === 'mensaje') {
+          return { ...q, texto: 'Algo que les quiero decir a los entrenadores…', textos: ['Gracias por todo!!', 'Los quiero mucho, son los mejores', 'Que sigan así', 'gracias profes', 'que no griten', 'son unos capos'] }
+        }
+        return q
+      }),
+    }
+    const libres = analizarTextosLibres(conTextos)
+    const pq = Object.fromEntries(libres.preguntas.map((q) => [q.clave, q]))
+    esperar('"nada" y "no sé" no cuentan como contenido', pq.mas_gusto.vacias === 1 && pq.cambiaria.vacias === 1, pq.cambiaria)
+    esperar('"nada, está todo bien" es no cambiar nada', pq.cambiaria.nada_que_cambiar === 2, pq.cambiaria)
+    esperar('los viajes son lo que más valoran',
+      libres.valoran[0]?.id === 'viajes' || libres.valoran[0]?.id === 'agradecimiento', libres.valoran)
+    esperar('jugar más minutos es lo que más piden cambiar', libres.piden[0]?.id === 'minutos' && libres.piden[0].en_contra === 4, libres.piden)
+    esperar('"que no griten" es un pedido, no un elogio', tonoDe(normalizar('que no griten')) === 'negativo'
+      && tonoDe(normalizar('no me aburrí nunca')) === 'positivo' && tonoDe(normalizar('no me gustó')) === 'negativo', null)
+    esperar('los mensajes a los entrenadores salen con tono positivo', pq.mensaje.tonos.positivo >= 4,
+      pq.mensaje.tonos)
+    esperar('lo escrito se cruza con la pregunta cerrada floja',
+      libres.cruces.some((c) => c.startsWith('Jugar más minutos') && c.includes('52% favorable')), libres.cruces)
+    esperar('las burlas escritas salen para leer con atención',
+      libres.sensibles.length === 1 && libres.sensibles[0].includes('burlan'), libres.sensibles)
+    esperar('las tendencias salen redactadas', libres.tendencias.some((t) => t.startsWith('Lo que más piden cambiar')), libres.tendencias)
+    const a2 = analizarEncuesta(conTextos, { links: 6, respondieron: 5 })
+    esperar('el análisis avisa de las respuestas escritas sensibles',
+      a2.alertas.some((t) => t.startsWith('1 respuesta escrita habla de burlas')) && a2.libres?.escritas > 0, a2.alertas)
+    const rep2 = generarReporteEncuestaPDF({
+      encuesta: r.datos.encuesta, resultados: conTextos, links: 6, respondieron: 5, pedidos: 1, pedidosPendientes: 0, generadoPor: 'Prueba',
+    })
+    const texto2 = new TextDecoder('latin1').decode(rep2.bytes())
+    esperar('el reporte en PDF trae las tendencias de lo escrito',
+      texto2.includes('Lo que escribieron: tendencias') && texto2.includes('Para leer con atenci'), rep2.paginas)
+    esperar('con pocas respuestas no se analizan los textos', analizarTextosLibres({ suficientes: false }) === null, null)
+  }
 
   r = await pedir(`encuesta-publica/${tokens[chicos[5]]}`, { method: 'POST', body: { respuestas: respuesta(5) } })
   esperar('cerrada, el link que quedaba ya no sirve', r.codigo === 409 && r.datos.error === 'encuesta_cerrada', r)
