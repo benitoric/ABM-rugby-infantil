@@ -14,7 +14,7 @@ correr nada a mano.
    app del club.
 2. Arriba a la izquierda, en el selector de proyectos, tocá **New project**.
 3. Completá:
-   - **Project name**: `rugby-m12-demo`
+   - **Project name**: `rugby-demo`
    - **Postgres version**: la que venga por defecto
    - **Region**: la misma que la del club (por ejemplo *AWS São Paulo*), así
      responde rápido
@@ -23,7 +23,7 @@ correr nada a mano.
    **Connection string**. Es una línea que empieza con `postgresql://`.
    Dejá tildado *Pooled connection* si aparece la opción.
 
-> ⚠️ Fijate que estás copiando la del proyecto **rugby-m12-demo**, no la del
+> ⚠️ Fijate que estás copiando la del proyecto **rugby-demo**, no la del
 > club. Igual, si te equivocás, la app no siembra nada en una base que ya
 > tiene jugadores.
 
@@ -45,7 +45,7 @@ No hace falta crear tablas ni pegar nada en el SQL Editor.
 
    | Name           | Value                                                        |
    | -------------- | ------------------------------------------------------------ |
-   | `DATABASE_URL` | la Connection string de **rugby-m12-demo** (paso 1)           |
+   | `DATABASE_URL` | la Connection string de **rugby-demo** (paso 1, Neon)         |
    | `JWT_SECRET`   | un texto largo cualquiera, distinto del de la app del club (por ejemplo, 40 letras y números al azar) |
    | `DEMO`         | `1`                                                          |
 
