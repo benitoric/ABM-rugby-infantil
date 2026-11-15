@@ -2,19 +2,12 @@
 // Uso: PGLITE=1 node scripts/dev-server.mjs   (base en memoria)
 //      DATABASE_URL=... node scripts/dev-server.mjs (base real de Neon)
 //      PGLITE=1 DEMO=1 node scripts/dev-server.mjs (base en memoria con los
-//      datos ficticios de la demo; ver scripts/demo-datos.mjs)
+//      datos ficticios de la demo, que server/db.js siembra solo)
 import { createServer } from 'http'
 import { readFileSync, existsSync } from 'fs'
 import { join, extname, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { handle } from '../server/router.js'
-
-if (process.env.PGLITE === '1' && process.env.DEMO === '1') {
-  const { query } = await import('../server/db.js')
-  const { sembrarDemo, leerInvitados } = await import('./demo-datos.mjs')
-  const r = await sembrarDemo(query, { invitados: leerInvitados(process.env.DEMO_INVITADOS) })
-  console.log('Demo sembrada:', r)
-}
 
 const RAIZ = dirname(dirname(fileURLToPath(import.meta.url)))
 const DIST = join(RAIZ, 'dist')

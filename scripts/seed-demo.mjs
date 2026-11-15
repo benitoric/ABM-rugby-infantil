@@ -43,6 +43,9 @@ if (process.env.PGLITE !== '1') {
   await cliente.end()
 }
 
+// La siembra la hace este script: que la base no se siembre además sola al
+// conectarse (server/db.js, sembrarDemoSiVacia)
+process.env.DEMO_SIN_AUTOSIEMBRA = '1'
 const { query } = await import('../server/db.js')
 const [{ n }] = await query('select count(*)::int as n from jugadores')
 const [marca] = await query("select valor from ajustes where clave = 'base_demo'")

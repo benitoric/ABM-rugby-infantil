@@ -94,11 +94,16 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   franja "Versión de prueba · todos los datos son ficticios" (`src/demo.jsx`,
   `__DEMO__` en `vite.config.js`) y `/api/health` devuelve `demo: true`. Los
   datos los arma `scripts/demo-datos.mjs` (temporada entera inventada, con
-  fechas relativas a hoy y azar con semilla fija) y se cargan con `npm run
-  seed:demo`, que borra la demo anterior y la vuelve a armar conservando las
-  cuentas reales y sus contraseñas. Nunca toca la base del club: exige
-  `DEMO=1` y, si la base ya tiene jugadores, la marca `base_demo` en
-  `ajustes`. El staff inventado usa el dominio `demo.invalid` y una
+  fechas relativas a hoy y azar con semilla fija). La base se llena sola:
+  con `DEMO=1`, `server/db.js` crea las tablas con `db/schema.sql` si la base
+  está vacía y, la primera vez que arranca sin jugadores ni la marca
+  `base_demo` en `ajustes`, siembra los datos (`sembrarDemoSiVacia`, con lock
+  consultivo; `vercel.json` incluye `db/schema.sql` y el script en la
+  función). Después queda la marca y no se resiembra sola. `npm run
+  seed:demo` la borra y la vuelve a armar a mano conservando las cuentas
+  reales y sus contraseñas. Nunca toca la base del club: todo exige `DEMO=1`,
+  y el script, si la base ya tiene jugadores, la marca `base_demo`.
+  `test:permisos` se corre sin `DEMO` (con la demo sembrada no da). El staff inventado usa el dominio `demo.invalid` y una
   contraseña al azar, así nadie puede reclamar esas cuentas. Los invitados
   entran con su propio email (se los suma desde Staff o con
   `DEMO_INVITADOS="email:Rol, ..."` al sembrar) y crean su contraseña en el
