@@ -895,6 +895,38 @@ async function main() {
   r = await pedir('jugadores', { token: M })
   esperar('el manager sigue sin ver jugadores (ni la asistencia por zona)', r.codigo === 403, r)
 
+  // ---------- versión de prueba: actividad de los invitados ----------
+  console.log('Actividad de la demo:')
+  r = await pedir('demo/actividad', { token: T })
+  esperar('sin DEMO, demo/actividad no existe', r.codigo === 404, r)
+  r = await pedir('demo/actividad', { method: 'POST', token: M, body: { seccion: 'padron' } })
+  esperar('sin DEMO, el manager tampoco la ve (404, no 403)', r.codigo === 404, r)
+  process.env.DEMO = '1'
+  try {
+    r = await pedir('demo/actividad', { method: 'POST', token: M, body: { seccion: 'padron' } })
+    esperar('el manager avisa qué sección abrió', r.codigo === 200, r)
+    r = await pedir('demo/actividad', { method: 'POST', token: M, body: { seccion: 'cualquiera' } })
+    esperar('una sección desconocida se rechaza', r.codigo === 400, r)
+    r = await pedir('me', { token: E })
+    r = await pedir('seguimientos', { method: 'POST', token: E, body: { jugador_id: jugador.id, fecha: '2026-03-12', area: 'tecnica', comentario: 'Texto privado' } })
+    esperar('el entrenador carga una nota', r.codigo === 200, r)
+    r = await pedir('demo/actividad', { token: M })
+    esperar('el manager no ve la actividad', r.codigo === 403, r)
+    r = await pedir('demo/actividad', { token: E })
+    esperar('el entrenador no ve la actividad', r.codigo === 403 && r.datos.error === 'solo_duenio', r)
+    r = await pedir('demo/actividad', { token: T })
+    esperar('el dueño ve la actividad', r.codigo === 200, r)
+    const deM = r.datos.invitados?.find((i) => i.email === MANAGER)
+    const deE = r.datos.invitados?.find((i) => i.email === ENTRENADOR)
+    esperar('cuenta la sección que abrió el manager', deM?.secciones.some((x) => x.clave === 'padron'), deM)
+    esperar('cuenta la visita y la nota del entrenador, sin el contenido',
+      deE?.visitas >= 1 && deE.acciones.some((a) => a.texto === 'Cargó una nota de seguimiento')
+        && !JSON.stringify(deE).includes('Texto privado'), deE)
+    esperar('al dueño no se lo anota', !r.datos.invitados.some((i) => i.email === DUENIO), r.datos)
+  } finally {
+    delete process.env.DEMO
+  }
+
   servidor.close()
   console.log(`\n${pruebas - fallas}/${pruebas} pruebas pasaron`)
   if (fallas) {

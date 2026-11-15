@@ -59,6 +59,8 @@ export function perfil(yo) {
     rol: yo.rol,
     admin: puedeAdministrar(yo),
     alcance: alcance(yo),
+    // Para lo que ve solo el dueño (la actividad de los invitados de la demo)
+    duenio: yo.email === EMAIL_DUENIO,
   }
 }
 
@@ -91,6 +93,10 @@ export function rutaAdministrativa(metodo, p) {
     // Avisos en el propio celular
     case 'push':
       return true
+    // Versión de prueba: avisar qué sección abrió (la lectura de la
+    // actividad es solo del dueño, server/actividad-demo.js)
+    case 'demo':
+      return metodo === 'POST' && sub === 'actividad'
     // La lista del staff solo para leerla (para elegir quién viaja)
     case 'staff':
       return metodo === 'GET' && !sub

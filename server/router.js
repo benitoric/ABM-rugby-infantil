@@ -1,3 +1,4 @@
+import { anotar, anotarEscritura } from './actividad-demo.js'
 import { query } from './db.js'
 import { sqlLesionadoEnFecha, sqlEnPlantel } from './asistencia-sql.js'
 import { autenticar, crearToken, hashClave, compararClave } from './auth.js'
@@ -809,6 +810,8 @@ export async function handle(req, res) {
       } catch (e) {
         console.error('No se pudieron invalidar los boletines guardados', e)
       }
+      // Versión de prueba: qué hizo cada invitado (sin el contenido)
+      if (req._email && process.env.DEMO === '1') await anotarEscritura(req._email, req.method, partes)
     }
     json(res, resultado?._codigo || 200, resultado ?? { ok: true })
   } catch (e) {
@@ -880,6 +883,7 @@ async function enrutar(metodo, p, b, req, url) {
       if (!fila.password_hash) throw { codigo: 409, error: 'necesita_clave' }
       if (!(await compararClave(clave, fila.password_hash)))
         throw { codigo: 401, error: 'clave_incorrecta' }
+      await anotar(email, 'ingreso', 'Ingresó con su contraseña')
       return { token: await crearToken(email), staff: perfil(fila) }
     }
 
@@ -889,6 +893,7 @@ async function enrutar(metodo, p, b, req, url) {
         'update staff set password_hash = $1 where email = $2 and password_hash is null returning email',
         [await hashClave(clave), email])
       if (!act.length) throw { codigo: 409, error: 'ya_tiene_clave' }
+      await anotar(email, 'ingreso', 'Primer ingreso: creó su contraseña')
       return { token: await crearToken(email), staff: perfil(fila) }
     }
     throw { codigo: 404, error: 'no_existe' }
@@ -950,6 +955,8 @@ async function enrutar(metodo, p, b, req, url) {
 
   // ---------- todo lo demás requiere staff activo ----------
   const yo = await autenticar(req)
+  // Para anotar la actividad de los invitados de la demo (handle)
+  req._email = yo.email
 
   // Los managers (alcance administrativo) solo pasan por la lista blanca de
   // server/permisos.js: viajes, padrón, documentos, avisos y la lista del
@@ -960,7 +967,17 @@ async function enrutar(metodo, p, b, req, url) {
     throw { codigo: 403, error: 'solo_entrenadores' }
   }
 
-  if (p[0] === 'me') return perfil(yo)
+  if (p[0] === 'me') {
+    await anotar(yo.email, 'visita', 'Abrió la app')
+    return perfil(yo)
+  }
+
+  // ---------- versión de prueba: actividad de los invitados ----------
+  // Solo con DEMO=1 (server/actividad-demo.js): el resto recibe 404
+  if (p[0] === 'demo') {
+    const { enrutarDemo } = await import('./actividad-demo.js')
+    return enrutarDemo({ metodo, p, b, yo })
+  }
 
   // ---------- encuesta anónima: administración ----------
   // Crear, editar las preguntas, mandar los links, seguir quién contestó y

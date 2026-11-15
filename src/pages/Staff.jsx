@@ -5,6 +5,8 @@ import { irA, leerHash, suscribir } from '../navegacion.js'
 import Avisos from './Avisos.jsx'
 import Informe from './Informe.jsx'
 import Encuestas from './Encuestas.jsx'
+import ActividadDemo from './ActividadDemo.jsx'
+import { ES_DEMO } from '../demo.jsx'
 
 // La subvista vive en el hash (#/staff/informe, #/staff/encuestas/<id>/<vista>),
 // como en el resto de la app
@@ -119,6 +121,10 @@ export default function Staff({ yo }) {
   if (sub === 'informe' && yo.admin) {
     return <Informe yo={yo} onVolver={() => irA('staff')} />
   }
+  // Versión de prueba: qué hicieron los invitados. Solo el dueño
+  if (sub === 'actividad' && ES_DEMO && yo.duenio) {
+    return <ActividadDemo onVolver={() => irA('staff')} />
+  }
   if (sub === 'encuestas' && yo.admin) {
     return <Encuestas yo={yo} id={subId} vista={subVista} onVolver={() => irA('staff')} />
   }
@@ -126,6 +132,21 @@ export default function Staff({ yo }) {
   return (
     <div className="contenido">
       <Avisos />
+
+      {ES_DEMO && yo.duenio && (
+        <div className="tarjeta">
+          <div className="fila entre">
+            <div className="crece">
+              <div style={{ fontWeight: 600 }}>👀 Actividad de los invitados</div>
+              <div className="mini">
+                Quién entró a la versión de prueba, cuándo, qué secciones abrió y qué cargó.
+                Solo la ves vos.
+              </div>
+            </div>
+            <button className="btn sec chico" onClick={() => irA('staff', 'actividad')}>Abrir</button>
+          </div>
+        </div>
+      )}
 
       {yo.admin && (
         <div className="tarjeta">
