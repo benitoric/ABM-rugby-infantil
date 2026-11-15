@@ -10,6 +10,7 @@ import { base64ABlob } from '../archivos.js'
 import { irA, leerHash, reponer, suscribir } from '../navegacion.js'
 import { ultimosMeses } from '../boletin.js'
 import { exportarEvaluaciones } from '../exportarEvaluaciones.js'
+import Plegable from '../Plegable.jsx'
 import { AvisosPerdidos } from './Avisos.jsx'
 import Boletin from './Boletin.jsx'
 import Ficha from './Ficha.jsx'
@@ -111,9 +112,12 @@ function ProcesoEvaluacion({ p }) {
   const diasProceso = Math.max(1, Math.ceil(
     (new Date(p.cerrado_en || Date.now()) - new Date(p.lanzado_en)) / 86400000))
   return (
-    <div className={`tarjeta proceso-eval ${p.cerrado_en ? 'cerrado' : ''}`}>
-      <h3>{p.cerrado_en ? '🏁 Evaluación completa' : '📋 Proceso de evaluación'}</h3>
-      <p className="mini" style={{ margin: '4px 0 8px' }}>
+    <Plegable
+      id="proceso"
+      clase={`proceso-eval ${p.cerrado_en ? 'cerrado' : ''}`}
+      titulo={p.cerrado_en ? '🏁 Evaluación completa' : `📋 Proceso de evaluación · ${pct}%`}
+    >
+      <p className="mini" style={{ margin: '0 0 8px' }}>
         {p.cerrado_en
           ? `Terminó el ${fechaCorta(p.cerrado_en.slice(0, 10))}, ${diasProceso === 1 ? 'al día' : `a los ${diasProceso} días`} de lanzado.`
           : `Lanzado el ${fechaCorta(p.lanzado_en.slice(0, 10))} por ${p.lanzado_por} · ${p.total} ${p.total === 1 ? 'jugador' : 'jugadores'}.`}
@@ -144,7 +148,7 @@ function ProcesoEvaluacion({ p }) {
           </div>
         )
       })}
-    </div>
+    </Plegable>
   )
 }
 
@@ -405,13 +409,14 @@ export default function Jugadores({ yo }) {
       <AvisosPerdidos />
 
       {faltadores.length > 0 && (
-        <div className="tarjeta aviso-faltas">
-          <h3>
-            ⚠️ {faltadores.length === 1
-              ? 'Un jugador viene faltando a los entrenamientos'
-              : `${faltadores.length} jugadores vienen faltando a los entrenamientos`}
-          </h3>
-          <p className="mini" style={{ margin: '4px 0 8px' }}>
+        <Plegable
+          id="faltas"
+          clase="aviso-faltas"
+          titulo={`⚠️ ${faltadores.length === 1
+            ? 'Un jugador viene faltando a los entrenamientos'
+            : `${faltadores.length} jugadores vienen faltando a los entrenamientos`}`}
+        >
+          <p className="mini" style={{ margin: '0 0 8px' }}>
             Activos que faltaron a 3 o más entrenamientos seguidos. Se cuentan
             los entrenamientos con asistencia tomada, sin los suspendidos. Tocá
             el nombre para abrir su ficha.
@@ -428,13 +433,12 @@ export default function Jugadores({ yo }) {
               </span>
             </button>
           ))}
-        </div>
+        </Plegable>
       )}
 
       {lesionesPendientes.length > 0 && (
-        <div className="tarjeta aviso-lesion">
-          <h3>{tituloPendientes(lesionesPendientes)}</h3>
-          <p className="mini" style={{ margin: '4px 0 8px' }}>
+        <Plegable id="lesiones-pendientes" clase="aviso-lesion" titulo={tituloPendientes(lesionesPendientes)}>
+          <p className="mini" style={{ margin: '0 0 8px' }}>
             Tocá cada nombre para abrir su ficha: al 🚑 lesionado hay que
             cargarle la lesión para hacerle el seguimiento, y del 🤕 golpeado
             conviene ver cómo sigue (si quedó tocado, se le carga la lesión
@@ -462,12 +466,11 @@ export default function Jugadores({ yo }) {
               </button>
             </div>
           ))}
-        </div>
+        </Plegable>
       )}
 
       {lesionados.length > 0 && (
-        <div className="tarjeta seguimiento-lesiones">
-          <h3>🤕 En recuperación ({lesionados.length})</h3>
+        <Plegable id="recuperacion" clase="seguimiento-lesiones" titulo={`🤕 En recuperación (${lesionados.length})`}>
           {lesionados.map((l) => {
             const alta = estadoAlta(l)
             return (
@@ -487,13 +490,16 @@ export default function Jugadores({ yo }) {
               </button>
             )
           })}
-        </div>
+        </Plegable>
       )}
 
       {asign?.mias?.length > 0 && (
-        <div className="tarjeta aviso-evaluar">
-          <h3>📋 Te toca evaluar a {asign.mias.length} {asign.mias.length === 1 ? 'jugador' : 'jugadores'}</h3>
-          <p className="mini" style={{ margin: '4px 0 8px' }}>
+        <Plegable
+          id="evaluar"
+          clase="aviso-evaluar"
+          titulo={`📋 Te toca evaluar a ${asign.mias.length} ${asign.mias.length === 1 ? 'jugador' : 'jugadores'}`}
+        >
+          <p className="mini" style={{ margin: '0 0 8px' }}>
             Tocá cada nombre para cargar su evaluación. Después tu pareja la revisa.
           </p>
           {asign.mias.map((a) => (
@@ -504,13 +510,16 @@ export default function Jugadores({ yo }) {
               </span>
             </button>
           ))}
-        </div>
+        </Plegable>
       )}
 
       {asign?.revisar?.length > 0 && (
-        <div className="tarjeta aviso-revisar">
-          <h3>🙈 Te toca revisar {asign.revisar.length} {asign.revisar.length === 1 ? 'evaluación' : 'evaluaciones'}</h3>
-          <p className="mini" style={{ margin: '4px 0 8px' }}>
+        <Plegable
+          id="revisar"
+          clase="aviso-revisar"
+          titulo={`🙈 Te toca revisar ${asign.revisar.length} ${asign.revisar.length === 1 ? 'evaluación' : 'evaluaciones'}`}
+        >
+          <p className="mini" style={{ margin: '0 0 8px' }}>
             Cargás tu propia mirada sin ver la del primer evaluador. Recién al
             guardar aparecen las dos juntas y se marcan las diferencias.
           </p>
@@ -522,17 +531,21 @@ export default function Jugadores({ yo }) {
               </span>
             </button>
           ))}
-        </div>
+        </Plegable>
       )}
 
       {yo?.admin && asign?.proceso && <ProcesoEvaluacion p={asign.proceso} />}
 
       {(asign?.sin_repartir > 0 || asign?.por_evaluador?.length > 0) && (
-        <div className="tarjeta">
-          <h3>Reparto de evaluaciones</h3>
+        <Plegable
+          id="reparto"
+          titulo={`🎲 Reparto de evaluaciones · ${asign.sin_repartir > 0
+            ? `${asign.sin_repartir} sin repartir`
+            : 'todo repartido'}`}
+        >
           {asign.sin_repartir > 0 ? (
             <>
-              <p className="mini" style={{ margin: '4px 0 8px' }}>
+              <p className="mini" style={{ margin: '0 0 8px' }}>
                 {asign.sin_repartir} {asign.sin_repartir === 1 ? 'jugador necesita' : 'jugadores necesitan'} evaluación
                 (sin evaluar o con la última de hace más de 30 días).
               </p>
@@ -541,7 +554,7 @@ export default function Jugadores({ yo }) {
               </button>
             </>
           ) : (
-            <p className="mini" style={{ marginTop: 4 }}>
+            <p className="mini">
               Todos los jugadores están evaluados o ya repartidos. 🙌
             </p>
           )}
@@ -561,12 +574,14 @@ export default function Jugadores({ yo }) {
               </button>
             </>
           )}
-        </div>
+        </Plegable>
       )}
 
       {cumples.length > 0 && (
-        <div className="tarjeta">
-          <h3>🎂 Cumpleaños de los próximos {DIAS_CUMPLE} días</h3>
+        <Plegable
+          id="cumples"
+          titulo={`🎂 Cumpleaños de los próximos ${DIAS_CUMPLE} días (${cumples.length})`}
+        >
           {cumples.map((c) => (
             <div key={c.jugador.id} className="fila entre cumple-item">
               <span className={c.faltan === 0 ? 'cumple-hoy' : ''}>
@@ -577,7 +592,7 @@ export default function Jugadores({ yo }) {
               </span>
             </div>
           ))}
-        </div>
+        </Plegable>
       )}
 
       <input

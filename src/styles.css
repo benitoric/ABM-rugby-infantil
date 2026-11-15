@@ -1740,3 +1740,27 @@ details.tarjeta summary {
 .enc-buscar { width: 100%; border: 1px solid var(--borde); border-radius: 8px; padding: 8px; margin-bottom: 6px; }
 .enc-inactivos { max-height: 320px; overflow-y: auto; }
 .opcion-seccion.deshabilitada { opacity: 0.6; }
+
+/* ---------- tarjetas plegables de la pantalla de inicio ---------- */
+/* Replegadas muestran solo el título (que ya dice cuántos); el cuerpo baja
+   de un toque. El marcador nativo se saca para dibujar la flecha propia. */
+.plegable > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  color: inherit;
+}
+.plegable > summary::-webkit-details-marker { display: none; }
+.plegable > summary h3 { display: inline; font-size: 1rem; }
+.plegable-flecha {
+  flex: none;
+  color: var(--texto-suave);
+  font-size: 0.9rem;
+  transition: transform 0.15s;
+}
+.plegable[open] > summary .plegable-flecha { transform: rotate(90deg); }
+.plegable-cuerpo { margin-top: 10px; }
