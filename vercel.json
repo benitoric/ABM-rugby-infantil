@@ -1,19 +1,43 @@
 {
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "{db/schema.sql,scripts/demo-datos.mjs}"
+    }
+  },
   "rewrites": [
-    { "source": "/api/:ruta*", "destination": "/api/index?ruta=:ruta*" }
+    {
+      "source": "/api/:ruta*",
+      "destination": "/api/index?ruta=:ruta*"
+    }
   ],
   "crons": [
-    { "path": "/api/index?ruta=cron/cumpleanos", "schedule": "0 12 * * *" },
-    { "path": "/api/index?ruta=cron/boletines", "schedule": "0 13 1 * *" }
+    {
+      "path": "/api/index?ruta=cron/cumpleanos",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/index?ruta=cron/boletines",
+      "schedule": "0 13 1 * *"
+    }
   ],
   "headers": [
     {
       "source": "/",
-      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
     },
     {
       "source": "/index.html",
-      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
     }
   ]
 }

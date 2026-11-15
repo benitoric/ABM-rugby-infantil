@@ -17,7 +17,9 @@ async function inicializar() {
     const { dirname, join } = await import('path')
     const raiz = dirname(dirname(fileURLToPath(import.meta.url)))
     await db.exec(readFileSync(join(raiz, 'db', 'schema.sql'), 'utf8'))
-    return (texto, params) => db.query(texto, params)
+    const consulta = (texto, params) => db.query(texto, params)
+    await sembrarDemoSiVacia(consulta)
+    return consulta
   }
 
   const { default: pg } = await import('pg')
@@ -41,6 +43,23 @@ async function inicializar() {
   // tabla que todavía no existe falla entera aunque el AND se cortara antes.
   // Con una sola consulta, la app quedaba caída hasta que alguien creara la
   // tabla a mano, que es justo lo que la migración tenía que hacer.
+  // Versión de prueba: una base de Neon recién creada no tiene ni las tablas.
+  // Se crean con el esquema, así nadie tiene que pegarlo en el SQL Editor.
+  if (process.env.DEMO === '1') {
+    const { rows: [t] } = await pool.query("select to_regclass('public.staff') as t")
+    if (!t.t) {
+      const { readFileSync } = await import('fs')
+      const { fileURLToPath } = await import('url')
+      const { dirname, join } = await import('path')
+      const raiz = dirname(dirname(fileURLToPath(import.meta.url)))
+      await pool.query('select pg_advisory_lock(420013)')
+      try {
+        await pool.query(readFileSync(join(raiz, 'db', 'schema.sql'), 'utf8'))
+      } finally {
+        await pool.query('select pg_advisory_unlock(420013)')
+      }
+    }
+  }
   if (!await migracionesAplicadas(pool)) {
     await pool.query('select pg_advisory_lock(420012)')
     try {
@@ -49,7 +68,36 @@ async function inicializar() {
       await pool.query('select pg_advisory_unlock(420012)')
     }
   }
-  return (texto, params) => pool.query(texto, params)
+  const consulta = (texto, params) => pool.query(texto, params)
+  await sembrarDemoSiVacia(consulta)
+  return consulta
+}
+
+// Versión de prueba (DEMO=1): la primera vez que arranca con la base vacía la
+// llena sola con los datos ficticios (scripts/demo-datos.mjs). Solo con DEMO=1
+// y solo si no hay ningún jugador ni la marca `base_demo`: la base del club
+// nunca cumple eso. Una vez sembrada queda la marca, así que aunque los
+// invitados borren todo no se vuelve a sembrar sola (para eso está
+// `npm run seed:demo`). El lock evita que dos arranques en frío siembren a la
+// vez.
+async function sembrarDemoSiVacia(consulta) {
+  if (process.env.DEMO !== '1' || process.env.DEMO_SIN_AUTOSIEMBRA === '1') return
+  const filas = async (texto, params = []) => (await consulta(texto, params)).rows
+  const vacia = async () => {
+    const [{ n }] = await filas('select count(*)::int as n from jugadores')
+    const [marca] = await filas("select 1 from ajustes where clave = 'base_demo'")
+    return n === 0 && !marca
+  }
+  if (!await vacia()) return
+  await filas('select pg_advisory_lock(420014)')
+  try {
+    if (!await vacia()) return
+    const { sembrarDemo, leerInvitados } = await import('../scripts/demo-datos.mjs')
+    const r = await sembrarDemo(filas, { invitados: leerInvitados(process.env.DEMO_INVITADOS) })
+    console.log('Demo sembrada sola en el primer arranque:', r)
+  } finally {
+    await filas('select pg_advisory_unlock(420014)')
+  }
 }
 
 // ¿Está aplicada la última migración? Primero se comprueba que exista la tabla
