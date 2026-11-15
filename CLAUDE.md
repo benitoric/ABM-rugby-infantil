@@ -88,6 +88,24 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   requeridas: `DATABASE_URL` (Neon) y `JWT_SECRET`; opcional `CRON_SECRET`,
   que exige que la tarea diaria venga de Vercel.
 - Diagnóstico de despliegue: `GET /api/health`.
+- **Versión de prueba (demo)**: un segundo proyecto de Vercel sobre el mismo
+  repo y la misma rama `main` (se actualiza solo con cada push), con su propia
+  base de Neon y la variable `DEMO=1`. Con esa variable el build muestra la
+  franja "Versión de prueba · todos los datos son ficticios" (`src/demo.jsx`,
+  `__DEMO__` en `vite.config.js`) y `/api/health` devuelve `demo: true`. Los
+  datos los arma `scripts/demo-datos.mjs` (temporada entera inventada, con
+  fechas relativas a hoy y azar con semilla fija) y se cargan con `npm run
+  seed:demo`, que borra la demo anterior y la vuelve a armar conservando las
+  cuentas reales y sus contraseñas. Nunca toca la base del club: exige
+  `DEMO=1` y, si la base ya tiene jugadores, la marca `base_demo` en
+  `ajustes`. El staff inventado usa el dominio `demo.invalid` y una
+  contraseña al azar, así nadie puede reclamar esas cuentas. Los invitados
+  entran con su propio email (se los suma desde Staff o con
+  `DEMO_INVITADOS="email:Rol, ..."` al sembrar) y crean su contraseña en el
+  primer ingreso. **Al sumar una función nueva, sumarle datos de ejemplo en
+  `scripts/demo-datos.mjs`** para que la demo la muestre con contenido.
+  Localmente: `npm run dev:demo` (base en memoria con los datos de la demo).
+  Pasos de puesta en marcha en `DEMO.md`.
 - **Asistencia**: los dos criterios que deciden si un evento le cuenta a un
   jugador viven en `server/asistencia-sql.js` y los usan tanto el router como
   el boletín (cuando estaban duplicados se fueron separando). Un evento entra

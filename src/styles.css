@@ -1764,3 +1764,14 @@ details.tarjeta summary {
 }
 .plegable[open] > summary .plegable-flecha { transform: rotate(90deg); }
 .plegable-cuerpo { margin-top: 10px; }
+
+/* Versión de prueba: franja fija arriba de todo (src/demo.jsx) */
+.franja-demo {
+  padding: 6px 16px;
+  background: #b4232a;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.02em;
+}

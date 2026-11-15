@@ -12,6 +12,7 @@ import PartidosManagers from './pages/PartidosManagers.jsx'
 import Avisos from './pages/Avisos.jsx'
 import { VERSION } from './version.js'
 import { useVersionNueva } from './actualizacion.js'
+import FranjaDemo from './demo.jsx'
 
 // Pestañas de quienes ven todo (entrenadores, PF, cabeza de división)
 const TABS_COMPLETO = [
@@ -86,10 +87,11 @@ export default function App() {
   )
 
   if (staff === undefined) return <div className="vacio">Cargando…</div>
-  if (!staff) return <>{avisoVersion}<Login onIngreso={setStaff} /></>
+  if (!staff) return <><FranjaDemo />{avisoVersion}<Login onIngreso={setStaff} /></>
 
   return (
     <div className="app">
+      <FranjaDemo />
       {avisoVersion}
       <header className="header no-imprimir">
         <div>
