@@ -24,7 +24,8 @@ import { EMAIL_DUENIO, ROLES } from '../server/permisos.js'
 
 // El staff inventado usa este dominio, que no existe: así nadie puede recibir
 // nada ni reclamar esas cuentas, y la siembra sabe cuáles borrar al repetirse
-export const DOMINIO_DEMO = 'demo.invalid'
+import { DOMINIO_DEMO } from '../server/demo-dominio.js'
+export { DOMINIO_DEMO }
 
 // ---------------------------------------------------------------------------
 // Azar con semilla (mulberry32)

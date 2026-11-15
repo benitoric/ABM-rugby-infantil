@@ -12,7 +12,8 @@ import PartidosManagers from './pages/PartidosManagers.jsx'
 import Avisos from './pages/Avisos.jsx'
 import { VERSION } from './version.js'
 import { useVersionNueva } from './actualizacion.js'
-import FranjaDemo from './demo.jsx'
+import FranjaDemo, { ES_DEMO } from './demo.jsx'
+import { seccionDeHash } from './actividadDemo.js'
 
 // Pestañas de quienes ven todo (entrenadores, PF, cabeza de división)
 const TABS_COMPLETO = [
@@ -62,6 +63,21 @@ export default function App() {
     if (staff === undefined) return
     setTab(tabDeHash(TABS))
     return suscribir(() => setTab(tabDeHash(TABS)))
+  }, [staff])
+
+  // Versión de prueba: avisa qué sección se abre, para la actividad de los
+  // invitados (server/actividad-demo.js). Nunca frena ni rompe nada.
+  useEffect(() => {
+    if (!ES_DEMO || !staff) return
+    let ultima = null
+    const avisar = () => {
+      const seccion = seccionDeHash(leerHash())
+      if (!seccion || seccion === ultima) return
+      ultima = seccion
+      api('demo/actividad', { method: 'POST', body: { seccion } }).catch(() => {})
+    }
+    avisar()
+    return suscribir(avisar)
   }, [staff])
 
   useEffect(() => {

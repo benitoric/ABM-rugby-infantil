@@ -1,11 +1,17 @@
 import { SECCIONES, SECCION_DEMO } from '../instructivo.js'
 import { ES_DEMO } from '../demo.jsx'
 import { VERSION } from '../version.js'
+import { useEffect } from 'react'
+import { api, getToken } from '../api.js'
 
 // El instructivo de uso (#/instructivo), en una pestaña aparte. No pide
 // sesión ni toca la posición guardada de la app (src/main.jsx). El contenido
 // vive en src/instructivo.js y sale con cada deploy.
 export default function Instructivo() {
+  // Versión de prueba: cuenta como sección abierta para quien tiene sesión
+  useEffect(() => {
+    if (ES_DEMO && getToken()) api('demo/actividad', { method: 'POST', body: { seccion: 'instructivo' } }).catch(() => {})
+  }, [])
   const secciones = ES_DEMO ? [SECCION_DEMO, ...SECCIONES] : SECCIONES
   // El índice no usa anclas (#id): el hash es la navegación de la app
   const ir = (id) => document.getElementById(`instr-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })

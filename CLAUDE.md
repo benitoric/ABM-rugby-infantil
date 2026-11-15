@@ -120,6 +120,19 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   sin tocar la posición guardada, como la encuesta pública). El contenido
   vive en `src/instructivo.js` (secciones por menú, más una de la demo que
   sale solo con `DEMO=1`), sale con cada deploy y muestra la versión.
+  **Actividad de los invitados** (`server/actividad-demo.js`,
+  `src/actividadDemo.js`, `src/pages/ActividadDemo.jsx`, hash
+  `#/staff/actividad`): solo con `DEMO=1` se anotan en `demo_actividad` (la
+  tabla se crea sola y solo en la demo) los ingresos (`auth/login` y
+  `setup`), las visitas (`me`; reabrir antes de 20 minutos es la misma), las
+  secciones que se abren (`POST demo/actividad` desde `App.jsx` y el
+  instructivo; abierta a los managers en la lista blanca) y cada escritura
+  que sale bien (`handle`, descripta por `describirAccion`). **Nunca el
+  contenido**: solo qué sección o qué tipo de acción. No se anota al dueño ni
+  al staff inventado. `GET demo/actividad` es solo del dueño (403
+  `solo_duenio`; `perfil` trae `duenio`), y sin `DEMO` todo `demo/*` da 404.
+  Por decisión del dueño no se menciona en el instructivo. Una ruta de
+  escritura nueva conviene sumarla a `describirAccion`.
 - **Asistencia**: los dos criterios que deciden si un evento le cuenta a un
   jugador viven en `server/asistencia-sql.js` y los usan tanto el router como
   el boletín (cuando estaban duplicados se fueron separando). Un evento entra
