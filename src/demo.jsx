@@ -8,7 +8,9 @@ export default function FranjaDemo() {
   if (!ES_DEMO) return null
   return (
     <div className="franja-demo no-imprimir">
-      Versión de prueba · todos los datos son ficticios
+      <span>Versión de prueba · todos los datos son ficticios</span>
+      {/* En otra pestaña, para leerlo al lado de la app (src/pages/Instructivo.jsx) */}
+      <a className="franja-demo-boton" href="#/instructivo" target="_blank" rel="noopener">📖 Instructivo</a>
     </div>
   )
 }

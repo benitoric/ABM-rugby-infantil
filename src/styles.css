@@ -1774,4 +1774,37 @@ details.tarjeta summary {
   font-weight: 700;
   text-align: center;
   letter-spacing: 0.02em;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 12px;
 }
+.franja-demo-boton {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #fff;
+  color: #b4232a;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* Instructivo de uso (src/pages/Instructivo.jsx) */
+.instructivo { max-width: 760px; margin: 0 auto; padding: 16px 16px 48px; }
+.instr-cabeza { margin: 8px 0 16px; }
+.instr-cabeza h1 { font-size: 1.35rem; color: var(--primario); margin-bottom: 4px; }
+.instructivo .tarjeta { margin-bottom: 14px; }
+.instr-indice-titulo { font-weight: 700; margin-bottom: 6px; }
+.instr-indice ol { padding-left: 22px; display: grid; gap: 4px; }
+.instr-indice button, .instr-arriba {
+  background: none; border: none; padding: 2px 0; font: inherit;
+  color: var(--primario); text-align: left; cursor: pointer;
+}
+.instr-seccion { scroll-margin-top: 12px; }
+.instr-seccion h2 { font-size: 1.1rem; margin-bottom: 8px; }
+.instr-intro { color: var(--texto-suave); margin-bottom: 8px; }
+.instr-item { margin-bottom: 10px; }
+.instr-item-t { font-weight: 700; }
+.instr-item p, .instr-pasos li { line-height: 1.45; font-size: 0.95rem; }
+.instr-pasos { padding-left: 22px; margin-bottom: 10px; display: grid; gap: 6px; }
+.instr-arriba { font-size: 0.85rem; margin-top: 4px; }

@@ -8,6 +8,10 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   cambios están pusheados y verificados, marcar el PR como listo (ready for
   review) y mergearlo directamente. No pedirle al usuario que lo haga él.
 - Comunicarse en español (Argentina).
+- **Instructivo al día**: todo cambio que sume, saque o mueva algo que el
+  usuario ve (pantalla, solapa, botón, permiso) actualiza en el mismo PR la
+  sección que corresponde de `src/instructivo.js`. Es lo que leen los
+  invitados de la demo y tiene que describir la versión que está andando.
 
 ## Arquitectura
 
@@ -110,7 +114,12 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   primer ingreso. **Al sumar una función nueva, sumarle datos de ejemplo en
   `scripts/demo-datos.mjs`** para que la demo la muestre con contenido.
   Localmente: `npm run dev:demo` (base en memoria con los datos de la demo).
-  Pasos de puesta en marcha en `DEMO.md`.
+  Pasos de puesta en marcha en `DEMO.md`. La franja tiene el botón
+  "📖 Instructivo", que abre en otra pestaña `#/instructivo`
+  (`src/pages/Instructivo.jsx`; `src/main.jsx` lo muestra solo, sin login y
+  sin tocar la posición guardada, como la encuesta pública). El contenido
+  vive en `src/instructivo.js` (secciones por menú, más una de la demo que
+  sale solo con `DEMO=1`), sale con cada deploy y muestra la versión.
 - **Asistencia**: los dos criterios que deciden si un evento le cuenta a un
   jugador viven en `server/asistencia-sql.js` y los usan tanto el router como
   el boletín (cuando estaban duplicados se fueron separando). Un evento entra
