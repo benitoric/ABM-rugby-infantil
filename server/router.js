@@ -826,6 +826,8 @@ async function enrutar(metodo, p, b, req, url) {
     const r = {
       database_url_configurada: !!(process.env.DATABASE_URL || '').trim(),
       jwt_secret_configurado: !!(process.env.JWT_SECRET || '').trim(),
+      // Versión de prueba con datos ficticios (scripts/seed-demo.mjs)
+      demo: process.env.DEMO === '1',
     }
     try {
       await query('select 1')

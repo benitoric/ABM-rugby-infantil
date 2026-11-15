@@ -9,6 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "db:init": "node scripts/init-db.mjs",
+    "dev:demo": "PGLITE=1 DEMO=1 node scripts/dev-server.mjs",
+    "seed:demo": "DEMO=1 node scripts/seed-demo.mjs",
     "test:permisos": "PGLITE=1 node scripts/test-permisos.mjs"
   },
   "dependencies": {
