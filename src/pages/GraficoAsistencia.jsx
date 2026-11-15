@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { fechaCorta } from '../helpers.js'
+import Plegable from '../Plegable.jsx'
 
 // Series del gráfico, en el orden fijo de la paleta. Los colores son los
 // mismos que usa el gráfico de evolución de la ficha: validados con el script
@@ -116,10 +117,15 @@ export default function GraficoAsistencia() {
     })
   }
 
+  // Arranca replegada para que el listado de entrenamientos quede a la vista:
+  // el título ya dice el promedio del año, y el gráfico baja de un toque. Los
+  // controles van adentro, porque en el título un toque abre y cierra.
   return (
-    <div className="tarjeta">
-      <div className="fila entre">
-        <h3>Asistencia evento por evento</h3>
+    <Plegable
+      id="entrenamientos-asistencia"
+      titulo={`📈 Asistencia evento por evento · ${promedioPct}% en ${datos.anio}`}
+    >
+      <div className="fila" style={{ justifyContent: 'flex-end' }}>
         <div className="fila" style={{ gap: 6 }}>
           <div className="seg grafico-modo">
             {MODOS.map((m) => (
@@ -218,7 +224,7 @@ export default function GraficoAsistencia() {
           </tbody>
         </table>
       </details>
-    </div>
+    </Plegable>
   )
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { fechaCompacta } from '../helpers.js'
 import { DIAS_ATRASO, diasSinTrabajar, haceCuanto } from '../planTecnico.js'
+import Plegable from '../Plegable.jsx'
 
 // Un color por grupo del catálogo, en el orden fijo de la paleta. Son los
 // mismos dos primeros tonos que usa el gráfico de asistencia, validados con el
@@ -44,11 +45,16 @@ export default function GraficoTecnica() {
     faltan: datos.aspectos.filter((a) => a.grupo === g.value && !a.veces),
   }))
 
+  // Arranca replegada, como la de asistencia: el título ya dice cuántos
+  // aspectos se tocaron y cuántos minutos van, y el detalle baja de un toque.
+  // El selector de año va adentro, porque en el título un toque abre y cierra.
   return (
-    <div className="tarjeta">
-      <div className="fila entre">
-        <h3>Qué se viene entrenando</h3>
-        {datos.anios.length > 1 && (
+    <Plegable
+      id="entrenamientos-tecnica"
+      titulo={`🏉 Qué se viene entrenando · ${trabajados.length} de ${datos.aspectos.length} aspectos · ${totalMin} min`}
+    >
+      {datos.anios.length > 1 && (
+        <div className="fila" style={{ justifyContent: 'flex-end' }}>
           <select
             className="grafico-anio"
             value={datos.anio}
@@ -56,8 +62,8 @@ export default function GraficoTecnica() {
           >
             {datos.anios.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
-        )}
-      </div>
+        </div>
+      )}
       <p className="mini" style={{ margin: '2px 0 8px' }}>
         Minutos de técnica acumulados en {datos.anio} sobre{' '}
         <b>{datos.sesiones}</b> {datos.sesiones === 1 ? 'entrenamiento' : 'entrenamientos'}{' '}
@@ -130,6 +136,6 @@ export default function GraficoTecnica() {
           </tbody>
         </table>
       </details>
-    </div>
+    </Plegable>
   )
 }
