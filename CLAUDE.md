@@ -345,7 +345,11 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   único que se ve replegado. Lo abierto se recuerda en memoria mientras la app
   siga abierta (volver de una ficha no lo cierra); al recargar todo vuelve
   replegado. La tarjeta de avisos perdidos (`AvisosPerdidos`) no se pliega:
-  pide una acción.
+  pide una acción. Lo mismo en el inicio de **Entrenamientos**: los gráficos
+  de asistencia evento por evento y "Qué se viene entrenando" son `Plegable`
+  (el título dice el promedio del año y cuántos aspectos y minutos van), y sus
+  controles (modo, año) van en el cuerpo, porque un toque en el título abre y
+  cierra.
 - **Navegación**: la posición en la app vive en el hash de la URL
   (`#/partidos/<id>/<vista>`) con respaldo en localStorage (`src/navegacion.js`),
   para sobrevivir recargas y descartes de la PWA. `#/partidos` a secas es la

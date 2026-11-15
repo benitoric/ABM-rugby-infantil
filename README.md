@@ -32,7 +32,9 @@ pantalla de inicio" del teléfono y queda como una app más).
    acumula), con un aviso en los que hace más de tres semanas que no se tocan;
    la pantalla de Entrenamientos resume lo mismo en un gráfico de barras,
    **Qué se viene entrenando**, con los minutos de cada aspecto y la lista de
-   los que todavía no se trabajaron.
+   los que todavía no se trabajaron. Ese gráfico y el de asistencia evento por
+   evento arrancan replegados (el título ya dice el promedio y los minutos) y
+   se despliegan de un toque, así el listado de entrenamientos queda a la vista.
 4. **Partidos**: al entrar se abre el último partido cargado, y "Listado de partidos"
    lleva a la lista de todos, del más próximo al más viejo, con los detalles
    de cada uno a la vista (rival, hora de convocatoria y lugar de cada
