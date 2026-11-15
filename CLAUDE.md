@@ -336,6 +336,16 @@ App de gestión de jugadores para el staff de la división M12 de rugby infantil
   tienen DNI cargado salen igual, marcados "SIN DNI", y el diálogo los avisa
   antes de emitir. El DNI del staff vive en `staff.dni` y se carga en la
   pantalla de Staff.
+- **Inicio de Jugadores**: las tarjetas que van antes del listado (faltas
+  seguidas, golpes y lesiones por revisar, en recuperación, te toca evaluar o
+  revisar, proceso y reparto de evaluaciones, cumpleaños) son `Plegable`
+  (`src/Plegable.jsx`, un `<details>` con estilo de tarjeta) y arrancan
+  replegadas, para llegar rápido al listado. El título tiene que decir solo lo
+  importante (cuántos faltan, cuántos cumplen, el % del proceso), porque es lo
+  único que se ve replegado. Lo abierto se recuerda en memoria mientras la app
+  siga abierta (volver de una ficha no lo cierra); al recargar todo vuelve
+  replegado. La tarjeta de avisos perdidos (`AvisosPerdidos`) no se pliega:
+  pide una acción.
 - **Navegación**: la posición en la app vive en el hash de la URL
   (`#/partidos/<id>/<vista>`) con respaldo en localStorage (`src/navegacion.js`),
   para sobrevivir recargas y descartes de la PWA. `#/partidos` a secas es la
